@@ -17,18 +17,11 @@ from mapox.wrappers.task_id_wrapper import TaskIdWrapper
 from mapox.wrappers.multitask import MultiTaskWrapper
 from mapox.wrappers.vector import VectorWrapper
 
-
-class PrisonersConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-    env_type: Literal["prisoners"] = "prisoners"
-
-
 type EnvironmentConfig = (
     ReturnDiggingConfig
     | TravelingSalesmanConfig
     | ScoutsConfig
     | KingHillConfig
-    | PrisonersConfig
 )
 
 

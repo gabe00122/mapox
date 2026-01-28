@@ -2,21 +2,29 @@
 
 __version__ = "0.1.0"
 
-from mapox.envs.scouts import ScoutsEnv, ScoutsConfig
-from mapox.envs.king_hill import KingHillEnv, KingHillConfig
-from mapox.envs.grid_return import ReturnDiggingEnv, ReturnDiggingConfig
-from mapox.envs.traveling_salesman import TravelingSalesmanEnv, TravelingSalesmanConfig
-from mapox.envs.renderer import GridworldRenderer, GridworldClient
+from mapox.timestep import TimeStep
+from mapox.environment import Environment
+from mapox.specs import ActionSpec, ObservationSpec
+from mapox.wrappers.multitask import MultiTaskWrapper
+from mapox.wrappers.vector import VectorWrapper
+from mapox.client import GridworldClient
+from mapox.utils.encode_one_hot import concat_one_hot
+from mapox.config import create_env, create_client, ScoutsConfig, TravelingSalesmanConfig, KingHillConfig, MultiTaskConfig, EnvironmentConfig
 
 __all__ = [
-    "ScoutsEnv",
-    "ScoutsConfig",
-    "KingHillEnv",
-    "KingHillConfig",
-    "ReturnDiggingEnv",
-    "ReturnDiggingConfig",
-    "TravelingSalesmanEnv",
-    "TravelingSalesmanConfig",
-    "GridworldRenderer",
+    "TimeStep",
+    "ActionSpec",
+    "ObservationSpec",
+    "Environment",
+    "MultiTaskWrapper",
+    "VectorWrapper",
     "GridworldClient",
+    "concat_one_hot",
+    "create_env",
+    "create_client",
+    "ScoutsConfig",
+    "TravelingSalesmanConfig",
+    "KingHillConfig",
+    "MultiTaskConfig",
+    "EnvironmentConfig"
 ]
