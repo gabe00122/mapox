@@ -3,12 +3,12 @@ import jax
 from jax import numpy as jnp
 from einops import rearrange
 
-from mapox.environment import Environment
+from mapox.environment import Environment, EnvState
 from mapox.specs import ActionSpec, ObservationSpec
 from mapox.timestep import TimeStep
 
 
-class VectorWrapper[EnvState](Environment[EnvState]):
+class VectorWrapper(Environment[EnvState]):
     def __init__(self, env: Environment[EnvState], vec_count: int):
         self.base_env = env
         self._vec_count = vec_count

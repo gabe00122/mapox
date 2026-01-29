@@ -257,6 +257,7 @@ class GridworldRenderer:
         pygame.display.flip()
 
     def render_agent_view(self, rs: GridRenderState):
+        # TODO: It's not very clean to have this mostly duplicate the regular render
         self._ensure_layout()
 
         tiles = rs.tilemap.tolist()

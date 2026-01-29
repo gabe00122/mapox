@@ -1,5 +1,5 @@
 import jax
-from typing import NamedTuple, TypeAlias
+from typing import NamedTuple
 
 Metrics = dict[str, jax.Array]
 
@@ -16,6 +16,6 @@ class TimeStep(NamedTuple):
     time: jax.Array
     terminated: jax.Array
     last_action: jax.Array
-    last_reward: jax.Array
+    reward: jax.Array
     action_mask: jax.Array | None  # (num_agents, num_actions)
     task_ids: jax.Array | None = None

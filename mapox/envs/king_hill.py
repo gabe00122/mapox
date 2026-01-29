@@ -1,5 +1,5 @@
 from functools import cached_property, partial
-from typing import NamedTuple, Literal, override
+from typing import NamedTuple, Literal
 
 import jax
 from jax import numpy as jnp
@@ -12,7 +12,7 @@ from mapox.map_generator import (
 )
 from mapox.specs import DiscreteActionSpec, ObservationSpec
 from mapox.timestep import TimeStep
-from mapox.envs.renderer import GridRenderSettings, GridRenderState
+from mapox.renderer import GridRenderSettings, GridRenderState
 import mapox.envs.constance as GW
 
 
@@ -188,7 +188,7 @@ class KingHillEnv(Environment[KingHillState]):
 
     @cached_property
     def action_spec(self) -> DiscreteActionSpec:
-        return DiscreteActionSpec(num_actions=GW.NUM_ACTIONS)
+        return DiscreteActionSpec(n=GW.NUM_ACTIONS)
 
     @property
     def is_jittable(self) -> bool:
@@ -504,7 +504,7 @@ class KingHillEnv(Environment[KingHillState]):
             obs=view,
             time=time,
             last_action=actions,
-            last_reward=rewards,
+            reward=rewards,
             action_mask=self._action_mask,
             terminated=jnp.equal(time, self._length - 1),
         )

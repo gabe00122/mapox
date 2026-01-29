@@ -3,22 +3,20 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from mapox.envs.king_hill import KingHillConfig, KingHillEnv
-from mapox.envs.grid_return import ReturnDiggingConfig, ReturnDiggingEnv
+from mapox.envs.find_return import FindReturnConfig, FindReturnEnv
 from mapox.envs.traveling_salesman import (
     TravelingSalesmanConfig,
     TravelingSalesmanEnv,
 )
 from mapox.envs.scouts import ScoutsConfig, ScoutsEnv
-from mapox.client import GridworldClient
 
-from mapox.client import EnvironmentClient
 from mapox.environment import Environment
 from mapox.wrappers.task_id_wrapper import TaskIdWrapper
 from mapox.wrappers.multitask import MultiTaskWrapper
 from mapox.wrappers.vector import VectorWrapper
 
-type EnvironmentConfig = (
-    ReturnDiggingConfig
+EnvironmentConfig = (
+    FindReturnConfig
     | TravelingSalesmanConfig
     | ScoutsConfig
     | KingHillConfig
@@ -70,8 +68,8 @@ def create_env(
                 out_env_names.append(env_def.name)
 
             env = MultiTaskWrapper(tuple(out_envs), tuple(out_env_names))
-        case "return_digging":
-            env = ReturnDiggingEnv(env_config, length)
+        case "find_return":
+            env = FindReturnEnv(env_config, length)
         case "scouts":
             env = ScoutsEnv(env_config, length)
         case "traveling_salesman":
@@ -85,8 +83,3 @@ def create_env(
         env = VectorWrapper(env, vec_count)
 
     return env, num_tasks
-
-
-def create_client[State](env: Environment[State]) -> EnvironmentClient[State]:
-    # use the grid client for all environments for now
-    return GridworldClient(env)

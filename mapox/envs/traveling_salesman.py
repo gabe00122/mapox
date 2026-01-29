@@ -8,7 +8,7 @@ from mapox.environment import Environment
 from mapox.map_generator import generate_decor_tiles
 from mapox.specs import DiscreteActionSpec, ObservationSpec
 from mapox.timestep import TimeStep
-from mapox.envs.renderer import GridRenderSettings, GridRenderState
+from mapox.renderer import GridRenderSettings, GridRenderState
 import mapox.envs.constance as GW
 
 
@@ -146,7 +146,7 @@ class TravelingSalesmanEnv(Environment[TravelingSalesmanState]):
 
     @cached_property
     def action_spec(self) -> DiscreteActionSpec:
-        return DiscreteActionSpec(num_actions=GW.NUM_ACTIONS)
+        return DiscreteActionSpec(n=GW.NUM_ACTIONS)
 
     @property
     def is_jittable(self) -> bool:
@@ -270,7 +270,7 @@ class TravelingSalesmanEnv(Environment[TravelingSalesmanState]):
             obs=view,
             time=time,
             last_action=actions,
-            last_reward=rewards,
+            reward=rewards,
             action_mask=self._action_mask,
             terminated=jnp.equal(time, self._length - 1),
         )

@@ -14,13 +14,13 @@ from mapox.map_generator import (
 from mapox.environment import Environment
 from mapox.specs import DiscreteActionSpec, ObservationSpec
 from mapox.timestep import TimeStep
-from mapox.envs.renderer import GridRenderSettings, GridRenderState
+from mapox.renderer import GridRenderSettings, GridRenderState
 import mapox.envs.constance as GW
 
 
-class ReturnDiggingConfig(BaseModel):
+class FindReturnConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-    env_type: Literal["return_digging"] = "return_digging"
+    env_type: Literal["find_return"] = "find_return"
 
     num_agents: int = 1
     num_flags: int = 1
@@ -37,7 +37,7 @@ class ReturnDiggingConfig(BaseModel):
     eval_map: bool = False
 
 
-class ReturnDiggingState(NamedTuple):
+class FindReturnState(NamedTuple):
     agents_pos: jax.Array
     agents_timeout: jax.Array
     found_reward: jax.Array
@@ -51,8 +51,8 @@ class ReturnDiggingState(NamedTuple):
     rewards: jax.Array
 
 
-class ReturnDiggingEnv(Environment[ReturnDiggingState]):
-    def __init__(self, config: ReturnDiggingConfig, length: int) -> None:
+class FindReturnEnv(Environment[FindReturnState]):
+    def __init__(self, config: FindReturnConfig, length: int) -> None:
         super().__init__()
 
         self._config = config
@@ -122,7 +122,7 @@ class ReturnDiggingEnv(Environment[ReturnDiggingState]):
 
         return tiles, spawn_pos, spawn_count
 
-    def reset(self, rng_key: jax.Array) -> tuple[ReturnDiggingState, TimeStep]:
+    def reset(self, rng_key: jax.Array) -> tuple[FindReturnState, TimeStep]:
         map_key, pos_key = jax.random.split(rng_key)
 
         map, spawn_pos, spawn_count = self._generate_map(map_key)
@@ -153,7 +153,7 @@ class ReturnDiggingEnv(Environment[ReturnDiggingState]):
         else:
             map = map.at[flag_pos[:, 0], flag_pos[:, 1]].set(GW.TILE_FLAG)
 
-        state = ReturnDiggingState(
+        state = FindReturnState(
             map=map,
             spawn_pos=spawn_pos,
             spawn_count=spawn_count,
@@ -211,7 +211,7 @@ class ReturnDiggingEnv(Environment[ReturnDiggingState]):
             constant_values=GW.TILE_WALL,
         )
 
-        state = ReturnDiggingState(
+        state = FindReturnState(
             map=tiles,
             spawn_pos=jnp.array(spawn_positions, jnp.int32),
             spawn_count=jnp.int32(len(spawn_positions)),
@@ -233,7 +233,7 @@ class ReturnDiggingEnv(Environment[ReturnDiggingState]):
 
     @cached_property
     def action_spec(self) -> DiscreteActionSpec:
-        return DiscreteActionSpec(num_actions=GW.NUM_ACTIONS)
+        return DiscreteActionSpec(n=GW.NUM_ACTIONS)
 
     @property
     def is_jittable(self) -> bool:
@@ -244,8 +244,8 @@ class ReturnDiggingEnv(Environment[ReturnDiggingState]):
         return self._num_agents
 
     def step(
-        self, state: ReturnDiggingState, action: jax.Array, rng_key: jax.Array
-    ) -> tuple[ReturnDiggingState, TimeStep]:
+        self, state: FindReturnState, action: jax.Array, rng_key: jax.Array
+    ) -> tuple[FindReturnState, TimeStep]:
         @partial(jax.vmap, in_axes=(0, 0, 0, 0), out_axes=(0, 0, 0, 0))
         def _step_agent(local_position, timeout, local_action, random_position):
             def _step_timeout(local_position, timeout, local_action, random_position):
@@ -317,7 +317,7 @@ class ReturnDiggingEnv(Environment[ReturnDiggingState]):
 
         return state, self.encode_observations(state, action, rewards)
 
-    def _render_tiles(self, state: ReturnDiggingState):
+    def _render_tiles(self, state: FindReturnState):
         tiles = state.map
         tiles = tiles.at[state.agents_pos[:, 0], state.agents_pos[:, 1]].set(
             GW.AGENT_GENERIC
@@ -338,7 +338,7 @@ class ReturnDiggingEnv(Environment[ReturnDiggingState]):
         )
 
     def encode_observations(
-        self, state: ReturnDiggingState, actions, rewards
+        self, state: FindReturnState, actions, rewards
     ) -> TimeStep:
         @partial(jax.vmap, in_axes=(None, 0))
         def _encode_view(tiles, positions):
@@ -361,7 +361,7 @@ class ReturnDiggingEnv(Environment[ReturnDiggingState]):
             obs=view,
             time=time,
             last_action=actions,
-            last_reward=rewards,
+            reward=rewards,
             action_mask=self._action_mask,
             terminated=jnp.equal(time, self._length - 1),
         )
@@ -369,10 +369,10 @@ class ReturnDiggingEnv(Environment[ReturnDiggingState]):
     def create_placeholder_logs(self):
         return {"rewards": jnp.float32(0.0)}
 
-    def create_logs(self, state: ReturnDiggingState):
+    def create_logs(self, state: FindReturnState):
         return {"rewards": state.rewards}
 
-    def get_render_state(self, state: ReturnDiggingState) -> GridRenderState:
+    def get_render_state(self, state: FindReturnState) -> GridRenderState:
         tiles = self._render_tiles(state)
 
         return GridRenderState(

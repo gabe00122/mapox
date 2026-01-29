@@ -8,12 +8,8 @@ class ObservationSpec(NamedTuple):
     max_value: int | tuple[int, ...] | None = None
 
 
-class ContinuousActionSpec(NamedTuple):
-    num_actions: int
-
-
 class DiscreteActionSpec(NamedTuple):
-    num_actions: int
+    n: int
 
 
-ActionSpec = ContinuousActionSpec | DiscreteActionSpec
+ActionSpec = DiscreteActionSpec
