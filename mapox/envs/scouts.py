@@ -165,7 +165,7 @@ class ScoutsEnv(Environment[ScoutsState]):
             scout_pos=scout_pos,
             harvester_pos=harvester_pos,
             harvester_time=jnp.zeros((self._num_harvesters,), dtype=jnp.int32),
-            time=jnp.int32(50),
+            time=jnp.int32(0),
             rewards=jnp.float32(0.0),
         )
 

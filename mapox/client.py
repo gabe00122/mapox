@@ -1,5 +1,4 @@
-from mapox import Environment
-from mapox.environment import EnvState
+from mapox.environment import EnvState, Environment
 from mapox.renderer import GridworldRenderer
 from mapox.timestep import TimeStep
 

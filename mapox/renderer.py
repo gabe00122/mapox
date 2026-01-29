@@ -1,4 +1,5 @@
 from typing import NamedTuple
+from importlib.resources import files
 
 import numpy as np
 import pygame
@@ -110,7 +111,8 @@ class GridworldRenderer:
         self._agent_view_offset_y = 0
         self._focused_agent = None
 
-        self._spritesheet = SpriteSheet("./assets/urizen_onebit_tileset__v2d0.png")
+        path = files("mapox").joinpath("assets/urizen_onebit_tileset__v2d0.png")
+        self._spritesheet = SpriteSheet(str(path))
 
     def set_env(self, env_settings: GridRenderSettings):
         self._tile_width = env_settings.tile_width

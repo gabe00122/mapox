@@ -61,7 +61,7 @@ class MultiTaskWrapper(Environment):
 
     @cached_property
     def action_spec(self) -> ActionSpec:
-        num_actions = max([env.action_spec.num_actions for env in self._envs])
+        num_actions = max([env.action_spec.n for env in self._envs])
 
         return DiscreteActionSpec(num_actions)
 

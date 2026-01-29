@@ -1,8 +1,14 @@
+import argparse
+from mapox.envs.king_hill import KingHillConfig
+from mapox.envs.traveling_salesman import TravelingSalesmanConfig
+from mapox.envs.scouts import ScoutsConfig
 from functools import partial
 
-from mapox.environment import EnvState
+from mapox.environment import EnvState, Environment
 from mapox.agent import Agent, AgentState, RandomAgent
-from mapox import TimeStep, create_env, GridworldClient, Environment, FindReturnConfig
+from mapox.timestep import TimeStep
+from mapox.config import EnvironmentFactory, FindReturnConfig
+from mapox.client import GridworldClient
 import mapox.envs.constance as GW
 
 
@@ -52,6 +58,7 @@ def play(
     rng_key: jax.Array = jax.random.PRNGKey(42),
     video_path: str | None = None,
     size: int = 960,
+    human_control: bool = True,
     pov: bool = False,
 ) -> None:
     focused_agent = 0
@@ -84,9 +91,12 @@ def play(
 
                 human_action = get_action_from_keydown(event)
 
-        if human_action is not None:
+        if human_action is not None or not human_control:
             agent_state, actions, rng_key = agent.sample_actions(agent_state, timestep, rng_key)
-            actions = actions.at[focused_agent].set(human_action)
+
+            if human_control:
+                actions = actions.at[focused_agent].set(human_action)
+
             env_state, timestep, rng_key = step(env, env_state, actions, rng_key)
 
             if video_path is not None:
@@ -104,8 +114,26 @@ def play(
 
 
 def main():
-    config = FindReturnConfig()
-    env, _ = create_env(config, 512)
+    parser = argparse.ArgumentParser(description="Play a MAPOX environment")
+    parser.add_argument(
+        "--env",
+        default="find_return",
+        choices=["find_return", "scouts", "traveling_salesman", "king_hill"],
+        help="Which environment to run",
+    )
+    args = parser.parse_args()
+
+    env_factory = EnvironmentFactory()
+
+    config_cls = {
+        "find_return": FindReturnConfig,
+        "scouts": ScoutsConfig,
+        "traveling_salesman": TravelingSalesmanConfig,
+        "king_hill": KingHillConfig,
+    }[args.env]
+
+    config = config_cls()
+    env, _ = env_factory.create_env(config, 512)
 
     agent = RandomAgent(env.action_spec)
     agent_state = None

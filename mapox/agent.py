@@ -1,6 +1,8 @@
 import jax
+from jax import numpy as jnp
 
-from mapox import TimeStep, ActionSpec
+from mapox.timestep import TimeStep
+from mapox.specs import ActionSpec
 from typing import Protocol, TypeVar, Generic
 
 AgentState = TypeVar("AgentState")
@@ -15,9 +17,10 @@ class RandomAgent(Agent[None]):
         self._action_spec = action_spec
 
     def sample_actions(self, agent_state: None, timestep: TimeStep, rng_key: jax.Array) -> tuple[None, jax.Array, jax.Array]:
-        action_shape = timestep.obs.shape[:1]
+        num_agents = timestep.obs.shape[0]
 
         action_rng, rng_key = jax.random.split(rng_key)
-        action = jax.random.randint(action_rng, shape=action_shape, minval=0, maxval=self._action_spec.n)
+        logits = jax.random.uniform(action_rng, (num_agents, self._action_spec.n))
+        actions = jnp.argmax(jnp.where(timestep.action_mask, logits, -jnp.inf), axis=-1)
 
-        return None, action, rng_key
+        return None, actions, rng_key

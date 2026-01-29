@@ -71,5 +71,5 @@ def make_action_mask(actions: list[int], num_agents: int):
     for action in actions:
         mask[action] = True
 
-    mask_array = jnp.array(mask, jnp.bool)
+    mask_array = jnp.array(mask, jnp.bool_)
     return jnp.repeat(mask_array[None, :], num_agents, axis=0)

@@ -17,5 +17,5 @@ class TimeStep(NamedTuple):
     terminated: jax.Array
     last_action: jax.Array
     reward: jax.Array
-    action_mask: jax.Array | None  # (num_agents, num_actions)
+    action_mask: jax.Array  # (num_agents, num_actions)
     task_ids: jax.Array | None = None
