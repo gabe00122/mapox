@@ -51,7 +51,7 @@ def step(env: Environment[EnvState], env_state: EnvState, actions: jax.Array, rn
     env_state, timestep = env.step(env_state, actions, env_key)
     return env_state, timestep, rng_key
 
-def play(
+def enjoy(
     env: Environment[EnvState],
     agent: Agent[AgentState],
     agent_state: AgentState,
@@ -125,20 +125,21 @@ def main():
 
     env_factory = EnvironmentFactory()
 
-    config_cls = {
-        "find_return": FindReturnConfig,
-        "scouts": ScoutsConfig,
-        "traveling_salesman": TravelingSalesmanConfig,
-        "king_hill": KingHillConfig,
+    config = {
+        "find_return": FindReturnConfig(),
+        "scouts": ScoutsConfig(),
+        "traveling_salesman": TravelingSalesmanConfig(),
+        "king_hill": KingHillConfig(
+            num_agents=8
+        ),
     }[args.env]
 
-    config = config_cls()
     env, _ = env_factory.create_env(config, 512)
 
     agent = RandomAgent(env.action_spec)
     agent_state = None
 
-    play(env, agent, agent_state, pov=True)
+    enjoy(env, agent, agent_state, pov=True)
 
 if __name__ == "__main__":
     main()

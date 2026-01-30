@@ -149,7 +149,7 @@ class ScoutsEnv(Environment[ScoutsState]):
         # harvester_pos = spawn_pos[jax.random.randint(
         #     harvester_key, (self._num_harvesters,), minval=0, maxval=spawn_count
         # )]
-        harvester_pos = scout_pos
+        harvester_pos = scout_pos.copy()
         treasure_pos = spawn_pos[
             jax.random.randint(
                 treasure_key, (self._num_treasures,), minval=0, maxval=spawn_count

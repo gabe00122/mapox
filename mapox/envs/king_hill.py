@@ -159,7 +159,7 @@ class KingHillEnv(Environment[KingHillState]):
 
         state = KingHillState(
             agents_start_pos=agent_pos,
-            agents_pos=agent_pos,
+            agents_pos=agent_pos.copy(),
             agents_direction=jnp.zeros((self.num_agents,), jnp.int8),
             agents_timeouts=jnp.zeros((self.num_agents,), jnp.int8),
             agents_types=agent_types,

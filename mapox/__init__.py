@@ -9,7 +9,6 @@ from mapox.wrappers.multitask import MultiTaskWrapper
 from mapox.wrappers.vector import VectorWrapper
 from mapox.client import GridworldClient
 from mapox.utils.encode_one_hot import concat_one_hot
-from mapox.play import play
 from mapox.config import ScoutsConfig, TravelingSalesmanConfig, KingHillConfig, MultiTaskConfig, EnvironmentConfig, FindReturnConfig, EnvironmentFactory
 
 __all__ = [
@@ -22,7 +21,6 @@ __all__ = [
     "GridworldClient",
     "concat_one_hot",
     "EnvironmentFactory",
-    "play",
     "ScoutsConfig",
     "TravelingSalesmanConfig",
     "KingHillConfig",

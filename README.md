@@ -61,7 +61,7 @@ x = concat_one_hot(ts.obs, sizes)  # (..., sum(sizes))
 A simple interactive runner is provided:
 
 ```bash
-python -m mapox.play --env king_hill
+uv run -m mapox.play --env king_hill
 ```
 
 Controls (depending on the environment):
