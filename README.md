@@ -4,6 +4,8 @@ MAPOX is a small collection of JAX-native, multi-agent, partially-observable gri
 
 The environments are functional (state in / state out), designed to work well with `jax.jit`/`jax.vmap`, and expose an `action_mask` for per-environment action subsets.
 
+These environments were originally devoloped as part of https://github.com/gabe00122/jaxrl/tree/mapox and this might be a good example for trained polices.
+
 ## Installation
 
 MAPOX requires **Python 3.11+**.
@@ -107,14 +109,22 @@ All environment configs are Pydantic models and can be created through `Environm
 - **Find & Return** (`FindReturnEnv`, `FindReturnConfig`)  
   Search for goal tiles in a procedurally-generated map. When an agent finds a flag it is rewarded and respawned elsewhere.
 
+https://github.com/user-attachments/assets/98cc3318-67ca-44c0-ac6e-e4537bd30ed1
+
 - **Scouts** (`ScoutsEnv`, `ScoutsConfig`)  
   Two roles: Harvesters “unlock” treasure tiles; Scouts collect unlocked treasures.
+
+https://github.com/user-attachments/assets/d566840e-1837-4fc1-8c78-439677f358a8
 
 - **Traveling Salesman** (`TravelingSalesmanEnv`, `TravelingSalesmanConfig`)  
   Multiple flags are scattered. Each agent is rewarded the first time it reaches each flag; flags reset after all are collected.
 
+https://github.com/user-attachments/assets/af009d24-c65e-4195-99af-0a4e703652cd
+
 - **King of the Hill** (`KingHillEnv`, `KingHillConfig`)  
   Two-team competitive environment with knights/archers, destructible walls, control points, and team-shared rewards.
+
+https://github.com/user-attachments/assets/3483745f-7c53-46e9-b838-3cc76b9e3ee4
 
 ## Wrappers
 
