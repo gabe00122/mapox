@@ -40,10 +40,6 @@ def get_action_from_keydown(event: pygame.event.Event | None):
     return None
 
 
-def add_seq_dim(ts: TimeStep):
-    return jax.tree.map(lambda x: rearrange(x, "b ... -> b 1 ..."), ts)
-
-
 @partial(jax.jit, static_argnums=(0,), donate_argnums=(1, 3))
 def step(env: Environment[EnvState], env_state: EnvState, actions: jax.Array, rng_key: jax.Array) -> tuple[EnvState, TimeStep, jax.Array]:
     env_key, rng_key = jax.random.split(rng_key)
