@@ -1,3 +1,4 @@
+from mapox.envs.soccer import SoccerConfig
 import argparse
 from mapox.envs.king_hill import KingHillConfig
 from mapox.envs.traveling_salesman import TravelingSalesmanConfig
@@ -118,7 +119,7 @@ def main():
     parser.add_argument(
         "--env",
         default="find_return",
-        choices=["find_return", "scouts", "traveling_salesman", "king_hill"],
+        choices=["find_return", "scouts", "traveling_salesman", "king_hill", "soccer"],
         help="Which environment to run",
     )
     args = parser.parse_args()
@@ -130,6 +131,7 @@ def main():
         "scouts": ScoutsConfig,
         "traveling_salesman": TravelingSalesmanConfig,
         "king_hill": KingHillConfig,
+        "soccer": SoccerConfig,
     }[args.env]
 
     config = config_cls()

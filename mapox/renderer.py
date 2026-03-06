@@ -82,6 +82,8 @@ tilemap = {
     GW.TILE_DECOR_3: (17, 5),
     GW.TILE_DECOR_4: (14, 5),
     GW.TILE_ARROW: (80, 21),
+    GW.TILE_GOAL: (18, 0),
+    GW.AGENT_BALL: (104, 1),
 }
 
 
