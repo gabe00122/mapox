@@ -1,3 +1,4 @@
+from mapox.envs.stealth import StealthConfig
 from mapox.envs.soccer import SoccerConfig
 import argparse
 from mapox.envs.king_hill import KingHillConfig
@@ -119,7 +120,7 @@ def main():
     parser.add_argument(
         "--env",
         default="find_return",
-        choices=["find_return", "scouts", "traveling_salesman", "king_hill", "soccer"],
+        choices=["find_return", "scouts", "traveling_salesman", "king_hill", "soccer", "stealth"],
         help="Which environment to run",
     )
     args = parser.parse_args()
@@ -132,6 +133,7 @@ def main():
         "traveling_salesman": TravelingSalesmanConfig,
         "king_hill": KingHillConfig,
         "soccer": SoccerConfig,
+        "stealth": StealthConfig,
     }[args.env]
 
     config = config_cls()

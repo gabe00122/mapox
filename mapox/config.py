@@ -10,6 +10,7 @@ from mapox.envs.traveling_salesman import (
 )
 from mapox.envs.scouts import ScoutsConfig, ScoutsEnv
 from mapox.envs.soccer import SoccerConfig, SoccerEnv
+from mapox.envs.stealth import StealthConfig, StealthEnv
 
 from mapox.environment import Environment, EnvState
 from mapox.wrappers.task_id_wrapper import TaskIdWrapper
@@ -22,6 +23,7 @@ EnvironmentConfig = (
     | ScoutsConfig
     | KingHillConfig
     | SoccerConfig
+    | StealthConfig
 )
 
 
@@ -53,6 +55,7 @@ class EnvironmentFactory:
         self.register_env("traveling_salesman", TravelingSalesmanEnv)
         self.register_env("king_hill", KingHillEnv)
         self.register_env("soccer", SoccerEnv)
+        self.register_env("stealth", StealthEnv)
 
     def register_env(self, name: str, fn: Callable[[Any, int], Environment[Any]]):
         self._registry[name] = fn

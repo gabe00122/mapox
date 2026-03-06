@@ -10,7 +10,7 @@ from mapox.wrappers.vector import VectorWrapper
 from mapox.client import GridworldClient
 from mapox.utils.encode_one_hot import concat_one_hot
 from mapox.play import play
-from mapox.config import ScoutsConfig, TravelingSalesmanConfig, KingHillConfig, MultiTaskConfig, EnvironmentConfig, FindReturnConfig, SoccerConfig, EnvironmentFactory
+from mapox.config import ScoutsConfig, TravelingSalesmanConfig, KingHillConfig, MultiTaskConfig, EnvironmentConfig, FindReturnConfig, SoccerConfig, StealthConfig, EnvironmentFactory
 
 __all__ = [
     "TimeStep",
@@ -29,5 +29,6 @@ __all__ = [
     "MultiTaskConfig",
     "EnvironmentConfig",
     "FindReturnConfig",
-    "SoccerConfig"
+    "SoccerConfig",
+    "StealthConfig",
 ]
