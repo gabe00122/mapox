@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mapox"
-version = "0.1.0"
+version = "0.1.1"
 description = "Multi-Agent Partially Observable gridworlds in JAX"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -27,6 +27,11 @@ dependencies = [
     "pygame-ce>=2.5.6",
     "python-ffmpeg>=2.0.12",
 ]
+
+[project.urls]
+Homepage = "https://github.com/gabe00122/mapox"
+Repository = "https://github.com/gabe00122/mapox"
+Issues = "https://github.com/gabe00122/mapox/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["mapox"]

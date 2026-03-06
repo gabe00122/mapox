@@ -20,10 +20,10 @@ class StealthConfig(BaseModel):
     num_sneakers: int = 3
     num_chasers: int = 2
     width: int = 40
-    height: int = 20
+    height: int = 40
     view_width: int = 11
     view_height: int = 11
-    grass_threshold: float = -0.15
+    grass_threshold: float = -0.5
     spawn_strip_width: int = 3
     catch_reward: float = 1.0
     cross_reward: float = 1.0
@@ -80,7 +80,7 @@ class StealthEnv(Environment[StealthState]):
         decor = generate_decor_tiles(w, h, decor_key)
 
         # Perlin noise for walls (res must divide dimensions)
-        wall_noise = generate_perlin_noise_2d((w, h), (2, 2), rng_key=wall_key)
+        wall_noise = generate_perlin_noise_2d((w, h), (8, 8), rng_key=wall_key)
         tiles = jnp.where(wall_noise > 0.1, jnp.int8(GW.TILE_WALL), decor)
 
         # Clear the left spawn strip and right goal strip
@@ -91,7 +91,7 @@ class StealthEnv(Environment[StealthState]):
         tiles = tiles.at[-strip:, :].set(right_strip)
 
         # Perlin noise for grass
-        grass_noise = generate_perlin_noise_2d((w, h), (2, 2), rng_key=grass_key)
+        grass_noise = generate_perlin_noise_2d((w, h), (8, 8), rng_key=grass_key)
         is_grass = (grass_noise < self._config.grass_threshold) & (tiles != GW.TILE_WALL)
         # No grass on spawn/goal strips
         strip_mask = jnp.ones((w, h), dtype=jnp.bool_)
@@ -333,7 +333,7 @@ class StealthEnv(Environment[StealthState]):
         ] == GW.TILE_GRASS
         sneaker_visible = ~sneaker_on_grass
 
-        visible_sneaker_tile = jnp.where(sneaker_visible, GW.AGENT_GENERIC, tiles[
+        visible_sneaker_tile = jnp.where(sneaker_visible, GW.AGENT_SCOUT, tiles[
             state.sneaker_pos[:, 0], state.sneaker_pos[:, 1]
         ])
         tiles = tiles.at[state.sneaker_pos[:, 0], state.sneaker_pos[:, 1]].set(
@@ -350,7 +350,7 @@ class StealthEnv(Environment[StealthState]):
         ] == GW.TILE_GRASS
         chaser_visible = ~chaser_on_grass
 
-        visible_chaser_tile = jnp.where(chaser_visible, GW.AGENT_GENERIC, tiles[
+        visible_chaser_tile = jnp.where(chaser_visible, GW.AGENT_HARVESTER, tiles[
             state.chaser_pos[:, 0], state.chaser_pos[:, 1]
         ])
         tiles = tiles.at[state.chaser_pos[:, 0], state.chaser_pos[:, 1]].set(

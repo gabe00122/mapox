@@ -42,10 +42,6 @@ def get_action_from_keydown(event: pygame.event.Event | None):
     return None
 
 
-def add_seq_dim(ts: TimeStep):
-    return jax.tree.map(lambda x: rearrange(x, "b ... -> b 1 ..."), ts)
-
-
 @partial(jax.jit, static_argnums=(0,), donate_argnums=(1, 3))
 def step(env: Environment[EnvState], env_state: EnvState, actions: jax.Array, rng_key: jax.Array) -> tuple[EnvState, TimeStep, jax.Array]:
     env_key, rng_key = jax.random.split(rng_key)
@@ -53,7 +49,7 @@ def step(env: Environment[EnvState], env_state: EnvState, actions: jax.Array, rn
     env_state, timestep = env.step(env_state, actions, env_key)
     return env_state, timestep, rng_key
 
-def play(
+def enjoy(
     env: Environment[EnvState],
     agent: Agent[AgentState],
     agent_state: AgentState,
@@ -65,7 +61,7 @@ def play(
 ) -> None:
     focused_agent = 0
 
-    client = GridworldClient(env, fps=30, screen_width=size, screen_height=size)
+    client = GridworldClient(env, fps=15, screen_width=size, screen_height=size)
     client.focus_agent(focused_agent)
 
     env_key, rng_key = jax.random.split(rng_key)
@@ -127,22 +123,21 @@ def main():
 
     env_factory = EnvironmentFactory()
 
-    config_cls = {
+    config = {
         "find_return": FindReturnConfig,
         "scouts": ScoutsConfig,
         "traveling_salesman": TravelingSalesmanConfig,
         "king_hill": KingHillConfig,
         "soccer": SoccerConfig,
         "stealth": StealthConfig,
-    }[args.env]
+    }[args.env]()
 
-    config = config_cls()
     env, _ = env_factory.create_env(config, 512)
 
     agent = RandomAgent(env.action_spec)
     agent_state = None
 
-    play(env, agent, agent_state, pov=True)
+    enjoy(env, agent, agent_state, pov=True)
 
 if __name__ == "__main__":
     main()
