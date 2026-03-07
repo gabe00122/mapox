@@ -146,8 +146,9 @@ class StealthEnv(Environment[StealthState]):
 
         actions = jnp.zeros((self.num_agents,), dtype=jnp.int32)
         rewards = jnp.zeros((self.num_agents,), dtype=jnp.float32)
+        sneaker_caught = jnp.zeros(self._num_sneakers, dtype=jnp.bool_)
 
-        return state, self.encode_observations(state, actions, rewards)
+        return state, self.encode_observations(state, actions, rewards, sneaker_caught)
 
     def step(
         self, state: StealthState, action: jax.Array, rng_key: jax.Array
@@ -225,12 +226,9 @@ class StealthEnv(Environment[StealthState]):
 
         # Respawn food that just hit 0 (was at 1 before decrement)
         food_respawning = (state.food_timer == 1) & (~food_eaten)
-        food_respawn_keys = jax.random.split(food_key, nf)
-        all_respawn_pos = jax.vmap(
-            lambda k: self._spawn(tiles, 1, k, allow_grass=True)[0]
-        )(food_respawn_keys)
+        respawn_food_pos = self._spawn(tiles, nf, food_key, allow_grass=True)
         new_food_pos = jnp.where(
-            food_respawning[:, None], all_respawn_pos, state.food_pos
+            food_respawning[:, None], respawn_food_pos, state.food_pos
         )
 
         # --- Catch detection (only hungry chasers) ---
@@ -257,13 +255,8 @@ class StealthEnv(Environment[StealthState]):
         chaser_rewards = chaser_catch_reward
 
         # --- Sneaker respawn on catch ---
-        sneaker_respawn_keys = jax.random.split(respawn_key, ns)
-
-        def respawn_sneaker(i, pos):
-            new_pos = self._spawn(tiles, 1, sneaker_respawn_keys[i])[0]
-            return jnp.where(sneaker_caught[i], new_pos, pos)
-
-        new_sneaker_pos = jax.vmap(respawn_sneaker)(jnp.arange(ns), new_sneaker_pos)
+        respawn_pos = self._spawn(tiles, ns, respawn_key)
+        new_sneaker_pos = jnp.where(sneaker_caught[:, None], respawn_pos, new_sneaker_pos)
 
         # --- Chaser fullness ---
         # Set fullness on catch
@@ -286,7 +279,7 @@ class StealthEnv(Environment[StealthState]):
             chaser_fullness=new_fullness,
         )
 
-        return state, self.encode_observations(state, action, rewards)
+        return state, self.encode_observations(state, action, rewards, sneaker_caught)
 
     def _render_tiles(self, state: StealthState, conceal: bool = False):
         """Render agents and food. If conceal=True, agents on grass are hidden."""
@@ -328,7 +321,7 @@ class StealthEnv(Environment[StealthState]):
             axis=-1,
         )
 
-    def encode_observations(self, state: StealthState, actions, rewards) -> TimeStep:
+    def encode_observations(self, state: StealthState, actions, rewards, sneaker_caught) -> TimeStep:
         @partial(jax.vmap, in_axes=(None, 0))
         def _encode_view(tiles, positions):
             return jax.lax.dynamic_slice(
@@ -357,7 +350,10 @@ class StealthEnv(Environment[StealthState]):
             last_action=actions,
             reward=rewards,
             action_mask=self._action_mask,
-            terminated=jnp.equal(time, self._length - 1),
+            terminated=jnp.equal(time, self._length - 1)
+            | jnp.concatenate(
+                [sneaker_caught, jnp.zeros(self._num_chasers, dtype=jnp.bool_)]
+            ),
         )
 
     @cached_property

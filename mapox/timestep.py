@@ -1,5 +1,6 @@
-import jax
 from typing import NamedTuple
+
+import jax
 
 Metrics = dict[str, jax.Array]
 
