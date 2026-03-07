@@ -12,7 +12,7 @@ from mapox.envs.scouts import ScoutsConfig, ScoutsEnv
 from mapox.envs.soccer import SoccerConfig, SoccerEnv
 from mapox.envs.stealth import StealthConfig, StealthEnv
 
-from mapox.environment import Environment, EnvState
+from mapox.environment import Environment
 from mapox.wrappers.task_id_wrapper import TaskIdWrapper
 from mapox.wrappers.multitask import MultiTaskWrapper
 from mapox.wrappers.vector import VectorWrapper
@@ -75,7 +75,10 @@ class EnvironmentFactory:
                 for task_id, env_def in enumerate(env_config.envs):
                     if env_def.name == env_name:
                         return TaskIdWrapper(
-                            self.create_env(env_def.env, length, vec_count=vec_count)[0], task_id
+                            self.create_env(env_def.env, length, vec_count=vec_count)[
+                                0
+                            ],
+                            task_id,
                         ), num_tasks
                 raise ValueError("Could not find environment matching env_name")
             else:
@@ -83,10 +86,14 @@ class EnvironmentFactory:
                 out_env_names = []
                 num_tasks = len(env_config.envs)
                 for env_def in env_config.envs:
-                    out_envs.append(self.create_env(env_def.env, length, env_def.num)[0])
+                    out_envs.append(
+                        self.create_env(env_def.env, length, env_def.num)[0]
+                    )
                     out_env_names.append(env_def.name)
 
-                return  MultiTaskWrapper(tuple(out_envs), tuple(out_env_names)), num_tasks
+                return MultiTaskWrapper(
+                    tuple(out_envs), tuple(out_env_names)
+                ), num_tasks
         elif env_config.env_type in self._registry:
             env = self._registry[env_config.env_type](env_config, length)
             if vec_count > 1:

@@ -337,9 +337,7 @@ class FindReturnEnv(Environment[FindReturnState]):
             axis=-1,
         )
 
-    def encode_observations(
-        self, state: FindReturnState, actions, rewards
-    ) -> TimeStep:
+    def encode_observations(self, state: FindReturnState, actions, rewards) -> TimeStep:
         @partial(jax.vmap, in_axes=(None, 0))
         def _encode_view(tiles, positions):
             return jax.lax.dynamic_slice(

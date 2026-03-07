@@ -26,9 +26,9 @@ class VectorWrapper(Environment[EnvState]):
         rng_keys = jax.random.split(rng_key, self._vec_count)
 
         action = action.reshape(self._vec_count, self._env.num_agents)
-        state, timestep = jax.vmap(
-            self._env.step, in_axes=(0, 0, 0), out_axes=(0, 0)
-        )(state, action, rng_keys)
+        state, timestep = jax.vmap(self._env.step, in_axes=(0, 0, 0), out_axes=(0, 0))(
+            state, action, rng_keys
+        )
         return state, self._flatten_timestep(timestep)
 
     @property

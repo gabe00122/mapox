@@ -16,7 +16,9 @@ class StepType(enum.IntEnum):
     MID = 1
     LAST = 2
 
+
 EnvState = TypeVar("EnvState")
+
 
 class Environment(ABC, Generic[EnvState]):
     @abstractmethod
@@ -54,9 +56,7 @@ class Environment(ABC, Generic[EnvState]):
         return None
 
     @abstractmethod
-    def get_render_settings(self) -> GridRenderSettings:
-        ...
+    def get_render_settings(self) -> GridRenderSettings: ...
 
     @abstractmethod
-    def get_render_state(self, state: EnvState) -> GridRenderState:
-        ...
+    def get_render_state(self, state: EnvState) -> GridRenderState: ...

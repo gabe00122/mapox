@@ -12,9 +12,7 @@ from mapox.renderer import GridRenderSettings, GridRenderState
 import mapox.envs.constance as GW
 
 # Movement directions including STAY (index 4 = [0, 0])
-MOVE_DIRECTIONS = jnp.array(
-    [[0, 1], [1, 0], [0, -1], [-1, 0], [0, 0]], dtype=jnp.int32
-)
+MOVE_DIRECTIONS = jnp.array([[0, 1], [1, 0], [0, -1], [-1, 0], [0, 0]], dtype=jnp.int32)
 
 
 class SoccerConfig(BaseModel):
@@ -70,10 +68,12 @@ class SoccerEnv(Environment[SoccerState]):
 
         # Teams: first half red (0), second half blue (1)
         team_size = config.team_size
-        self._teams = jnp.concatenate([
-            jnp.zeros(team_size, dtype=jnp.int8),
-            jnp.ones(team_size, dtype=jnp.int8),
-        ])
+        self._teams = jnp.concatenate(
+            [
+                jnp.zeros(team_size, dtype=jnp.int8),
+                jnp.ones(team_size, dtype=jnp.int8),
+            ]
+        )
 
         self._action_mask = GW.make_action_mask(
             [GW.MOVE_UP, GW.MOVE_RIGHT, GW.MOVE_DOWN, GW.MOVE_LEFT, GW.STAY],
@@ -92,18 +92,14 @@ class SoccerEnv(Environment[SoccerState]):
 
         # Red team on bottom quarter
         red_y = self.pad_height + self.height // 4
-        red_xs = (
-            jnp.arange(team_size, dtype=jnp.int32) + center_x - team_size // 2
-        )
+        red_xs = jnp.arange(team_size, dtype=jnp.int32) + center_x - team_size // 2
         red_pos = jnp.stack(
             [red_xs, jnp.full(team_size, red_y, dtype=jnp.int32)], axis=-1
         )
 
         # Blue team on top quarter
         blue_y = self.pad_height + 3 * self.height // 4
-        blue_xs = (
-            jnp.arange(team_size, dtype=jnp.int32) + center_x - team_size // 2
-        )
+        blue_xs = jnp.arange(team_size, dtype=jnp.int32) + center_x - team_size // 2
         blue_pos = jnp.stack(
             [blue_xs, jnp.full(team_size, blue_y, dtype=jnp.int32)], axis=-1
         )
@@ -195,9 +191,7 @@ class SoccerEnv(Environment[SoccerState]):
 
             # If ball blocked, agent can't push through - stays in place
             agent_blocked_by_ball = hits_ball & ball_blocked
-            final_pos = jnp.where(
-                agent_blocked_by_ball, positions[agent_idx], new_pos
-            )
+            final_pos = jnp.where(agent_blocked_by_ball, positions[agent_idx], new_pos)
             final_ball = jnp.where(hits_ball & ~ball_blocked, new_ball_pos, ball_pos)
 
             positions = positions.at[agent_idx].set(final_pos)
@@ -211,9 +205,7 @@ class SoccerEnv(Environment[SoccerState]):
         ball_in_goal_x = (new_ball_pos[0] >= self._goal_x_min) & (
             new_ball_pos[0] <= self._goal_x_max
         )
-        ball_in_bottom_goal = ball_in_goal_x & (
-            new_ball_pos[1] == self._bottom_goal_y
-        )
+        ball_in_bottom_goal = ball_in_goal_x & (new_ball_pos[1] == self._bottom_goal_y)
         ball_in_top_goal = ball_in_goal_x & (new_ball_pos[1] == self._top_goal_y)
 
         scored = ball_in_bottom_goal | ball_in_top_goal
@@ -278,9 +270,7 @@ class SoccerEnv(Environment[SoccerState]):
             axis=-1,
         )
 
-    def encode_observations(
-        self, state: SoccerState, actions, rewards
-    ) -> TimeStep:
+    def encode_observations(self, state: SoccerState, actions, rewards) -> TimeStep:
         @partial(jax.vmap, in_axes=(None, 0))
         def _encode_view(tiles, positions):
             return jax.lax.dynamic_slice(

@@ -9,9 +9,17 @@ from typing import Generic
 class GridworldClient(Generic[EnvState]):
     """EnvironmentClient that renders via GridworldRenderer using per-env adapters."""
 
-    def __init__(self, env: Environment[EnvState], screen_width: int = 960, screen_height: int = 960, fps: int = 10):
+    def __init__(
+        self,
+        env: Environment[EnvState],
+        screen_width: int = 960,
+        screen_height: int = 960,
+        fps: int = 10,
+    ):
         self.env = env
-        self.renderer = GridworldRenderer(screen_width=screen_width, screen_height=screen_height, fps=fps)
+        self.renderer = GridworldRenderer(
+            screen_width=screen_width, screen_height=screen_height, fps=fps
+        )
         self.renderer.set_env(env.get_render_settings())
 
     def render(self, state: EnvState, timestep: TimeStep, pov: bool = False) -> None:

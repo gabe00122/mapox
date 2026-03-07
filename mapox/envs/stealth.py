@@ -87,9 +87,7 @@ class StealthEnv(Environment[StealthState]):
         tiles = jnp.where(wall_noise > 0.1, jnp.int8(GW.TILE_WALL), decor)
 
         # Perlin noise for grass
-        grass_noise = generate_perlin_noise_2d(
-            (w, h), (8, 8), rng_key=grass_key
-        )
+        grass_noise = generate_perlin_noise_2d((w, h), (8, 8), rng_key=grass_key)
         is_grass = (grass_noise < self._config.grass_threshold) & (
             tiles != GW.TILE_WALL
         )
@@ -128,16 +126,12 @@ class StealthEnv(Environment[StealthState]):
         return jnp.stack((x_open[indices], y_open[indices]), axis=1)
 
     def reset(self, rng_key: jax.Array) -> tuple[StealthState, TimeStep]:
-        map_key, sneaker_key, chaser_key, food_key = jax.random.split(
-            rng_key, 4
-        )
+        map_key, sneaker_key, chaser_key, food_key = jax.random.split(rng_key, 4)
 
         tiles = self._generate_map(map_key)
         sneaker_pos = self._spawn(tiles, self._num_sneakers, sneaker_key)
         chaser_pos = self._spawn(tiles, self._num_chasers, chaser_key)
-        food_pos = self._spawn(
-            tiles, self._config.num_food, food_key, allow_grass=True
-        )
+        food_pos = self._spawn(tiles, self._config.num_food, food_key, allow_grass=True)
 
         state = StealthState(
             sneaker_pos=sneaker_pos,
@@ -184,9 +178,7 @@ class StealthEnv(Environment[StealthState]):
             is_wall = tiles[proposed[0], proposed[1]] == GW.TILE_WALL
 
             other_mask = jnp.arange(num_agents) != agent_idx
-            is_occupied = jnp.any(
-                jnp.all(positions == proposed, axis=-1) & other_mask
-            )
+            is_occupied = jnp.any(jnp.all(positions == proposed, axis=-1) & other_mask)
             blocked = is_wall | is_occupied
 
             new_pos = jnp.where(blocked, positions[agent_idx], proposed)
@@ -203,26 +195,20 @@ class StealthEnv(Environment[StealthState]):
 
         # Check if any sneaker is on each food tile
         # (num_food, num_sneakers, 2)
-        food_sneaker_diff = (
-            state.food_pos[:, None, :] - new_sneaker_pos[None, :, :]
-        )
+        food_sneaker_diff = state.food_pos[:, None, :] - new_sneaker_pos[None, :, :]
         food_sneaker_match = jnp.all(
             food_sneaker_diff == 0, axis=-1
         )  # (num_food, num_sneakers)
 
         # A food is eaten if present and any sneaker is on it
-        food_eaten = food_present & jnp.any(
-            food_sneaker_match, axis=1
-        )  # (num_food,)
+        food_eaten = food_present & jnp.any(food_sneaker_match, axis=1)  # (num_food,)
 
         # Which sneaker eats each food (first in index order)
         # For each food, find first sneaker index that matches (or ns if none)
         first_eater = jnp.argmax(food_sneaker_match, axis=1)  # (num_food,)
 
         # Accumulate food rewards per sneaker via scatter-add
-        eaten_rewards = (
-            food_eaten.astype(jnp.float32) * self._config.food_reward
-        )
+        eaten_rewards = food_eaten.astype(jnp.float32) * self._config.food_reward
         sneaker_food_rewards = (
             jnp.zeros(ns, dtype=jnp.float32).at[first_eater].add(eaten_rewards)
         )
@@ -255,9 +241,7 @@ class StealthEnv(Environment[StealthState]):
         adjacent = jnp.sum(diff, axis=-1) <= 1  # (num_sneakers, num_chasers)
 
         # Mask out full chasers
-        adjacent = (
-            adjacent & chaser_hungry[None, :]
-        )  # (num_sneakers, num_chasers)
+        adjacent = adjacent & chaser_hungry[None, :]  # (num_sneakers, num_chasers)
 
         sneaker_caught = jnp.any(adjacent, axis=1)  # (num_sneakers,)
         chaser_caught = jnp.any(adjacent, axis=0)  # (num_chasers,)
@@ -279,9 +263,7 @@ class StealthEnv(Environment[StealthState]):
             new_pos = self._spawn(tiles, 1, sneaker_respawn_keys[i])[0]
             return jnp.where(sneaker_caught[i], new_pos, pos)
 
-        new_sneaker_pos = jax.vmap(respawn_sneaker)(
-            jnp.arange(ns), new_sneaker_pos
-        )
+        new_sneaker_pos = jax.vmap(respawn_sneaker)(jnp.arange(ns), new_sneaker_pos)
 
         # --- Chaser fullness ---
         # Set fullness on catch
@@ -289,9 +271,7 @@ class StealthEnv(Environment[StealthState]):
             chaser_caught, self._config.fullness_duration, state.chaser_fullness
         )
         # Decrement (after setting, so newly-full chasers don't tick down this step)
-        new_fullness = jnp.where(
-            new_fullness > 0, new_fullness - 1, new_fullness
-        )
+        new_fullness = jnp.where(new_fullness > 0, new_fullness - 1, new_fullness)
 
         rewards = jnp.concatenate([sneaker_rewards, chaser_rewards])
 
@@ -323,17 +303,13 @@ class StealthEnv(Environment[StealthState]):
             GW.TILE_FOOD,
             tiles[state.food_pos[:, 0], state.food_pos[:, 1]],
         )
-        tiles = tiles.at[state.food_pos[:, 0], state.food_pos[:, 1]].set(
-            food_tile_vals
-        )
+        tiles = tiles.at[state.food_pos[:, 0], state.food_pos[:, 1]].set(food_tile_vals)
 
         def _apply_agents(tiles, pos, agent_tile, team_id):
             if conceal:
                 on_grass = state.tiles[pos[:, 0], pos[:, 1]] == GW.TILE_GRASS
                 visible = ~on_grass
-                tile_vals = jnp.where(
-                    visible, agent_tile, tiles[pos[:, 0], pos[:, 1]]
-                )
+                tile_vals = jnp.where(visible, agent_tile, tiles[pos[:, 0], pos[:, 1]])
             else:
                 tile_vals = agent_tile
             tiles = tiles.at[pos[:, 0], pos[:, 1]].set(tile_vals)
@@ -352,9 +328,7 @@ class StealthEnv(Environment[StealthState]):
             axis=-1,
         )
 
-    def encode_observations(
-        self, state: StealthState, actions, rewards
-    ) -> TimeStep:
+    def encode_observations(self, state: StealthState, actions, rewards) -> TimeStep:
         @partial(jax.vmap, in_axes=(None, 0))
         def _encode_view(tiles, positions):
             return jax.lax.dynamic_slice(
@@ -372,9 +346,7 @@ class StealthEnv(Environment[StealthState]):
             )
 
         tiles = self._render_tiles(state, conceal=True)
-        agents_pos = jnp.concatenate(
-            [state.sneaker_pos, state.chaser_pos], axis=0
-        )
+        agents_pos = jnp.concatenate([state.sneaker_pos, state.chaser_pos], axis=0)
         view = _encode_view(tiles, agents_pos)
 
         time = jnp.repeat(state.time[None], self.num_agents, axis=0)
@@ -416,9 +388,7 @@ class StealthEnv(Environment[StealthState]):
 
     def get_render_state(self, state: StealthState) -> GridRenderState:
         tiles = self._render_tiles(state)
-        agent_positions = jnp.concatenate(
-            [state.sneaker_pos, state.chaser_pos], axis=0
-        )
+        agent_positions = jnp.concatenate([state.sneaker_pos, state.chaser_pos], axis=0)
         return GridRenderState(
             tilemap=tiles,
             agent_positions=agent_positions,
