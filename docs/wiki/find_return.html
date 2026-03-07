@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Find &amp; Return - MAPOX Wiki</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">MAPOX</div>
+    <div class="sidebar-subtitle">Environment Wiki</div>
+    <nav>
+      <a href="index.html"><span class="nav-dot" style="background:var(--accent)"></span> Overview</a>
+      <div class="nav-section">Environments</div>
+      <a href="find_return.html" class="active"><span class="nav-dot" style="background:var(--blue)"></span> Find &amp; Return</a>
+      <a href="scouts.html"><span class="nav-dot" style="background:var(--green)"></span> Scouts</a>
+      <a href="traveling_salesman.html"><span class="nav-dot" style="background:var(--blue)"></span> Traveling Salesman</a>
+      <a href="king_hill.html"><span class="nav-dot" style="background:var(--red)"></span> King of the Hill</a>
+      <a href="soccer.html"><span class="nav-dot" style="background:var(--red)"></span> Soccer</a>
+      <a href="stealth.html"><span class="nav-dot" style="background:var(--orange)"></span> Stealth</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <h1>Find &amp; Return</h1>
+    <p class="page-description">
+      Search for goal flags in a procedurally-generated maze with destructible walls.
+      When an agent finds a flag, it is rewarded and teleported to a new random position.
+    </p>
+
+    <h2>Game Rules</h2>
+
+    <h3>Map Generation</h3>
+    <p>The map is generated using fractal noise. Tiles above a configurable threshold
+       (<code>mapgen_threshold</code>, default 0.3) become destructible walls. Decorative tiles
+       fill the remaining empty space. The map is padded with permanent walls for observation slicing.</p>
+
+    <h3>Flags</h3>
+    <p>A configurable number of flags (<code>num_flags</code>) are placed on random empty tiles at reset.
+       Flags remain on the map &mdash; when an agent walks onto a flag tile, the agent is rewarded
+       and teleported to a random empty position. The flag itself stays in place for other agents.</p>
+
+    <h3>Movement &amp; Digging</h3>
+    <ul>
+      <li>Agents can move in the 4 cardinal directions.</li>
+      <li>Moving into a wall or destructible wall blocks movement.</li>
+      <li>When an agent attempts to move into a destructible wall, the wall is destroyed
+          and the agent enters a <strong>digging timeout</strong> (<code>digging_timeout</code> steps,
+          default 5). During this timeout the agent cannot act.</li>
+    </ul>
+
+    <h3>Actions Used</h3>
+    <table>
+      <thead><tr><th>ID</th><th>Action</th></tr></thead>
+      <tbody>
+        <tr><td>0</td><td>Move up</td></tr>
+        <tr><td>1</td><td>Move right</td></tr>
+        <tr><td>2</td><td>Move down</td></tr>
+        <tr><td>3</td><td>Move left</td></tr>
+      </tbody>
+    </table>
+    <p>Stay, primary action, and dig are <strong>masked off</strong>. Digging happens implicitly when
+       moving into a destructible wall.</p>
+
+    <h3>Rewards</h3>
+    <ul>
+      <li><code>+treasure_reward</code> (default 1.0) when an agent steps onto a flag tile.</li>
+    </ul>
+
+    <h3>Termination</h3>
+    <p>Episode ends after <code>length</code> steps (set at environment creation).</p>
+
+    <h2>Configuration</h2>
+    <div class="config-block">
+      <div class="config-header">FindReturnConfig</div>
+      <pre><code>class FindReturnConfig(BaseModel):
+    env_type: Literal["find_return"] = "find_return"
+    num_agents: int = 1
+    num_flags: int = 1
+    width: int = 40
+    height: int = 40
+    view_width: int = 11
+    view_height: int = 11
+    mapgen_threshold: float = 0.3
+    digging_timeout: int = 5
+    treasure_reward: float = 1.0
+    eval_map: bool = False</code></pre>
+    </div>
+
+    <table>
+      <thead><tr><th>Parameter</th><th>Default</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>num_agents</code></td><td>1</td><td>Number of agents</td></tr>
+        <tr><td><code>num_flags</code></td><td>1</td><td>Number of flag tiles placed on the map</td></tr>
+        <tr><td><code>width</code> / <code>height</code></td><td>40</td><td>Unpadded map dimensions</td></tr>
+        <tr><td><code>view_width</code> / <code>view_height</code></td><td>11</td><td>Agent observation crop size</td></tr>
+        <tr><td><code>mapgen_threshold</code></td><td>0.3</td><td>Fractal noise threshold for destructible walls (higher = more walls)</td></tr>
+        <tr><td><code>digging_timeout</code></td><td>5</td><td>Steps an agent is frozen after breaking a wall</td></tr>
+        <tr><td><code>treasure_reward</code></td><td>1.0</td><td>Reward for reaching a flag</td></tr>
+        <tr><td><code>eval_map</code></td><td>false</td><td>Use a fixed evaluation map layout</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Observations</h2>
+    <p>Standard 4-channel format. Only the tile channel is meaningfully used &mdash; direction, team, and health are all zeros.</p>
+
+    <table>
+      <thead><tr><th>Channel</th><th>Usage</th></tr></thead>
+      <tbody>
+        <tr><td>Tile ID</td><td>Empty, wall, destructible wall, flag, decorative, agent</td></tr>
+        <tr><td>Direction</td><td>Unused (always 0)</td></tr>
+        <tr><td>Team ID</td><td>Unused (always 0)</td></tr>
+        <tr><td>Health</td><td>Unused (always 0)</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Key Tile IDs</h2>
+    <table>
+      <thead><tr><th>Tile</th><th>ID</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>TILE_EMPTY</code></td><td>0</td><td>Open space</td></tr>
+        <tr><td><code>TILE_WALL</code></td><td>1</td><td>Permanent wall (border)</td></tr>
+        <tr><td><code>TILE_DESTRUCTIBLE_WALL</code></td><td>2</td><td>Breakable wall</td></tr>
+        <tr><td><code>TILE_FLAG</code></td><td>3</td><td>Goal flag</td></tr>
+        <tr><td><code>AGENT_GENERIC</code></td><td>5</td><td>Agent</td></tr>
+      </tbody>
+    </table>
+  </main>
+</div>
+</body>
+</html>

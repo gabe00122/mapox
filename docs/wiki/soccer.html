@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Soccer - MAPOX Wiki</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">MAPOX</div>
+    <div class="sidebar-subtitle">Environment Wiki</div>
+    <nav>
+      <a href="index.html"><span class="nav-dot" style="background:var(--accent)"></span> Overview</a>
+      <div class="nav-section">Environments</div>
+      <a href="find_return.html"><span class="nav-dot" style="background:var(--blue)"></span> Find &amp; Return</a>
+      <a href="scouts.html"><span class="nav-dot" style="background:var(--green)"></span> Scouts</a>
+      <a href="traveling_salesman.html"><span class="nav-dot" style="background:var(--blue)"></span> Traveling Salesman</a>
+      <a href="king_hill.html"><span class="nav-dot" style="background:var(--red)"></span> King of the Hill</a>
+      <a href="soccer.html" class="active"><span class="nav-dot" style="background:var(--red)"></span> Soccer</a>
+      <a href="stealth.html"><span class="nav-dot" style="background:var(--orange)"></span> Stealth</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <h1>Soccer</h1>
+    <p class="page-description">
+      Two teams play on an open gridworld field with goals at opposite ends.
+      Push the ball into the opponent's goal to score. All agents act simultaneously
+      with randomized execution order.
+    </p>
+
+    <h2>Game Rules</h2>
+
+    <h3>Field</h3>
+    <ul>
+      <li>Open rectangle with no internal walls or obstacles.</li>
+      <li>Goals are 1-tile-deep zones spanning <code>goal_width</code> tiles, centered on opposite edges.</li>
+      <li>Bottom goal (defended by Red) and top goal (defended by Blue).</li>
+    </ul>
+
+    <h3>Teams</h3>
+    <p>Agents are split evenly: first half Red, second half Blue.</p>
+    <ul>
+      <li><strong>Red team:</strong> starts in the bottom quarter, centered horizontally.</li>
+      <li><strong>Blue team:</strong> starts in the top quarter, centered horizontally.</li>
+    </ul>
+
+    <h3>The Ball</h3>
+    <ul>
+      <li>Single tile rendered as <code>AGENT_BALL</code> (tile ID 16). Starts at field center.</li>
+      <li>When a moving agent's destination is the ball's tile, the ball is <strong>pushed</strong>
+          1 tile in that agent's movement direction.</li>
+      <li>If the pushed ball would land on a wall or another agent, the ball stays put
+          <strong>and the pushing agent also stays in place</strong> (cannot push through a blocked ball).</li>
+      <li>Staying agents (action = STAY) never interact with the ball.</li>
+    </ul>
+
+    <h3>Actions Used</h3>
+    <table>
+      <thead><tr><th>ID</th><th>Action</th></tr></thead>
+      <tbody>
+        <tr><td>0</td><td>Move up</td></tr>
+        <tr><td>1</td><td>Move right</td></tr>
+        <tr><td>2</td><td>Move down</td></tr>
+        <tr><td>3</td><td>Move left</td></tr>
+        <tr><td>4</td><td>Stay</td></tr>
+      </tbody>
+    </table>
+    <p>Primary action and dig are masked off.</p>
+
+    <h3>Turn Execution</h3>
+    <ul>
+      <li>All agents submit actions simultaneously.</li>
+      <li>A random permutation determines execution order each step.</li>
+      <li>Agents are processed sequentially (via <code>jax.lax.fori_loop</code>) &mdash;
+          only the first agent (in random order) to reach the ball pushes it.</li>
+      <li>Agent-to-agent collision: an agent cannot move to a tile occupied by another agent
+          (unless the ball is there, in which case the push rules apply).</li>
+    </ul>
+
+    <h3>Scoring</h3>
+    <ul>
+      <li>Ball entering the <strong>top goal</strong> = Red scores (<code>+goal_reward</code> for Red,
+          <code>-goal_reward</code> for Blue).</li>
+      <li>Ball entering the <strong>bottom goal</strong> = Blue scores (<code>+goal_reward</code> for Blue,
+          <code>-goal_reward</code> for Red).</li>
+      <li>After a goal, ball and all agents reset to starting positions.</li>
+    </ul>
+
+    <h3>Termination</h3>
+    <p>Episode ends after <code>length</code> steps.</p>
+
+    <h2>Configuration</h2>
+    <div class="config-block">
+      <div class="config-header">SoccerConfig</div>
+      <pre><code>class SoccerConfig(BaseModel):
+    env_type: Literal["soccer"] = "soccer"
+    team_size: int = 3
+    width: int = 30
+    height: int = 20
+    view_width: int = 11
+    view_height: int = 11
+    goal_width: int = 6
+    goal_reward: float = 1.0</code></pre>
+    </div>
+
+    <table>
+      <thead><tr><th>Parameter</th><th>Default</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>team_size</code></td><td>3</td><td>Agents per team (total = team_size * 2)</td></tr>
+        <tr><td><code>width</code> / <code>height</code></td><td>30 / 20</td><td>Field dimensions (unpadded)</td></tr>
+        <tr><td><code>view_width</code> / <code>view_height</code></td><td>11</td><td>Agent observation crop size</td></tr>
+        <tr><td><code>goal_width</code></td><td>6</td><td>Goal zone width in tiles</td></tr>
+        <tr><td><code>goal_reward</code></td><td>1.0</td><td>Reward magnitude per goal (positive for scorer, negative for conceder)</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Observations</h2>
+    <table>
+      <thead><tr><th>Channel</th><th>Usage</th></tr></thead>
+      <tbody>
+        <tr><td>Tile ID</td><td>Empty, wall, decorative, goal zones, ball, agents</td></tr>
+        <tr><td>Direction</td><td>Unused (always 0)</td></tr>
+        <tr><td>Team ID</td><td>1=Red, 2=Blue for agent tiles</td></tr>
+        <tr><td>Health</td><td>Unused (always 0)</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Key Tile IDs</h2>
+    <table>
+      <thead><tr><th>Tile</th><th>ID</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>TILE_GOAL</code></td><td>15</td><td>Goal zone tiles at field edges</td></tr>
+        <tr><td><code>AGENT_BALL</code></td><td>16</td><td>The ball</td></tr>
+        <tr><td><code>AGENT_GENERIC</code></td><td>5</td><td>Player agent</td></tr>
+      </tbody>
+    </table>
+  </main>
+</div>
+</body>
+</html>

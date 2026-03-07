@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stealth - MAPOX Wiki</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">MAPOX</div>
+    <div class="sidebar-subtitle">Environment Wiki</div>
+    <nav>
+      <a href="index.html"><span class="nav-dot" style="background:var(--accent)"></span> Overview</a>
+      <div class="nav-section">Environments</div>
+      <a href="find_return.html"><span class="nav-dot" style="background:var(--blue)"></span> Find &amp; Return</a>
+      <a href="scouts.html"><span class="nav-dot" style="background:var(--green)"></span> Scouts</a>
+      <a href="traveling_salesman.html"><span class="nav-dot" style="background:var(--blue)"></span> Traveling Salesman</a>
+      <a href="king_hill.html"><span class="nav-dot" style="background:var(--red)"></span> King of the Hill</a>
+      <a href="soccer.html"><span class="nav-dot" style="background:var(--red)"></span> Soccer</a>
+      <a href="stealth.html" class="active"><span class="nav-dot" style="background:var(--orange)"></span> Stealth</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <h1>Stealth</h1>
+    <p class="page-description">
+      Asymmetric predator-prey environment. Sneakers (prey) gather food and hide in grass
+      while Chasers (predators) hunt them down. Features grass concealment, food respawning,
+      and a fullness cooldown mechanic.
+    </p>
+
+    <h2>Game Rules</h2>
+
+    <h3>Map Generation</h3>
+    <ul>
+      <li>Perlin noise generates permanent wall patterns (threshold > 0.1).</li>
+      <li>A second Perlin noise layer generates <strong>grass tiles</strong> (threshold &lt; <code>grass_threshold</code>,
+          default -0.5). Grass only appears on non-wall tiles.</li>
+      <li>Food is spawned on random open tiles (including grass).</li>
+    </ul>
+
+    <h3>Agent Roles</h3>
+
+    <h3>Sneakers (Prey)</h3>
+    <ul>
+      <li>Goal: collect food and avoid chasers.</li>
+      <li>Stepping onto a present food tile earns <code>food_reward</code> (default 1.0).</li>
+      <li><strong>Grass concealment:</strong> sneakers standing on grass tiles are <strong>invisible</strong>
+          to all agents' observations. The grass tile is shown instead of the agent.</li>
+      <li>When caught by a chaser, the sneaker loses <code>catch_reward</code> (default 1.0) and
+          is respawned at a random open (non-grass) position.</li>
+      <li>Sneakers spawn on non-grass tiles.</li>
+    </ul>
+
+    <h3>Chasers (Predators)</h3>
+    <ul>
+      <li>Goal: catch sneakers.</li>
+      <li>A chaser <strong>catches</strong> a sneaker when they are adjacent (Manhattan distance &le; 1),
+          but only if the chaser is <strong>hungry</strong> (fullness = 0).</li>
+      <li>Catching a sneaker earns <code>catch_reward</code> and triggers a <strong>fullness cooldown</strong>
+          (<code>fullness_duration</code>, default 5 steps) during which the chaser cannot catch again.</li>
+      <li>Chasers spawn on non-grass tiles.</li>
+    </ul>
+
+    <div class="info-box note">
+      <strong>Stealth mechanic:</strong> Sneakers on grass are invisible in observations,
+      creating an information asymmetry. Chasers must infer sneaker positions from partial
+      information, while sneakers can use grass strategically for cover.
+    </div>
+
+    <h3>Food System</h3>
+    <ul>
+      <li><code>num_food</code> food items are placed at reset.</li>
+      <li>When eaten, a food tile enters a respawn timer (<code>food_regrow_time</code>, default 10 steps).</li>
+      <li>When the timer expires, the food respawns at a new random open position (including grass).</li>
+      <li>Multiple sneakers on the same food tile: the first (by index) gets the reward.</li>
+    </ul>
+
+    <h3>Actions Used</h3>
+    <table>
+      <thead><tr><th>ID</th><th>Action</th></tr></thead>
+      <tbody>
+        <tr><td>0</td><td>Move up</td></tr>
+        <tr><td>1</td><td>Move right</td></tr>
+        <tr><td>2</td><td>Move down</td></tr>
+        <tr><td>3</td><td>Move left</td></tr>
+        <tr><td>4</td><td>Stay</td></tr>
+      </tbody>
+    </table>
+    <p>Primary action and dig are masked off.</p>
+
+    <h3>Movement</h3>
+    <ul>
+      <li>Random execution order each step (via <code>jax.lax.fori_loop</code>).</li>
+      <li>Agents cannot move through walls or onto tiles occupied by another agent.</li>
+      <li>Agents <strong>can</strong> move onto grass tiles freely.</li>
+    </ul>
+
+    <h3>Catch Detection</h3>
+    <ul>
+      <li>Happens <strong>after</strong> all movement is resolved.</li>
+      <li>A sneaker is caught if any hungry chaser is within Manhattan distance 1 (including same tile).</li>
+      <li>Caught sneakers respawn immediately at a random non-grass position.</li>
+    </ul>
+
+    <h3>Rewards</h3>
+    <table>
+      <thead><tr><th>Agent</th><th>Event</th><th>Reward</th></tr></thead>
+      <tbody>
+        <tr><td>Sneaker</td><td>Eat food</td><td><code>+food_reward</code> (1.0)</td></tr>
+        <tr><td>Sneaker</td><td>Caught by chaser</td><td><code>-catch_reward</code> (-1.0)</td></tr>
+        <tr><td>Chaser</td><td>Catch a sneaker</td><td><code>+catch_reward</code> (1.0)</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Termination</h3>
+    <p>Episode ends after <code>length</code> steps.</p>
+
+    <h2>Configuration</h2>
+    <div class="config-block">
+      <div class="config-header">StealthConfig</div>
+      <pre><code>class StealthConfig(BaseModel):
+    env_type: Literal["stealth"] = "stealth"
+    num_sneakers: int = 3
+    num_chasers: int = 2
+    width: int = 40
+    height: int = 40
+    view_width: int = 11
+    view_height: int = 11
+    grass_threshold: float = -0.5
+    catch_reward: float = 1.0
+    num_food: int = 15
+    food_reward: float = 1.0
+    food_regrow_time: int = 10
+    fullness_duration: int = 5</code></pre>
+    </div>
+
+    <table>
+      <thead><tr><th>Parameter</th><th>Default</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>num_sneakers</code></td><td>3</td><td>Number of prey agents</td></tr>
+        <tr><td><code>num_chasers</code></td><td>2</td><td>Number of predator agents</td></tr>
+        <tr><td><code>width</code> / <code>height</code></td><td>40</td><td>Map dimensions</td></tr>
+        <tr><td><code>view_width</code> / <code>view_height</code></td><td>11</td><td>Agent observation crop size</td></tr>
+        <tr><td><code>grass_threshold</code></td><td>-0.5</td><td>Perlin noise threshold for grass (lower = less grass)</td></tr>
+        <tr><td><code>catch_reward</code></td><td>1.0</td><td>Reward/penalty magnitude for catches</td></tr>
+        <tr><td><code>num_food</code></td><td>15</td><td>Food items placed at reset</td></tr>
+        <tr><td><code>food_reward</code></td><td>1.0</td><td>Reward for eating food</td></tr>
+        <tr><td><code>food_regrow_time</code></td><td>10</td><td>Steps before eaten food respawns</td></tr>
+        <tr><td><code>fullness_duration</code></td><td>5</td><td>Steps a chaser is full after a catch (cannot catch again)</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Observations</h2>
+    <table>
+      <thead><tr><th>Channel</th><th>Usage</th></tr></thead>
+      <tbody>
+        <tr><td>Tile ID</td><td>Terrain, grass, food, visible agents</td></tr>
+        <tr><td>Direction</td><td>Unused (always 0)</td></tr>
+        <tr><td>Team ID</td><td>Unused (always 0)</td></tr>
+        <tr><td>Health</td><td>Unused (always 0)</td></tr>
+      </tbody>
+    </table>
+
+    <div class="info-box warning">
+      <strong>Concealment in observations:</strong> The tilemap is rendered with
+      <code>conceal=True</code> for observations. Sneakers on grass tiles appear as
+      grass in all agents' views, making them undetectable through observation alone.
+    </div>
+
+    <h2>Key Tile IDs</h2>
+    <table>
+      <thead><tr><th>Tile</th><th>ID</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>TILE_GRASS</code></td><td>17</td><td>Grass (concealment for sneakers)</td></tr>
+        <tr><td><code>TILE_FOOD</code></td><td>18</td><td>Food item (present)</td></tr>
+        <tr><td><code>AGENT_SCOUT</code></td><td>6</td><td>Sneaker (prey) agent</td></tr>
+        <tr><td><code>AGENT_HARVESTER</code></td><td>7</td><td>Chaser (predator) agent</td></tr>
+      </tbody>
+    </table>
+  </main>
+</div>
+</body>
+</html>

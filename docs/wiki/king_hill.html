@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>King of the Hill - MAPOX Wiki</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">MAPOX</div>
+    <div class="sidebar-subtitle">Environment Wiki</div>
+    <nav>
+      <a href="index.html"><span class="nav-dot" style="background:var(--accent)"></span> Overview</a>
+      <div class="nav-section">Environments</div>
+      <a href="find_return.html"><span class="nav-dot" style="background:var(--blue)"></span> Find &amp; Return</a>
+      <a href="scouts.html"><span class="nav-dot" style="background:var(--green)"></span> Scouts</a>
+      <a href="traveling_salesman.html"><span class="nav-dot" style="background:var(--blue)"></span> Traveling Salesman</a>
+      <a href="king_hill.html" class="active"><span class="nav-dot" style="background:var(--red)"></span> King of the Hill</a>
+      <a href="soccer.html"><span class="nav-dot" style="background:var(--red)"></span> Soccer</a>
+      <a href="stealth.html"><span class="nav-dot" style="background:var(--orange)"></span> Stealth</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <h1>King of the Hill</h1>
+    <p class="page-description">
+      Two-team competitive environment featuring knights and archers, destructible walls,
+      control point capture, and team-shared rewards. The most complex MAPOX environment.
+    </p>
+
+    <h2>Game Rules</h2>
+
+    <h3>Teams</h3>
+    <p>Agents are split evenly into Red and Blue teams. Red spawns along the bottom edge,
+       Blue along the top edge.</p>
+
+    <h3>Agent Types</h3>
+    <p>At reset, each agent is randomly assigned one of two types (mirrored for both teams):</p>
+
+    <table>
+      <thead><tr><th>Type</th><th>Tile</th><th>Health</th><th>Primary Action</th></tr></thead>
+      <tbody>
+        <tr><td>Knight</td><td><code>AGENT_KNIGHT</code> (8)</td><td>2 HP</td><td>Melee attack (1 tile ahead in facing direction)</td></tr>
+        <tr><td>Archer</td><td><code>AGENT_ARCHER</code> (9)</td><td>1 HP</td><td>Shoot arrow (projectile in facing direction)</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Actions Used</h3>
+    <p>All 7 actions are available:</p>
+    <table>
+      <thead><tr><th>ID</th><th>Action</th><th>Effect</th></tr></thead>
+      <tbody>
+        <tr><td>0&ndash;3</td><td>Move</td><td>Move in cardinal direction and update facing</td></tr>
+        <tr><td>4</td><td>Stay</td><td>Hold position (keeps current facing)</td></tr>
+        <tr><td>5</td><td>Primary</td><td>Knight: melee attack / Archer: shoot arrow</td></tr>
+        <tr><td>6</td><td>Dig</td><td>Destroy a destructible wall in facing direction</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Movement</h3>
+    <ul>
+      <li>All agents propose moves simultaneously. A random permutation resolves conflicts.</li>
+      <li>An agent cannot move to a tile occupied by a wall, destructible wall, or another agent
+          (first-come in random order wins).</li>
+      <li>Moving updates the agent's <strong>facing direction</strong>.</li>
+    </ul>
+
+    <h3>Combat</h3>
+
+    <h3>Knights (Melee)</h3>
+    <ul>
+      <li>Primary action deals 1 damage to the tile directly ahead (in facing direction).</li>
+      <li>After attacking, the knight enters a <code>melee_timeout</code> (default 3 steps) during which
+          it can only stay.</li>
+    </ul>
+
+    <h3>Archers (Ranged)</h3>
+    <ul>
+      <li>Primary action spawns an <strong>arrow projectile</strong> on the tile ahead.</li>
+      <li>Arrows move 1 tile per step in the direction they were fired.</li>
+      <li>Arrows deal 1 damage to any agent on the tiles they pass through (current position and destination).</li>
+      <li>Arrows are destroyed when they hit a wall or destructible wall, or after
+          <code>arrow_timeout</code> steps (default 6).</li>
+      <li>After firing, the archer enters a cooldown of <code>arrow_timeout</code> steps before
+          it can fire again.</li>
+    </ul>
+
+    <h3>Death &amp; Respawn</h3>
+    <ul>
+      <li>When an agent's health reaches 0, it immediately respawns at its starting position
+          with full health.</li>
+    </ul>
+
+    <h3>Digging</h3>
+    <ul>
+      <li>The dig action destroys a destructible wall in the facing direction.</li>
+      <li>After digging, the agent enters a <code>dig_timeout</code> (default 5 steps).</li>
+    </ul>
+
+    <h3>Control Points</h3>
+    <ul>
+      <li><code>num_flags</code> control points are placed in the center band of the map.</li>
+      <li>A control point is captured by the last team to step on it (Red=1, Blue=2, Neutral=0).</li>
+      <li>Each step, every team member earns <code>reward_per_turn</code> times the number of
+          control points their team holds.</li>
+    </ul>
+
+    <h3>Rewards</h3>
+    <ul>
+      <li><code>reward_per_turn * num_flags_held</code> per step, shared equally across team members.</li>
+      <li>Default: <code>10.0 / 512</code> per point per step, incentivizing sustained control.</li>
+    </ul>
+
+    <h3>Termination</h3>
+    <p>Episode ends after <code>length</code> steps.</p>
+
+    <h2>Configuration</h2>
+    <div class="config-block">
+      <div class="config-header">KingHillConfig</div>
+      <pre><code>class KingHillConfig(BaseModel):
+    env_type: Literal["king_hill"] = "king_hill"
+    num_agents: int = 8
+    num_flags: int = 2
+    width: int = 40
+    height: int = 40
+    view_width: int = 11
+    view_height: int = 11
+    dig_timeout: int = 5
+    melee_timeout: int = 3
+    reward_per_turn: float = 10.0 / 512
+    arrow_timeout: int = 6</code></pre>
+    </div>
+
+    <table>
+      <thead><tr><th>Parameter</th><th>Default</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>num_agents</code></td><td>8</td><td>Total agents (split evenly into 2 teams)</td></tr>
+        <tr><td><code>num_flags</code></td><td>2</td><td>Number of control points</td></tr>
+        <tr><td><code>width</code> / <code>height</code></td><td>40</td><td>Map dimensions</td></tr>
+        <tr><td><code>view_width</code> / <code>view_height</code></td><td>11</td><td>Agent observation crop size</td></tr>
+        <tr><td><code>dig_timeout</code></td><td>5</td><td>Freeze duration after digging</td></tr>
+        <tr><td><code>melee_timeout</code></td><td>3</td><td>Freeze duration after melee attack</td></tr>
+        <tr><td><code>reward_per_turn</code></td><td>~0.0195</td><td>Reward per control point held per step</td></tr>
+        <tr><td><code>arrow_timeout</code></td><td>6</td><td>Arrow lifetime / archer cooldown (steps)</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Observations</h2>
+    <p>All 4 observation channels are meaningfully used:</p>
+    <table>
+      <thead><tr><th>Channel</th><th>Usage</th></tr></thead>
+      <tbody>
+        <tr><td>Tile ID</td><td>Terrain, agents (knight/archer), arrows, control points</td></tr>
+        <tr><td>Direction</td><td>Agent facing direction, arrow travel direction (1&ndash;4)</td></tr>
+        <tr><td>Team ID</td><td>1=Red, 2=Blue for agents; control point owner</td></tr>
+        <tr><td>Health</td><td>Agent health (knight: 0&ndash;2, archer: 0&ndash;1)</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Key Tile IDs</h2>
+    <table>
+      <thead><tr><th>Tile</th><th>ID</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>TILE_DESTRUCTIBLE_WALL</code></td><td>2</td><td>Breakable wall</td></tr>
+        <tr><td><code>TILE_FLAG</code></td><td>3</td><td>Control point</td></tr>
+        <tr><td><code>AGENT_KNIGHT</code></td><td>8</td><td>Knight agent</td></tr>
+        <tr><td><code>AGENT_ARCHER</code></td><td>9</td><td>Archer agent</td></tr>
+        <tr><td><code>TILE_ARROW</code></td><td>14</td><td>Arrow projectile</td></tr>
+      </tbody>
+    </table>
+  </main>
+</div>
+</body>
+</html>

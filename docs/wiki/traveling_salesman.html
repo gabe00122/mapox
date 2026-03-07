@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Traveling Salesman - MAPOX Wiki</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="sidebar-title">MAPOX</div>
+    <div class="sidebar-subtitle">Environment Wiki</div>
+    <nav>
+      <a href="index.html"><span class="nav-dot" style="background:var(--accent)"></span> Overview</a>
+      <div class="nav-section">Environments</div>
+      <a href="find_return.html"><span class="nav-dot" style="background:var(--blue)"></span> Find &amp; Return</a>
+      <a href="scouts.html"><span class="nav-dot" style="background:var(--green)"></span> Scouts</a>
+      <a href="traveling_salesman.html" class="active"><span class="nav-dot" style="background:var(--blue)"></span> Traveling Salesman</a>
+      <a href="king_hill.html"><span class="nav-dot" style="background:var(--red)"></span> King of the Hill</a>
+      <a href="soccer.html"><span class="nav-dot" style="background:var(--red)"></span> Soccer</a>
+      <a href="stealth.html"><span class="nav-dot" style="background:var(--orange)"></span> Stealth</a>
+    </nav>
+  </aside>
+
+  <main class="main">
+    <h1>Traveling Salesman</h1>
+    <p class="page-description">
+      Multiple flags are scattered on an open map. Each agent independently tracks which flags
+      it has visited. After collecting all flags, the agent's flag set resets for another round.
+    </p>
+
+    <h2>Game Rules</h2>
+
+    <h3>Map</h3>
+    <p>An open map (no walls other than the border) with decorative tiles. No destructible walls.
+       Flags are placed on random positions at reset and remain fixed for the episode.</p>
+
+    <h3>Flag Collection</h3>
+    <ul>
+      <li>Each agent maintains a personal boolean array tracking which of the <code>num_flags</code>
+          flags it has already visited.</li>
+      <li>Stepping onto a flag tile that the agent has <strong>not yet visited</strong> grants
+          <code>flag_reward</code> and marks that flag as collected for that agent.</li>
+      <li>Stepping onto an already-visited flag does nothing.</li>
+      <li>When an agent has collected <strong>all</strong> flags, its tracking array resets &mdash;
+          all flags become available again for a new round.</li>
+    </ul>
+
+    <div class="info-box note">
+      <strong>Route optimization:</strong> The challenge is to find an efficient visitation order.
+      With multiple agents, agents may develop strategies to cover different regions &mdash;
+      though each agent tracks flags independently.
+    </div>
+
+    <h3>Actions Used</h3>
+    <table>
+      <thead><tr><th>ID</th><th>Action</th></tr></thead>
+      <tbody>
+        <tr><td>0</td><td>Move up</td></tr>
+        <tr><td>1</td><td>Move right</td></tr>
+        <tr><td>2</td><td>Move down</td></tr>
+        <tr><td>3</td><td>Move left</td></tr>
+        <tr><td>4</td><td>Stay</td></tr>
+      </tbody>
+    </table>
+    <p>5 actions available. Primary action and dig are masked off.</p>
+
+    <h3>Movement</h3>
+    <ul>
+      <li>Moving into a wall (border) blocks the agent &mdash; it stays in place.</li>
+      <li>No collision between agents &mdash; multiple agents can occupy the same tile.</li>
+    </ul>
+
+    <h3>Rewards</h3>
+    <ul>
+      <li><code>+flag_reward</code> (default 1/3) per new flag visited.</li>
+      <li>No penalty for revisiting flags or staying.</li>
+    </ul>
+
+    <h3>Termination</h3>
+    <p>Episode ends after <code>length</code> steps.</p>
+
+    <h2>Configuration</h2>
+    <div class="config-block">
+      <div class="config-header">TravelingSalesmanConfig</div>
+      <pre><code>class TravelingSalesmanConfig(BaseModel):
+    env_type: Literal["traveling_salesman"] = "traveling_salesman"
+    num_agents: int = 2
+    num_flags: int = 8
+    flag_reward: float = 1.0 / 3
+    width: int = 40
+    height: int = 40
+    view_width: int = 11
+    view_height: int = 11</code></pre>
+    </div>
+
+    <table>
+      <thead><tr><th>Parameter</th><th>Default</th><th>Description</th></tr></thead>
+      <tbody>
+        <tr><td><code>num_agents</code></td><td>2</td><td>Number of agents</td></tr>
+        <tr><td><code>num_flags</code></td><td>8</td><td>Number of flags scattered on the map</td></tr>
+        <tr><td><code>flag_reward</code></td><td>0.333</td><td>Reward per new flag visit</td></tr>
+        <tr><td><code>width</code> / <code>height</code></td><td>40</td><td>Map dimensions</td></tr>
+        <tr><td><code>view_width</code> / <code>view_height</code></td><td>11</td><td>Agent observation crop size</td></tr>
+      </tbody>
+    </table>
+
+    <h2>Observations</h2>
+    <p>Standard 4-channel format. Only tile channel is used.</p>
+    <div class="info-box warning">
+      <strong>Partial observability note:</strong> Agents can see flag tiles in their local view,
+      but cannot distinguish between flags they have already collected and those they haven't.
+      This makes route planning challenging under partial observation.
+    </div>
+
+    <h2>Key Tile IDs</h2>
+    <table>
+      <thead><tr><th>Tile</th><th>ID</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>TILE_EMPTY</code></td><td>0</td><td>Open space</td></tr>
+        <tr><td><code>TILE_WALL</code></td><td>1</td><td>Border wall</td></tr>
+        <tr><td><code>TILE_FLAG</code></td><td>3</td><td>Flag (goal)</td></tr>
+        <tr><td><code>AGENT_GENERIC</code></td><td>5</td><td>Agent</td></tr>
+      </tbody>
+    </table>
+  </main>
+</div>
+</body>
+</html>
