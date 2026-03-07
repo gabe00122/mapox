@@ -85,6 +85,7 @@ tilemap = {
     GW.TILE_GOAL: (18, 0),
     GW.AGENT_BALL: (104, 1),
     GW.TILE_GRASS: (6, 9),
+    GW.TILE_FOOD: (8, 18),
 }
 
 
