@@ -25,11 +25,14 @@ class StealthConfig(BaseModel):
     view_width: int = 11
     view_height: int = 11
     grass_threshold: float = -0.5
-    catch_reward: float = 1.0
     num_food: int = 15
-    food_reward: float = 1.0
     food_regrow_time: int = 10
-    fullness_duration: int = 5
+    max_fullness: int = 40
+    initial_fullness: int = 20
+    fullness_per_food: int = 20
+    fullness_per_catch: int = 20
+    full_threshold: int = 30
+    survival_reward_scale: float = 0.05
 
 
 class StealthState(NamedTuple):
@@ -40,7 +43,7 @@ class StealthState(NamedTuple):
     rewards: jax.Array  # () cumulative for logging
     food_pos: jax.Array  # (num_food, 2)
     food_timer: jax.Array  # (num_food,) 0 = present, >0 = respawning
-    chaser_fullness: jax.Array  # (num_chasers,) 0 = hungry, >0 = full
+    fullness: jax.Array  # (num_agents,) 0 = starving, decrements each step
 
 
 class StealthEnv(Environment[StealthState]):
@@ -141,14 +144,14 @@ class StealthEnv(Environment[StealthState]):
             rewards=jnp.float32(0.0),
             food_pos=food_pos,
             food_timer=jnp.zeros(self._config.num_food, dtype=jnp.int32),
-            chaser_fullness=jnp.zeros(self._num_chasers, dtype=jnp.int32),
+            fullness=jnp.full(self.num_agents, self._config.initial_fullness, dtype=jnp.int32),
         )
 
         actions = jnp.zeros((self.num_agents,), dtype=jnp.int32)
         rewards = jnp.zeros((self.num_agents,), dtype=jnp.float32)
-        sneaker_caught = jnp.zeros(self._num_sneakers, dtype=jnp.bool_)
+        terminated = jnp.zeros(self.num_agents, dtype=jnp.bool_)
 
-        return state, self.encode_observations(state, actions, rewards, sneaker_caught)
+        return state, self.encode_observations(state, actions, rewards, terminated)
 
     def step(
         self, state: StealthState, action: jax.Array, rng_key: jax.Array
@@ -159,6 +162,7 @@ class StealthEnv(Environment[StealthState]):
         ns = self._num_sneakers
         nf = self._config.num_food
         tiles = state.tiles
+        cfg = self._config
 
         # --- Movement resolution ---
         all_pos = jnp.concatenate([state.sneaker_pos, state.chaser_pos], axis=0)
@@ -191,82 +195,73 @@ class StealthEnv(Environment[StealthState]):
         new_sneaker_pos = all_pos[:ns]
         new_chaser_pos = all_pos[ns:]
 
-        # --- Food eating ---
+        # --- Fullness: decrement then eat ---
+        fullness = jnp.maximum(state.fullness - 1, 0)
+        can_eat = fullness < cfg.full_threshold
+        sneaker_can_eat = can_eat[:ns]
+        chaser_can_eat = can_eat[ns:]
+
+        # --- Food eating (sneakers only, gated by fullness) ---
         food_present = state.food_timer == 0  # (num_food,)
 
-        # Check if any sneaker is on each food tile
-        # (num_food, num_sneakers, 2)
         food_sneaker_diff = state.food_pos[:, None, :] - new_sneaker_pos[None, :, :]
-        food_sneaker_match = jnp.all(
-            food_sneaker_diff == 0, axis=-1
+        food_sneaker_match = (
+            jnp.all(food_sneaker_diff == 0, axis=-1) & sneaker_can_eat[None, :]
         )  # (num_food, num_sneakers)
 
-        # A food is eaten if present and any sneaker is on it
         food_eaten = food_present & jnp.any(food_sneaker_match, axis=1)  # (num_food,)
-
-        # Which sneaker eats each food (first in index order)
-        # For each food, find first sneaker index that matches (or ns if none)
         first_eater = jnp.argmax(food_sneaker_match, axis=1)  # (num_food,)
 
-        # Accumulate food rewards per sneaker via scatter-add
-        eaten_rewards = food_eaten.astype(jnp.float32) * self._config.food_reward
-        sneaker_food_rewards = (
-            jnp.zeros(ns, dtype=jnp.float32).at[first_eater].add(eaten_rewards)
-        )
+        # Accumulate fullness gain per sneaker
+        eaten_gain = food_eaten.astype(jnp.int32) * cfg.fullness_per_food
+        sneaker_gain = jnp.zeros(ns, dtype=jnp.int32).at[first_eater].add(eaten_gain)
 
-        # Update food timers: eaten food starts countdown
+        # Update food timers
         new_food_timer = jnp.where(
-            food_eaten, self._config.food_regrow_time, state.food_timer
+            food_eaten, cfg.food_regrow_time, state.food_timer
         )
-
-        # Decrement active timers
         new_food_timer = jnp.where(
             new_food_timer > 0, new_food_timer - 1, new_food_timer
         )
 
-        # Respawn food that just hit 0 (was at 1 before decrement)
+        # Respawn food that just hit 0
         food_respawning = (state.food_timer == 1) & (~food_eaten)
         respawn_food_pos = self._spawn(tiles, nf, food_key, allow_grass=True)
         new_food_pos = jnp.where(
             food_respawning[:, None], respawn_food_pos, state.food_pos
         )
 
-        # --- Catch detection (only hungry chasers) ---
-        chaser_hungry = state.chaser_fullness == 0  # (num_chasers,)
-
-        # (num_sneakers, num_chasers, 2)
+        # --- Catch detection (gated by chaser fullness) ---
         diff = jnp.abs(new_sneaker_pos[:, None, :] - new_chaser_pos[None, :, :])
         adjacent = jnp.sum(diff, axis=-1) <= 1  # (num_sneakers, num_chasers)
-
-        # Mask out full chasers
-        adjacent = adjacent & chaser_hungry[None, :]  # (num_sneakers, num_chasers)
+        adjacent = adjacent & chaser_can_eat[None, :]
 
         sneaker_caught = jnp.any(adjacent, axis=1)  # (num_sneakers,)
         chaser_caught = jnp.any(adjacent, axis=0)  # (num_chasers,)
 
-        sneaker_catch_penalty = (
-            sneaker_caught.astype(jnp.float32) * self._config.catch_reward
-        )
-        chaser_catch_reward = (
-            chaser_caught.astype(jnp.float32) * self._config.catch_reward
-        )
+        chaser_gain = chaser_caught.astype(jnp.int32) * cfg.fullness_per_catch
 
-        sneaker_rewards = sneaker_food_rewards - sneaker_catch_penalty
-        chaser_rewards = chaser_catch_reward
+        # --- Apply fullness gains ---
+        gain = jnp.concatenate([sneaker_gain, chaser_gain])
+        fullness = jnp.minimum(fullness + gain, cfg.max_fullness)
 
-        # --- Sneaker respawn on catch ---
-        respawn_pos = self._spawn(tiles, ns, respawn_key)
-        new_sneaker_pos = jnp.where(sneaker_caught[:, None], respawn_pos, new_sneaker_pos)
+        # --- Termination: starvation or caught ---
+        starving = fullness == 0
+        time_up = jnp.equal(state.time + 1, self._length)
+        terminated = starving | time_up
+        terminated = terminated.at[:ns].set(terminated[:ns] | sneaker_caught)
 
-        # --- Chaser fullness ---
-        # Set fullness on catch
-        new_fullness = jnp.where(
-            chaser_caught, self._config.fullness_duration, state.chaser_fullness
-        )
-        # Decrement (after setting, so newly-full chasers don't tick down this step)
-        new_fullness = jnp.where(new_fullness > 0, new_fullness - 1, new_fullness)
+        # --- Respawn terminated agents ---
+        respawn_pos = self._spawn(tiles, num_agents, respawn_key)
+        all_pos = jnp.where(terminated[:, None], respawn_pos, all_pos)
+        fullness = jnp.where(terminated, cfg.initial_fullness, fullness)
 
-        rewards = jnp.concatenate([sneaker_rewards, chaser_rewards])
+        new_sneaker_pos = all_pos[:ns]
+        new_chaser_pos = all_pos[ns:]
+
+        # --- Survival rewards (diminishing returns based on fullness) ---
+        rewards = cfg.survival_reward_scale * (fullness.astype(jnp.float32) / cfg.max_fullness)
+        rewards = jnp.where(terminated, 0.0, rewards)
 
         state = StealthState(
             sneaker_pos=new_sneaker_pos,
@@ -276,10 +271,10 @@ class StealthEnv(Environment[StealthState]):
             rewards=state.rewards + jnp.mean(rewards),
             food_pos=new_food_pos,
             food_timer=new_food_timer,
-            chaser_fullness=new_fullness,
+            fullness=fullness,
         )
 
-        return state, self.encode_observations(state, action, rewards, sneaker_caught)
+        return state, self.encode_observations(state, action, rewards, terminated)
 
     def _render_tiles(self, state: StealthState, conceal: bool = False):
         """Render agents and food. If conceal=True, agents on grass are hidden."""
@@ -311,6 +306,18 @@ class StealthEnv(Environment[StealthState]):
         tiles = _apply_agents(tiles, state.sneaker_pos, GW.AGENT_SCOUT, 1)
         tiles = _apply_agents(tiles, state.chaser_pos, GW.AGENT_HARVESTER, 2)
 
+        # Map fullness to health channel: 0=starving, 1=low, 2=high
+        half = self._config.max_fullness // 2
+        agents_pos = jnp.concatenate([state.sneaker_pos, state.chaser_pos], axis=0)
+        agent_health = jnp.where(
+            state.fullness == 0, jnp.int8(0),
+            jnp.where(state.fullness <= half, jnp.int8(1), jnp.int8(2)),
+        )
+        if conceal:
+            on_grass = state.tiles[agents_pos[:, 0], agents_pos[:, 1]] == GW.TILE_GRASS
+            agent_health = jnp.where(on_grass, jnp.int8(0), agent_health)
+        health = health.at[agents_pos[:, 0], agents_pos[:, 1]].set(agent_health)
+
         return jnp.concatenate(
             (
                 tiles[..., None],
@@ -321,7 +328,7 @@ class StealthEnv(Environment[StealthState]):
             axis=-1,
         )
 
-    def encode_observations(self, state: StealthState, actions, rewards, sneaker_caught) -> TimeStep:
+    def encode_observations(self, state: StealthState, actions, rewards, terminated) -> TimeStep:
         @partial(jax.vmap, in_axes=(None, 0))
         def _encode_view(tiles, positions):
             return jax.lax.dynamic_slice(
@@ -350,10 +357,7 @@ class StealthEnv(Environment[StealthState]):
             last_action=actions,
             reward=rewards,
             action_mask=self._action_mask,
-            terminated=jnp.equal(time, self._length - 1)
-            | jnp.concatenate(
-                [sneaker_caught, jnp.zeros(self._num_chasers, dtype=jnp.bool_)]
-            ),
+            terminated=terminated,
         )
 
     @cached_property
