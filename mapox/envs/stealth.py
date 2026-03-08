@@ -27,11 +27,11 @@ class StealthConfig(BaseModel):
     grass_threshold: float = -0.5
     num_food: int = 15
     food_regrow_time: int = 10
-    max_fullness: int = 40
-    initial_fullness: int = 20
-    fullness_per_food: int = 20
-    fullness_per_catch: int = 20
-    full_threshold: int = 30
+    max_fullness: int = 256
+    initial_fullness: int = 128
+    fullness_per_food: int = 32
+    fullness_per_catch: int = 64
+    full_threshold: int = 192
     survival_reward_scale: float = 0.05
 
 

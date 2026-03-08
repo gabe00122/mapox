@@ -55,8 +55,8 @@ tilemap = {
     GW.TILE_FLAG: [(29, 23), (29, 31), (29, 32)],
     GW.TILE_FLAG_UNLOCKED: (29, 23),
     GW.AGENT_GENERIC: (104, 0),
-    GW.AGENT_HARVESTER: (13, 14),
-    GW.AGENT_SCOUT: (3, 16),
+    GW.AGENT_HARVESTER: (2, 15),
+    GW.AGENT_SCOUT: (5, 15),
     GW.AGENT_KNIGHT: [
         None,
         [

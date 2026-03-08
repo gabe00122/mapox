@@ -75,7 +75,7 @@ def enjoy(
     cumulative_reward = 0.0
 
     step_count = 0
-    while not timestep.terminated[..., 0].item():
+    while step_count < 512:
         human_action = None
 
         for event in pygame.event.get():
