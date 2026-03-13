@@ -35,3 +35,8 @@ Issues = "https://github.com/gabe00122/mapox/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["mapox"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]

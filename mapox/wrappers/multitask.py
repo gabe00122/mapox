@@ -87,6 +87,12 @@ class MultiTaskWrapper(Environment):
             for name, env in zip(self._env_names, self._envs)
         }
 
+    def get_render_settings(self):
+        raise NotImplementedError("MultiTaskWrapper does not support rendering")
+
+    def get_render_state(self, state):
+        raise NotImplementedError("MultiTaskWrapper does not support rendering")
+
     def create_logs(self, state):
         return {
             name: env.create_logs(s)

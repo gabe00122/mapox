@@ -34,7 +34,7 @@ class FindReturnConfig(BaseModel):
     digging_timeout: int = 5
     treasure_reward: float = 1.0
 
-    eval_map: bool = False
+    ascii_map: str | None = None
 
 
 class FindReturnState(NamedTuple):
@@ -51,29 +51,121 @@ class FindReturnState(NamedTuple):
     rewards: jax.Array
 
 
+_CHAR_TO_TILE = {
+    ".": GW.TILE_EMPTY,
+    " ": GW.TILE_EMPTY,
+    "#": GW.TILE_WALL,
+    "x": GW.TILE_DESTRUCTIBLE_WALL,
+}
+
+
+def _parse_ascii_map(
+    ascii_map: str,
+) -> tuple[np.ndarray, np.ndarray, int]:
+    """Parse an ASCII map string into tiles and entity positions.
+
+    Returns:
+        tiles: (width, height) int8 array of tile IDs
+        agent_positions: (num_agents, 2) int32 array of [x, y] positions
+        num_flags: number of flags found in the map
+    """
+    lines = ascii_map.strip("\n").split("\n")
+    text_height = len(lines)
+    text_width = len(lines[0])
+
+    for i, line in enumerate(lines):
+        if len(line) != text_width:
+            raise ValueError(
+                f"Row {i} has length {len(line)}, expected {text_width}"
+            )
+
+    tiles = np.zeros((text_width, text_height), dtype=np.int8)
+    agent_positions = []
+
+    for row_idx, line in enumerate(lines):
+        y = text_height - 1 - row_idx
+        for col_idx, char in enumerate(line):
+            x = col_idx
+            if char == "a":
+                agent_positions.append([x, y])
+                tiles[x, y] = GW.TILE_EMPTY
+            elif char == "f":
+                tiles[x, y] = GW.TILE_FLAG
+            elif char in _CHAR_TO_TILE:
+                tiles[x, y] = _CHAR_TO_TILE[char]
+            else:
+                raise ValueError(f"Unknown character '{char}' at row {row_idx}, col {col_idx}")
+
+    agent_positions = np.array(agent_positions, dtype=np.int32).reshape(-1, 2)
+    num_flags = int(np.sum(tiles == GW.TILE_FLAG))
+
+    if len(agent_positions) == 0:
+        raise ValueError("ASCII map must contain at least one agent ('a')")
+    if num_flags == 0:
+        raise ValueError("ASCII map must contain at least one flag ('f')")
+
+    return tiles, agent_positions, num_flags
+
+
 class FindReturnEnv(Environment[FindReturnState]):
     def __init__(self, config: FindReturnConfig, length: int) -> None:
         super().__init__()
 
         self._config = config
         self._length = length
-        self._num_agents = config.num_agents
-        self.num_flags = config.num_flags
-
-        self.unpadded_width = config.width
-        self.unpadded_height = config.height
 
         self.view_width = config.view_width
         self.view_height = config.view_height
         self.pad_width = self.view_width // 2
         self.pad_height = self.view_height // 2
 
-        self.width = self.unpadded_width + self.pad_width
-        self.height = self.unpadded_height + self.pad_height
-
-        self.mapgen_threshold = config.mapgen_threshold
         self.digging_timeout = config.digging_timeout
         self.treasure_reward = config.treasure_reward
+
+        if config.ascii_map is not None:
+            tiles, agent_positions, num_flags = _parse_ascii_map(config.ascii_map)
+
+            self._num_agents = len(agent_positions)
+            self.num_flags = num_flags
+            self.unpadded_width, self.unpadded_height = tiles.shape
+
+            # pad with walls
+            tiles = np.pad(
+                tiles,
+                pad_width=(
+                    (self.pad_width, self.pad_width),
+                    (self.pad_height, self.pad_height),
+                ),
+                mode="constant",
+                constant_values=GW.TILE_WALL,
+            )
+
+            # collect spawn positions from empty tiles (before padding offset)
+            raw_x, raw_y = np.where(tiles == GW.TILE_EMPTY)
+            spawn_pos = np.stack((raw_x, raw_y), axis=1).astype(np.int32)
+
+            if len(spawn_pos) == 0:
+                raise ValueError("ASCII map must contain at least one empty tile for spawning")
+
+            # shift agent positions by padding
+            agent_positions = agent_positions + np.array(
+                [self.pad_width, self.pad_height], dtype=np.int32
+            )
+
+            self._fixed_map = jnp.asarray(tiles)
+            self._fixed_agent_pos = jnp.asarray(agent_positions)
+            self._fixed_spawn_pos = jnp.asarray(spawn_pos)
+            self._fixed_spawn_count = jnp.int32(len(spawn_pos))
+        else:
+            self._num_agents = config.num_agents
+            self.num_flags = config.num_flags
+            self.unpadded_width = config.width
+            self.unpadded_height = config.height
+            self.mapgen_threshold = config.mapgen_threshold
+            self._fixed_map = None
+
+        self.width = self.unpadded_width + self.pad_width
+        self.height = self.unpadded_height + self.pad_height
 
         self._action_mask = GW.make_action_mask(
             [
@@ -123,34 +215,33 @@ class FindReturnEnv(Environment[FindReturnState]):
         return tiles, spawn_pos, spawn_count
 
     def reset(self, rng_key: jax.Array) -> tuple[FindReturnState, TimeStep]:
-        map_key, pos_key = jax.random.split(rng_key)
-
-        map, spawn_pos, spawn_count = self._generate_map(map_key)
-
-        unpadded_map = map[
-            self.pad_width : -self.pad_width, self.pad_height : -self.pad_height
-        ]
-
-        pos_x, pos_y = choose_positions(
-            unpadded_map,
-            self.num_flags + self.num_agents,
-            pos_key,
-            replace=False,
-        )
-
-        pos_x = pos_x + self.pad_width
-        pos_y = pos_y + self.pad_height
-        positions = jnp.stack((pos_x, pos_y), axis=1)
-        flag_pos = positions[: self.num_flags]
-        agents_pos = positions[self.num_flags :]
-
-        if self._config.eval_map:
-            o = map
-            map = map.at[36:45, 10:30].set(GW.TILE_DESTRUCTIBLE_WALL)
-            map = map.at[42:45, 17:23].set(o[42:45, 17:23])
-            agents_pos = agents_pos.at[0].set([44, 22])
-            map = map.at[43, 18].set(GW.TILE_FLAG)
+        if self._fixed_map is not None:
+            map = self._fixed_map
+            agents_pos = self._fixed_agent_pos
+            spawn_pos = self._fixed_spawn_pos
+            spawn_count = self._fixed_spawn_count
         else:
+            map_key, pos_key = jax.random.split(rng_key)
+
+            map, spawn_pos, spawn_count = self._generate_map(map_key)
+
+            unpadded_map = map[
+                self.pad_width : -self.pad_width, self.pad_height : -self.pad_height
+            ]
+
+            pos_x, pos_y = choose_positions(
+                unpadded_map,
+                self.num_flags + self.num_agents,
+                pos_key,
+                replace=False,
+            )
+
+            pos_x = pos_x + self.pad_width
+            pos_y = pos_y + self.pad_height
+            positions = jnp.stack((pos_x, pos_y), axis=1)
+            flag_pos = positions[: self.num_flags]
+            agents_pos = positions[self.num_flags :]
+
             map = map.at[flag_pos[:, 0], flag_pos[:, 1]].set(GW.TILE_FLAG)
 
         state = FindReturnState(
@@ -158,64 +249,6 @@ class FindReturnEnv(Environment[FindReturnState]):
             spawn_pos=spawn_pos,
             spawn_count=spawn_count,
             agents_pos=agents_pos,
-            agents_timeout=jnp.zeros((self.num_agents,), dtype=jnp.int32),
-            found_reward=jnp.zeros((self.num_agents,), dtype=jnp.bool_),
-            time=jnp.int32(0),
-            rewards=jnp.float32(0.0),
-        )
-
-        actions = jnp.zeros((self.num_agents,), dtype=jnp.int32)
-        rewards = jnp.zeros((self.num_agents,), dtype=jnp.float32)
-
-        return state, self.encode_observations(state, actions, rewards)
-
-    def load_map(self, map: str):
-        tiles = np.zeros((self.unpadded_width, self.unpadded_height), dtype=np.int8)
-
-        x = 0
-        y = self.unpadded_height
-
-        agent_positions = []
-        spawn_positions = []
-
-        for c in map:
-            if c == "\n":
-                x = 0
-                y -= 1
-            else:
-                match x:
-                    case "x":
-                        tiles[x, y] = GW.TILE_DESTRUCTIBLE_WALL
-                    case "a":
-                        agent_positions.append(
-                            [self.pad_width + x, self.pad_height + y]
-                        )
-                    case "f":
-                        tiles[x, y] = GW.TILE_FLAG
-                    case _:
-                        spawn_positions.append(
-                            [self.pad_width + x, self.pad_height + y]
-                        )
-
-                x += 1
-
-        tiles = jnp.asarray(tiles)
-        # pad the tiles
-        tiles = jnp.pad(
-            tiles,
-            pad_width=(
-                (self.pad_width, self.pad_width),
-                (self.pad_height, self.pad_height),
-            ),
-            mode="constant",
-            constant_values=GW.TILE_WALL,
-        )
-
-        state = FindReturnState(
-            map=tiles,
-            spawn_pos=jnp.array(spawn_positions, jnp.int32),
-            spawn_count=jnp.int32(len(spawn_positions)),
-            agents_pos=jnp.arange(agent_positions, jnp.int32),
             agents_timeout=jnp.zeros((self.num_agents,), dtype=jnp.int32),
             found_reward=jnp.zeros((self.num_agents,), dtype=jnp.bool_),
             time=jnp.int32(0),

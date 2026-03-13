@@ -1,4 +1,5 @@
 from typing import Any
+from functools import cached_property
 from mapox.renderer import GridRenderState, GridRenderSettings
 import jax
 from jax import numpy as jnp
@@ -24,8 +25,23 @@ class TaskIdWrapper(Environment):
         ts = ts._replace(task_ids=self._task_ids)
         return new_state, ts
 
+    @property
+    def num_agents(self) -> int:
+        return self._env.num_agents
+
+    @cached_property
+    def observation_spec(self):
+        return self._env.observation_spec
+
+    @cached_property
+    def action_spec(self):
+        return self._env.action_spec
+
     def create_placeholder_logs(self) -> dict[str, Any]:
         return self._env.create_placeholder_logs()
+
+    def create_logs(self, state) -> dict[str, Any]:
+        return self._env.create_logs(state)
 
     @property
     def is_jittable(self) -> bool:
