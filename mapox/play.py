@@ -60,12 +60,15 @@ def enjoy(
     rng_key: jax.Array = jax.random.PRNGKey(42),
     video_path: str | None = None,
     size: int = 960,
+    fps: int = 15,
     human_control: bool = True,
     pov: bool = False,
 ) -> None:
     focused_agent = 0 if human_control else None
 
-    client = GridworldClient(env, fps=15, screen_width=size, screen_height=size)
+    client = GridworldClient(
+        env, fps=fps, screen_width=size, screen_height=size
+    )
     client.focus_agent(focused_agent)
 
     env_key, rng_key = jax.random.split(rng_key)
