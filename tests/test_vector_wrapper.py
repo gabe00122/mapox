@@ -4,7 +4,6 @@ import jax
 from jax import numpy as jnp
 
 from mapox.envs.find_return import FindReturnConfig, FindReturnEnv
-from mapox.envs.soccer import SoccerConfig, SoccerEnv
 from mapox.envs.constance import MOVE_UP
 from mapox.wrappers.vector import VectorWrapper
 
@@ -46,15 +45,6 @@ def test_step_works():
 
     assert ts.obs.shape == (venv.num_agents, *inner.observation_spec.shape)
     assert ts.reward.shape == (venv.num_agents,)
-
-
-def test_teams_tiling():
-    inner = SoccerEnv(SoccerConfig(team_size=2), LENGTH)
-    venv = VectorWrapper(inner, 2)
-
-    assert venv.teams is not None
-    assert venv.teams.shape == (venv.num_agents,)
-    assert jnp.array_equal(venv.teams, jnp.tile(inner.teams, 2))
 
 
 def test_teams_none():
