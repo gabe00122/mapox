@@ -11,7 +11,7 @@ from mapox.config import EnvironmentFactory, FindReturnConfig
 from mapox.environment import Environment, EnvState
 from mapox.envs.king_hill import KingHillConfig
 from mapox.envs.scouts import ScoutsConfig
-from mapox.envs.stealth import StealthConfig
+from mapox.envs.prey import PreyConfig
 from mapox.envs.traveling_salesman import TravelingSalesmanConfig
 from mapox.timestep import TimeStep
 
@@ -131,7 +131,7 @@ def main():
             "scouts",
             "traveling_salesman",
             "king_hill",
-            "stealth",
+            "prey",
         ],
         help="Which environment to run",
     )
@@ -144,7 +144,7 @@ def main():
         "scouts": ScoutsConfig,
         "traveling_salesman": TravelingSalesmanConfig,
         "king_hill": KingHillConfig,
-        "stealth": StealthConfig,
+        "prey": PreyConfig,
     }[args.env]()
 
     env, _ = env_factory.create_env(config, 512)

@@ -16,7 +16,7 @@ from mapox.config import (
     MultiTaskConfig,
     EnvironmentConfig,
     FindReturnConfig,
-    StealthConfig,
+    PreyConfig,
     EnvironmentFactory,
 )
 
@@ -36,5 +36,5 @@ __all__ = [
     "MultiTaskConfig",
     "EnvironmentConfig",
     "FindReturnConfig",
-    "StealthConfig",
+    "PreyConfig",
 ]

@@ -14,9 +14,9 @@ from mapox.specs import DiscreteActionSpec, ObservationSpec
 from mapox.timestep import TimeStep
 
 
-class StealthConfig(BaseModel):
+class PreyConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-    env_type: Literal["stealth"] = "stealth"
+    env_type: Literal["prey"] = "prey"
 
     num_sneakers: int = 3
     num_chasers: int = 2
@@ -35,7 +35,7 @@ class StealthConfig(BaseModel):
     survival_reward_scale: float = 0.05
 
 
-class StealthState(NamedTuple):
+class PreyState(NamedTuple):
     sneaker_pos: jax.Array  # (num_sneakers, 2)
     chaser_pos: jax.Array  # (num_chasers, 2)
     tiles: jax.Array  # (padded_w, padded_h)
@@ -46,8 +46,8 @@ class StealthState(NamedTuple):
     fullness: jax.Array  # (num_agents,) 0 = starving, decrements each step
 
 
-class StealthEnv(Environment[StealthState]):
-    def __init__(self, config: StealthConfig, length: int) -> None:
+class PreyEnv(Environment[PreyState]):
+    def __init__(self, config: PreyConfig, length: int) -> None:
         super().__init__()
 
         self._length = length
@@ -128,7 +128,7 @@ class StealthEnv(Environment[StealthState]):
         indices = jax.random.randint(rng_key, (n,), minval=0, maxval=open_count)
         return jnp.stack((x_open[indices], y_open[indices]), axis=1)
 
-    def reset(self, rng_key: jax.Array) -> tuple[StealthState, TimeStep]:
+    def reset(self, rng_key: jax.Array) -> tuple[PreyState, TimeStep]:
         map_key, sneaker_key, chaser_key, food_key = jax.random.split(rng_key, 4)
 
         tiles = self._generate_map(map_key)
@@ -136,7 +136,7 @@ class StealthEnv(Environment[StealthState]):
         chaser_pos = self._spawn(tiles, self._num_chasers, chaser_key)
         food_pos = self._spawn(tiles, self._config.num_food, food_key, allow_grass=True)
 
-        state = StealthState(
+        state = PreyState(
             sneaker_pos=sneaker_pos,
             chaser_pos=chaser_pos,
             tiles=tiles,
@@ -154,8 +154,8 @@ class StealthEnv(Environment[StealthState]):
         return state, self.encode_observations(state, actions, rewards, terminated)
 
     def step(
-        self, state: StealthState, action: jax.Array, rng_key: jax.Array
-    ) -> tuple[StealthState, TimeStep]:
+        self, state: PreyState, action: jax.Array, rng_key: jax.Array
+    ) -> tuple[PreyState, TimeStep]:
         move_key, respawn_key, food_key, rng_key = jax.random.split(rng_key, 4)
 
         num_agents = self.num_agents
@@ -263,7 +263,7 @@ class StealthEnv(Environment[StealthState]):
         rewards = cfg.survival_reward_scale * (fullness.astype(jnp.float32) / cfg.max_fullness)
         rewards = jnp.where(terminated, 0.0, rewards)
 
-        state = StealthState(
+        state = PreyState(
             sneaker_pos=new_sneaker_pos,
             chaser_pos=new_chaser_pos,
             tiles=state.tiles,
@@ -276,7 +276,7 @@ class StealthEnv(Environment[StealthState]):
 
         return state, self.encode_observations(state, action, rewards, terminated)
 
-    def _render_tiles(self, state: StealthState, conceal: bool = False):
+    def _render_tiles(self, state: PreyState, conceal: bool = False):
         """Render agents and food. If conceal=True, agents on grass are hidden."""
         tiles = state.tiles
 
@@ -328,7 +328,7 @@ class StealthEnv(Environment[StealthState]):
             axis=-1,
         )
 
-    def encode_observations(self, state: StealthState, actions, rewards, terminated) -> TimeStep:
+    def encode_observations(self, state: PreyState, actions, rewards, terminated) -> TimeStep:
         @partial(jax.vmap, in_axes=(None, 0))
         def _encode_view(tiles, positions):
             return jax.lax.dynamic_slice(
@@ -383,10 +383,10 @@ class StealthEnv(Environment[StealthState]):
     def create_placeholder_logs(self):
         return {"rewards": jnp.float32(0.0)}
 
-    def create_logs(self, state: StealthState):
+    def create_logs(self, state: PreyState):
         return {"rewards": state.rewards}
 
-    def get_render_state(self, state: StealthState) -> GridRenderState:
+    def get_render_state(self, state: PreyState) -> GridRenderState:
         tiles = self._render_tiles(state)
         agent_positions = jnp.concatenate([state.sneaker_pos, state.chaser_pos], axis=0)
         return GridRenderState(
