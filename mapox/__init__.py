@@ -1,6 +1,6 @@
 """MAPOX: Multi-Agent Partially Observable gridworlds in JAX"""
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from mapox.timestep import TimeStep
 from mapox.environment import Environment
