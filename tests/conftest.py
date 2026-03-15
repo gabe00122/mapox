@@ -5,7 +5,7 @@ from mapox.envs.find_return import FindReturnConfig, FindReturnEnv
 from mapox.envs.traveling_salesman import TravelingSalesmanConfig, TravelingSalesmanEnv
 from mapox.envs.scouts import ScoutsConfig, ScoutsEnv
 from mapox.envs.king_hill import KingHillConfig, KingHillEnv
-from mapox.envs.stealth import StealthConfig, StealthEnv
+from mapox.envs.prey import PreyConfig, PreyEnv
 
 LENGTH = 32
 
@@ -30,9 +30,9 @@ def _make_envs():
         ),
         ("king_hill", KingHillEnv(KingHillConfig(num_agents=4, num_flags=1), LENGTH)),
         (
-            "stealth",
-            StealthEnv(
-                StealthConfig(num_sneakers=2, num_chasers=1, num_food=3), LENGTH
+            "prey",
+            PreyEnv(
+                PreyConfig(num_sneakers=2, num_chasers=1, num_food=3), LENGTH
             ),
         ),
     ]
