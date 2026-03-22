@@ -4,7 +4,7 @@ MAPOX is a small collection of JAX-native, multi-agent, partially-observable gri
 
 The environments are functional (state in / state out), designed to work well with `jax.jit`/`jax.vmap`, and expose an `action_mask` for per-environment action subsets.
 
-These environments were originally devoloped as part of [https://github.com/gabe00122/jaxrl/tree/mapox](https://github.com/gabe00122/jaxrl) and contains a reference model on huggingface.
+These environments were originally devoloped as part of https://github.com/gabe00122/jaxrl and contains a reference model on huggingface.
 
 ## Installation
 
