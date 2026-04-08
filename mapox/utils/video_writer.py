@@ -1,5 +1,6 @@
-import numpy as np
+from pathlib import Path
 
+import numpy as np
 from ffmpeg import FFmpeg
 
 
@@ -9,9 +10,10 @@ def grayscale_to_rgb(image: np.ndarray) -> np.ndarray:
     return image
 
 
-def save_video(frames: np.ndarray, filename, fps=60):
+def save_video(frames: np.ndarray, filename: str, fps=60):
     print("Saving video...")
-    # frames = grayscale_to_rgb(frames)
+    Path(filename).parent.mkdir(parents=True, exist_ok=True)
+
     frames = np.array(frames)
     frames = np.rot90(frames, -1, (1, 2))
     frames = np.flip(frames, 2)
@@ -35,6 +37,8 @@ def save_video(frames: np.ndarray, filename, fps=60):
                 # "vf": "scale=iw*4:ih*4:flags=neighbor",
                 "pix_fmt": "yuv420p",
                 "codec:v": "libx264",
+                "crf": 28,
+                "preset": "veryslow",
                 "movflags": "faststart",
             },
         )

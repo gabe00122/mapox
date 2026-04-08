@@ -14,7 +14,7 @@ def generate_perlin_noise_2d(
 
     Args:
         shape: The shape of the generated array (tuple of two ints).
-            This must be a multple of res.
+            This must be a multiple of res.
         res: The number of periods of noise to generate along each
             axis (tuple of two ints). Note shape must be a multiple of
             res.
@@ -100,7 +100,7 @@ def choose_positions(
     tiles: jax.Array, n: int, rng_key: jax.Array, replace: bool = False
 ):
     """
-    Chooses 'n' non-repeating empty tile position
+    Chooses 'n' non-repeating empty tile positions
     """
     width, height = tiles.shape
     size = width * height

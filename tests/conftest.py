@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 import jax
 
@@ -8,6 +10,7 @@ from mapox.envs.king_hill import KingHillConfig, KingHillEnv
 from mapox.envs.prey import PreyConfig, PreyEnv
 
 LENGTH = 32
+TEST_MAP_PATH = str(Path(__file__).parent / "fixtures" / "test_map.json")
 
 
 def _make_envs():
@@ -15,6 +18,13 @@ def _make_envs():
         (
             "find_return",
             FindReturnEnv(FindReturnConfig(num_agents=2, num_flags=2), LENGTH),
+        ),
+        (
+            "find_return_loaded",
+            FindReturnEnv(
+                FindReturnConfig(num_agents=2, num_flags=2, map_path=TEST_MAP_PATH),
+                LENGTH,
+            ),
         ),
         (
             "traveling_salesman",
@@ -26,6 +36,18 @@ def _make_envs():
             "scouts",
             ScoutsEnv(
                 ScoutsConfig(num_scouts=1, num_harvesters=1, num_treasures=3), LENGTH
+            ),
+        ),
+        (
+            "scouts_loaded",
+            ScoutsEnv(
+                ScoutsConfig(
+                    num_scouts=1,
+                    num_harvesters=1,
+                    num_treasures=3,
+                    map_path=TEST_MAP_PATH,
+                ),
+                LENGTH,
             ),
         ),
         ("king_hill", KingHillEnv(KingHillConfig(num_agents=4, num_flags=1), LENGTH)),

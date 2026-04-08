@@ -8,9 +8,9 @@ Metrics = dict[str, jax.Array]
 class TimeStep(NamedTuple):
     """The observation that the agent sees.
 
-    agents_view: the agent's view of the environment.
+    obs: the agent's view of the environment.
     action_mask: boolean array specifying, for each agent, which action is legal.
-    step_count: the number of steps elapsed since the beginning of the episode.
+    time: the number of steps elapsed since the beginning of the episode.
     """
 
     obs: jax.Array  # (num_agents, num_obs_features)

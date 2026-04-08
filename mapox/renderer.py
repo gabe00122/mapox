@@ -6,7 +6,7 @@ import pygame
 import jax
 
 import mapox.envs.constance as GW
-from mapox.utils.video_writter import save_video
+from mapox.utils.video_writer import save_video
 
 
 class SpriteSheet:

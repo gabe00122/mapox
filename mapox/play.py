@@ -10,8 +10,8 @@ from mapox.client import GridworldClient
 from mapox.config import EnvironmentFactory, FindReturnConfig
 from mapox.environment import Environment, EnvState
 from mapox.envs.king_hill import KingHillConfig
-from mapox.envs.scouts import ScoutsConfig
 from mapox.envs.prey import PreyConfig
+from mapox.envs.scouts import ScoutsConfig
 from mapox.envs.traveling_salesman import TravelingSalesmanConfig
 from mapox.timestep import TimeStep
 
@@ -65,7 +65,9 @@ def enjoy(
 ) -> None:
     focused_agent = 0 if human_control else None
 
-    client = GridworldClient(env, fps=fps, screen_width=size, screen_height=size)
+    client = GridworldClient(
+        env, fps=fps, screen_width=size, screen_height=size
+    )
     client.focus_agent(focused_agent)
 
     env_key, rng_key = jax.random.split(rng_key)
@@ -84,7 +86,7 @@ def enjoy(
             if event.type == pygame.QUIT:
                 break
 
-            if event.type == pygame.KEYDOWN:
+            if human_control and event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_n:
                     if focused_agent is None:
                         focused_agent = 0
@@ -103,7 +105,9 @@ def enjoy(
             if human_control:
                 actions = actions.at[focused_agent].set(human_action)
 
-            env_state, timestep, rng_key = step(env, env_state, actions, rng_key)
+            env_state, timestep, rng_key = step(
+                env, env_state, actions, rng_key
+            )
 
             if video_path is not None:
                 client.record_frame()

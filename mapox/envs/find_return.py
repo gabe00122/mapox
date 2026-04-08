@@ -10,6 +10,7 @@ from mapox.map_generator import (
     generate_decor_tiles,
     choose_positions,
 )
+from mapox.map_loader import load_map
 from mapox.environment import Environment
 from mapox.specs import DiscreteActionSpec, ObservationSpec
 from mapox.timestep import TimeStep
@@ -32,6 +33,8 @@ class FindReturnConfig(BaseModel):
     mapgen_threshold: float = 0.3
     digging_timeout: int = 5
     treasure_reward: float = 1.0
+
+    map_path: str | None = None
 
 
 class FindReturnState(NamedTuple):
@@ -68,6 +71,13 @@ class FindReturnEnv(Environment[FindReturnState]):
         self.unpadded_width = config.width
         self.unpadded_height = config.height
         self.mapgen_threshold = config.mapgen_threshold
+
+        if config.map_path is not None:
+            self._loaded_tiles = load_map(config.map_path)
+            self.unpadded_width = self._loaded_tiles.shape[0]
+            self.unpadded_height = self._loaded_tiles.shape[1]
+        else:
+            self._loaded_tiles = None
 
         self.width = self.unpadded_width + self.pad_width
         self.height = self.unpadded_height + self.pad_height
@@ -122,26 +132,69 @@ class FindReturnEnv(Environment[FindReturnState]):
     def reset(self, rng_key: jax.Array) -> tuple[FindReturnState, TimeStep]:
         map_key, pos_key = jax.random.split(rng_key)
 
-        map, spawn_pos, spawn_count = self._generate_map(map_key)
+        if self._loaded_tiles is not None:
+            # sprinkle decor tiles on empty cells
+            unpadded_map = self._loaded_tiles
+            decor = generate_decor_tiles(
+                self.unpadded_width, self.unpadded_height, map_key
+            )
+            unpadded_map = jnp.where(
+                unpadded_map == GW.TILE_EMPTY, decor, unpadded_map
+            )
 
-        unpadded_map = map[
-            self.pad_width : -self.pad_width, self.pad_height : -self.pad_height
-        ]
+            # pad with walls
+            map = jnp.pad(
+                unpadded_map,
+                pad_width=(
+                    (self.pad_width, self.pad_width),
+                    (self.pad_height, self.pad_height),
+                ),
+                mode="constant",
+                constant_values=GW.TILE_WALL,
+            )
 
-        pos_x, pos_y = choose_positions(
-            unpadded_map,
-            self.num_flags + self.num_agents,
-            pos_key,
-            replace=False,
-        )
+            # compute spawn positions after decor
+            x_spawns, y_spawns = jnp.where(
+                unpadded_map == GW.TILE_EMPTY,
+                size=self.unpadded_width * self.unpadded_height,
+                fill_value=jnp.int8(-1),
+            )
+            spawn_count = jnp.sum(unpadded_map == GW.TILE_EMPTY)
+            x_spawns = x_spawns + self.pad_width
+            y_spawns = y_spawns + self.pad_height
+            spawn_pos = jnp.stack((x_spawns, y_spawns), axis=1)
 
-        pos_x = pos_x + self.pad_width
-        pos_y = pos_y + self.pad_height
-        positions = jnp.stack((pos_x, pos_y), axis=1)
-        flag_pos = positions[: self.num_flags]
-        agents_pos = positions[self.num_flags :]
+            pos_x, pos_y = choose_positions(
+                unpadded_map,
+                self.num_agents,
+                pos_key,
+                replace=False,
+            )
 
-        map = map.at[flag_pos[:, 0], flag_pos[:, 1]].set(GW.TILE_FLAG)
+            pos_x = pos_x + self.pad_width
+            pos_y = pos_y + self.pad_height
+            agents_pos = jnp.stack((pos_x, pos_y), axis=1)
+        else:
+            map, spawn_pos, spawn_count = self._generate_map(map_key)
+
+            unpadded_map = map[
+                self.pad_width : -self.pad_width, self.pad_height : -self.pad_height
+            ]
+
+            pos_x, pos_y = choose_positions(
+                unpadded_map,
+                self.num_flags + self.num_agents,
+                pos_key,
+                replace=False,
+            )
+
+            pos_x = pos_x + self.pad_width
+            pos_y = pos_y + self.pad_height
+            positions = jnp.stack((pos_x, pos_y), axis=1)
+            flag_pos = positions[: self.num_flags]
+            agents_pos = positions[self.num_flags :]
+
+            map = map.at[flag_pos[:, 0], flag_pos[:, 1]].set(GW.TILE_FLAG)
 
         state = FindReturnState(
             map=map,
