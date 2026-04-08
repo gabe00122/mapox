@@ -200,12 +200,18 @@ class ScoutsEnv(Environment[ScoutsState]):
         else:
             map, spawn_pos, spawn_count = self._generate_map(map_key)
 
-            scout_pos = spawn_pos[
+            spawn_position = spawn_pos[
                 jax.random.randint(
-                    scout_key, (self._num_scouts,), minval=0, maxval=spawn_count
+                    scout_key, (1,), minval=0, maxval=spawn_count
                 )
-            ]
-            harvester_pos = scout_pos.copy()
+            ].squeeze(0)
+
+            scout_pos = jnp.full(
+                (self._num_scouts, 2), spawn_position, dtype=jnp.int32
+            )
+            harvester_pos = jnp.full(
+                (self._num_harvesters, 2), spawn_position, dtype=jnp.int32
+            )
             treasure_pos = spawn_pos[
                 jax.random.randint(
                     treasure_key,
