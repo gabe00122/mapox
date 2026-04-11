@@ -21,7 +21,6 @@ class EmbodiedCommConfig(BaseModel):
 
     view_width: int = 9
     view_height: int = 9
-    length: int = 64
     win_reward: float = 1.0
 
 
@@ -37,6 +36,7 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
     def __init__(self, config: EmbodiedCommConfig, length: int) -> None:
         super().__init__()
         self.config = config
+        self.length = length
 
         self._pad_width = self.config.view_width // 2
         self._pad_height = self.config.view_height // 2
@@ -83,6 +83,8 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
             constant_values=GW.TILE_WALL,
         )
 
+        map = map.astype(jnp.int8)
+
         return map
 
     def _generate_map_mask(self) -> jax.Array:
@@ -100,6 +102,8 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
             ),
             mode="empty",
         )
+
+        mask = mask.astype(jnp.int8)
 
         return mask
 
@@ -176,12 +180,14 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
         color_b = state.map[agents_pos[1, 0], agents_pos[1, 1]]
         win = all_committed & (color_a == color_b)
 
-        rewards = jnp.full((self.num_agents,), self.config.win_reward) * win
+        reward = self.config.win_reward * win
+        rewards = jnp.full((self.num_agents,), reward)
 
         state = state._replace(
             agents_pos=agents_pos,
             committed=committed,
             time=state.time + 1,
+            rewards=state.rewards + reward,
         )
         state = self._maybe_reset(state, all_committed, rng_key)
 
@@ -263,7 +269,7 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
             last_action=actions,
             reward=rewards,
             action_mask=self._action_mask,
-            terminated=jnp.equal(time, self.config.length - 1),
+            terminated=jnp.equal(time, self.length - 1),
         )
 
     def create_placeholder_logs(self):
