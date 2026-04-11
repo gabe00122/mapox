@@ -1,9 +1,9 @@
-from typing import NamedTuple
 from importlib.resources import files
+from typing import NamedTuple
 
+import jax
 import numpy as np
 import pygame
-import jax
 
 import mapox.envs.constance as GW
 from mapox.utils.video_writer import save_video
@@ -81,6 +81,16 @@ tilemap = {
     GW.TILE_DECOR_2: (16, 5),
     GW.TILE_DECOR_3: (17, 5),
     GW.TILE_DECOR_4: (14, 5),
+    # Color palette tiles for the embodied communication env.
+    # Sprite choices are cosmetic; each color just needs a distinct sprite.
+    GW.TILE_COLOR_0: (102, 14),
+    GW.TILE_COLOR_1: (102, 15),
+    GW.TILE_COLOR_2: (102, 16),
+    GW.TILE_COLOR_3: (102, 17),
+    GW.TILE_COLOR_4: (102, 18),
+    GW.TILE_COLOR_5: (102, 19),
+    GW.TILE_COLOR_6: (102, 20),
+    GW.TILE_COLOR_7: (102, 21),
     GW.TILE_ARROW: (80, 21),
     GW.TILE_GOAL: (18, 0),
     GW.AGENT_BALL: (104, 1),
@@ -97,7 +107,9 @@ class GridworldRenderer:
         self.screen_height = screen_height
         self.fps = fps
 
-        self.screen = pygame.display.set_mode((self.screen_width, self.screen_height))
+        self.screen = pygame.display.set_mode(
+            (self.screen_width, self.screen_height)
+        )
         self._vision_flags = pygame.SRCALPHA
         self.vision = pygame.Surface(
             (self.screen_width, self.screen_height), flags=self._vision_flags
@@ -136,7 +148,8 @@ class GridworldRenderer:
             self.screen_width = width
             self.screen_height = height
             self.vision = pygame.Surface(
-                (self.screen_width, self.screen_height), flags=self._vision_flags
+                (self.screen_width, self.screen_height),
+                flags=self._vision_flags,
             )
             self._tile_size = None
 
@@ -163,7 +176,10 @@ class GridworldRenderer:
             self._tile_size = tile_size
             self._tilecache = self._build_tilecache(self._tile_size)
 
-        if self._agent_tile_size != agent_tile_size or self._agent_tilecache is None:
+        if (
+            self._agent_tile_size != agent_tile_size
+            or self._agent_tilecache is None
+        ):
             self._agent_tile_size = agent_tile_size
             self._agent_tilecache = self._build_tilecache(self._agent_tile_size)
 
@@ -175,12 +191,16 @@ class GridworldRenderer:
         agent_pixel_width = self._agent_tile_size * self._view_width
         agent_pixel_height = self._agent_tile_size * self._view_height
         self._agent_view_offset_x = (self.screen_width - agent_pixel_width) // 2
-        self._agent_view_offset_y = (self.screen_height - agent_pixel_height) // 2
+        self._agent_view_offset_y = (
+            self.screen_height - agent_pixel_height
+        ) // 2
 
     def _build_tilecache(self, tile_size: int):
         def _load_tiles(item: dict | list | tuple[int, int]):
             if isinstance(item, tuple):
-                return self._spritesheet.image_at_tile(item[0], item[1], tile_size)
+                return self._spritesheet.image_at_tile(
+                    item[0], item[1], tile_size
+                )
             if isinstance(item, list):
                 return [_load_tiles(elm) for elm in item]
             if isinstance(item, dict):
@@ -189,7 +209,9 @@ class GridworldRenderer:
         return _load_tiles(tilemap)
 
     def _tile_to_screen(self, x: int, y: int):
-        return x - self._pad_width, (self._tile_height - 1 - y) + self._pad_height
+        return x - self._pad_width, (
+            self._tile_height - 1 - y
+        ) + self._pad_height
 
     def _draw_tile(self, image, x, y):
         x, y = self._tile_to_screen(x, y)
@@ -303,7 +325,8 @@ class GridworldRenderer:
 
                 px = self._agent_view_offset_x + vx * tile_size
                 py = (
-                    self._agent_view_offset_y + (self._view_height - 1 - vy) * tile_size
+                    self._agent_view_offset_y
+                    + (self._view_height - 1 - vy) * tile_size
                 )
                 dest = pygame.Rect(px, py, tile_size, tile_size)
                 self.screen.blit(image, dest)

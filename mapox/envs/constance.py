@@ -2,7 +2,7 @@ from jax import numpy as jnp
 
 from mapox.specs import ObservationSpec
 
-NUM_TYPES = 19
+NUM_TYPES = 27
 
 # Unified tile ids across gridworld environments
 TILE_EMPTY = 0  # empty space
@@ -33,6 +33,17 @@ TILE_GOAL = 15
 AGENT_BALL = 16
 TILE_GRASS = 17
 TILE_FOOD = 18
+
+# Color palette tiles, used by the embodied communication env.
+# Kept contiguous so (TILE_COLOR_0 + color_id) maps a 0..7 color id to a tile id.
+TILE_COLOR_0 = 19
+TILE_COLOR_1 = 20
+TILE_COLOR_2 = 21
+TILE_COLOR_3 = 22
+TILE_COLOR_4 = 23
+TILE_COLOR_5 = 24
+TILE_COLOR_6 = 25
+TILE_COLOR_7 = 26
 
 
 # Actions

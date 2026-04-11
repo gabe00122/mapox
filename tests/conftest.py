@@ -8,6 +8,7 @@ from mapox.envs.traveling_salesman import TravelingSalesmanConfig, TravelingSale
 from mapox.envs.scouts import ScoutsConfig, ScoutsEnv
 from mapox.envs.king_hill import KingHillConfig, KingHillEnv
 from mapox.envs.prey import PreyConfig, PreyEnv
+from mapox.envs.embodied_comm import EmbodiedCommConfig, EmbodiedCommEnv
 
 LENGTH = 32
 TEST_MAP_PATH = str(Path(__file__).parent / "fixtures" / "test_map.json")
@@ -56,6 +57,10 @@ def _make_envs():
             PreyEnv(
                 PreyConfig(num_sneakers=2, num_chasers=1, num_food=3), LENGTH
             ),
+        ),
+        (
+            "embodied_comm",
+            EmbodiedCommEnv(EmbodiedCommConfig(), LENGTH),
         ),
     ]
 
