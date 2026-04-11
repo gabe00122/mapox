@@ -52,6 +52,8 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
             self.num_agents,
         )
 
+        self._map_mask = self._generate_map_mask()
+
     def _generate_map(self, rng_key: jax.Array) -> jax.Array:
         grid_a_key, grid_b_key = jax.random.split(rng_key, 2)
         grid_a_colors = (
@@ -204,8 +206,7 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
     ):
         tiles = state.map
         if pov is not None:
-            mask = self._generate_map_mask()
-            tiles = jnp.where(mask == pov + 1, GW.TILE_EMPTY, tiles)
+            tiles = jnp.where(self._map_mask == pov + 1, GW.TILE_EMPTY, tiles)
 
         tiles = tiles.at[state.agents_pos[:, 0], state.agents_pos[:, 1]].set(
             GW.AGENT_GENERIC
