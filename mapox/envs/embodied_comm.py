@@ -126,7 +126,9 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
             rewards=rewards,
         )
 
-        return state, self.encode_observations(state, actions, rewards)
+        return state, self.encode_observations(
+            state, actions, jnp.zeros((self.num_agents,))
+        )
 
     def _maybe_reset(
         self,
