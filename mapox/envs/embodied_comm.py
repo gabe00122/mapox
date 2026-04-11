@@ -21,7 +21,6 @@ class EmbodiedCommConfig(BaseModel):
 
     view_width: int = 9
     view_height: int = 9
-    length: int = 64
     win_reward: float = 1.0
 
 
@@ -37,6 +36,7 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
     def __init__(self, config: EmbodiedCommConfig, length: int) -> None:
         super().__init__()
         self.config = config
+        self.length = length
 
         self._pad_width = self.config.view_width // 2
         self._pad_height = self.config.view_height // 2
@@ -83,6 +83,8 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
             constant_values=GW.TILE_WALL,
         )
 
+        map = map.astype(jnp.int8)
+
         return map
 
     def _generate_map_mask(self) -> jax.Array:
@@ -100,6 +102,8 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
             ),
             mode="empty",
         )
+
+        mask = mask.astype(jnp.int8)
 
         return mask
 
@@ -127,7 +131,10 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
         )
 
         return state, self.encode_observations(
-            state, actions, jnp.zeros((self.num_agents,))
+            state,
+            actions,
+            jnp.zeros((self.num_agents,)),
+            jnp.zeros((self.num_agents,), dtype=jnp.bool_),
         )
 
     def _maybe_reset(
@@ -136,12 +143,7 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
         all_committed: jax.Array,
         rng_key: jax.Array,
     ) -> EmbodiedCommState:
-        new_map = self._generate_map(rng_key)
-
-        map = jnp.where(all_committed, new_map, state.map)
-        committed = jnp.where(all_committed, False, state.committed)
-
-        return state._replace(map=map, committed=committed)
+        return jax.lax.cond(all_committed, lambda: self.reset(rng_key), state)
 
     def step(
         self,
@@ -176,16 +178,27 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
         color_b = state.map[agents_pos[1, 0], agents_pos[1, 1]]
         win = all_committed & (color_a == color_b)
 
-        rewards = jnp.full((self.num_agents,), self.config.win_reward) * win
+        reward = self.config.win_reward * win
+        rewards = jnp.full((self.num_agents,), reward)
 
         state = state._replace(
             agents_pos=agents_pos,
             committed=committed,
             time=state.time + 1,
+            rewards=state.rewards + reward,
         )
-        state = self._maybe_reset(state, all_committed, rng_key)
+        terminated = jnp.full(
+            (self.num_agents,), all_committed, dtype=jnp.bool_
+        )
 
-        return state, self.encode_observations(state, action, rewards)
+        next_state = self._maybe_reset(state, all_committed, rng_key)
+
+        return next_state, self.encode_observations(
+            state,
+            action,
+            rewards,
+            terminated,
+        )
 
     @cached_property
     def observation_spec(self) -> ObservationSpec:
@@ -208,7 +221,8 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
     ):
         tiles = state.map
         if pov is not None:
-            tiles = jnp.where(self._map_mask == pov + 1, GW.TILE_EMPTY, tiles)
+            hidden = (self._map_mask > 0) & (self._map_mask != pov + 1)
+            tiles = jnp.where(hidden, GW.TILE_EMPTY, tiles)
 
         tiles = tiles.at[state.agents_pos[:, 0], state.agents_pos[:, 1]].set(
             GW.AGENT_GENERIC
@@ -233,6 +247,7 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
         state: EmbodiedCommState,
         actions: jax.Array,
         rewards: jax.Array,
+        terminated: jax.Array,
     ) -> TimeStep:
         @partial(jax.vmap, in_axes=(None, 0, 0))
         def _encode_view(state, agent_id, positions):
@@ -263,7 +278,7 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
             last_action=actions,
             reward=rewards,
             action_mask=self._action_mask,
-            terminated=jnp.equal(time, self.config.length - 1),
+            terminated=terminated,
         )
 
     def create_placeholder_logs(self):
