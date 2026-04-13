@@ -22,6 +22,7 @@ class EmbodiedCommConfig(BaseModel):
     view_width: int = 9
     view_height: int = 9
     win_reward: float = 1.0
+    full_info: bool = False
 
 
 class EmbodiedCommState(NamedTuple):
@@ -30,6 +31,7 @@ class EmbodiedCommState(NamedTuple):
     map: jax.Array  # (W_padded, H_padded) int8; colors baked in as TILE_COLOR_*
     time: jax.Array  # () int32
     rewards: jax.Array  # () float32, cumulative episode reward
+    episodes: jax.Array
 
 
 class EmbodiedCommEnv(Environment[EmbodiedCommState]):
@@ -120,6 +122,7 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
         committed = jnp.zeros((self.num_agents,), jnp.bool_)
         time = jnp.int32(0)
         rewards = jnp.float32(0.0)
+        episodes = jnp.int32(0)
 
         actions = jnp.zeros((self.num_agents,), dtype=jnp.int32)
         state = EmbodiedCommState(
@@ -128,6 +131,7 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
             committed=committed,
             time=time,
             rewards=rewards,
+            episodes=episodes,
         )
 
         return state, self.encode_observations(
@@ -143,7 +147,14 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
         all_committed: jax.Array,
         rng_key: jax.Array,
     ) -> EmbodiedCommState:
-        return jax.lax.cond(all_committed, lambda: self.reset(rng_key), state)
+        map = jnp.where(
+            all_committed,
+            self._generate_map(rng_key),
+            state.map,
+        )
+        committed = jnp.where(all_committed, False, state.committed)
+
+        return state._replace(map=map, committed=committed)
 
     def step(
         self,
@@ -186,6 +197,7 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
             committed=committed,
             time=state.time + 1,
             rewards=state.rewards + reward,
+            episodes=state.episodes + all_committed,
         )
         terminated = jnp.full(
             (self.num_agents,), all_committed, dtype=jnp.bool_
@@ -220,7 +232,7 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
         self, state: EmbodiedCommState, pov: jax.Array | None = None
     ):
         tiles = state.map
-        if pov is not None:
+        if pov is not None and not self.config.full_info:
             hidden = (self._map_mask > 0) & (self._map_mask != pov + 1)
             tiles = jnp.where(hidden, GW.TILE_EMPTY, tiles)
 
@@ -285,7 +297,7 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
         return {"rewards": jnp.float32(0.0)}
 
     def create_logs(self, state: EmbodiedCommState):
-        return {"rewards": state.rewards}
+        return {"rewards": state.rewards / state.episodes}
 
     def get_render_state(self, state: EmbodiedCommState) -> GridRenderState:
         return GridRenderState(
