@@ -195,6 +195,17 @@ class GridworldRenderer:
             self.screen_height - agent_pixel_height
         ) // 2
 
+    @staticmethod
+    def _resolve_tile_image(tilecache, tile_data):
+        image = tilecache.get(tile_data[0])
+        if isinstance(image, list):
+            image = image[tile_data[2]]
+        if isinstance(image, list):
+            image = image[tile_data[1] - 1]
+        if isinstance(image, list):
+            image = image[tile_data[3] - 1]
+        return image
+
     def _build_tilecache(self, tile_size: int):
         def _load_tiles(item: dict | list | tuple[int, int]):
             if isinstance(item, tuple):
@@ -262,17 +273,9 @@ class GridworldRenderer:
             for y in range(self._tile_height):
                 tx = self._pad_width + x
                 ty = self._pad_height + y
-                tile = tiles[tx][ty]
-                tile_type_id = tile[0]
-
-                image = self._tilecache[tile_type_id]
-                if isinstance(image, list):
-                    image = image[tile[2]]
-                if isinstance(image, list):
-                    image = image[tile[1] - 1]
-                if isinstance(image, list):
-                    image = image[tile[3] - 1]
-
+                image = self._resolve_tile_image(self._tilecache, tiles[tx][ty])
+                if image is None:
+                    continue
                 self._draw_tile(image, tx, ty)
 
         agent_pos = rs.agent_positions.tolist()
@@ -284,20 +287,11 @@ class GridworldRenderer:
         self.screen.blit(self.vision, (0, 0))
         pygame.display.flip()
 
-    def render_agent_view(self, rs: GridRenderState):
-        # TODO: It's not very clean to have this mostly duplicate the regular render
+    def render_agent_view(self, observations: jax.Array):
         self._ensure_layout()
 
-        tiles = rs.tilemap.tolist()
-        agent_positions = rs.agent_positions.tolist()
-
-        if not agent_positions:
-            return
-
-        agent_x, agent_y = agent_positions[self._focused_agent or 0]
-
-        start_x = agent_x - self._pad_width
-        start_y = agent_y - self._pad_height
+        agent_id = self._focused_agent or 0
+        obs = observations[agent_id].tolist()
 
         tilecache = self._agent_tilecache or {}
         tile_size = self._agent_tile_size or 1
@@ -305,21 +299,8 @@ class GridworldRenderer:
         self.screen.fill((0, 0, 0))
 
         for vx in range(self._view_width):
-            tx = start_x + vx
             for vy in range(self._view_height):
-                ty = start_y + vy
-                tile_data = tiles[tx][ty]
-                tile_type_id = tile_data[0]
-
-                image = tilecache.get(tile_type_id)
-
-                if isinstance(image, list):
-                    image = image[tile_data[2]]
-                if isinstance(image, list):
-                    image = image[tile_data[1] - 1]
-                if isinstance(image, list):
-                    image = image[tile_data[3] - 1]
-
+                image = self._resolve_tile_image(tilecache, obs[vx][vy])
                 if image is None:
                     continue
 

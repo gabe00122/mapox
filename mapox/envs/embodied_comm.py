@@ -109,15 +109,17 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
 
         return mask
 
-    def reset(self, rng_key: jax.Array) -> tuple[EmbodiedCommState, TimeStep]:
-        map = self._generate_map(rng_key)
-        agents_pos = jnp.array(
+    def _start_pos(self) -> jax.Array:
+        return jnp.array(
             [
                 [self._pad_width, self._pad_height],
                 [self._pad_width + GRID_SIZE + 1, self._pad_height],
             ],
             dtype=jnp.int32,
         )
+
+    def reset(self, rng_key: jax.Array) -> tuple[EmbodiedCommState, TimeStep]:
+        map = self._generate_map(rng_key)
 
         committed = jnp.zeros((self.num_agents,), jnp.bool_)
         time = jnp.int32(0)
@@ -127,7 +129,7 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
         actions = jnp.zeros((self.num_agents,), dtype=jnp.int32)
         state = EmbodiedCommState(
             map=map,
-            agents_pos=agents_pos,
+            agents_pos=self._start_pos(),
             committed=committed,
             time=time,
             rewards=rewards,
@@ -153,8 +155,13 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
             state.map,
         )
         committed = jnp.where(all_committed, False, state.committed)
+        agent_pos = jnp.where(
+            all_committed, self._start_pos(), state.agents_pos
+        )
 
-        return state._replace(map=map, committed=committed)
+        return state._replace(
+            map=map, committed=committed, agents_pos=agent_pos
+        )
 
     def step(
         self,

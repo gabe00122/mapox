@@ -23,10 +23,10 @@ class GridworldClient(Generic[EnvState]):
         self.renderer.set_env(env.get_render_settings())
 
     def render(self, state: EnvState, timestep: TimeStep, pov: bool = False) -> None:
-        render_state = self.env.get_render_state(state)
         if pov:
-            self.renderer.render_agent_view(render_state)
+            self.renderer.render_agent_view(timestep.obs)
         else:
+            render_state = self.env.get_render_state(state)
             self.renderer.render(render_state)
 
     def handle_event(self, event: pygame.event.Event) -> bool:
