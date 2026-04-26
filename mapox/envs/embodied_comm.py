@@ -23,6 +23,7 @@ class EmbodiedCommConfig(BaseModel):
     view_height: int = 9
     win_reward: float = 1.0
     full_info: bool = False
+    color_probs: list[float] | None = None
 
 
 class EmbodiedCommState(NamedTuple):
@@ -56,20 +57,32 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
 
         self._map_mask = self._generate_map_mask()
 
+    def _sample_colors(self, rng_key: jax.Array) -> jax.Array:
+        if (
+            self.config.color_probs is not None
+            and len(self.config.color_probs) != NUM_COLORS
+        ):
+            raise ValueError(
+                f"Color probs must have 8 elements or not be included, found {len(self.config.color_probs)}"
+            )
+        p = (
+            None
+            if self.config.color_probs is None
+            else jnp.array(self.config.color_probs)
+        )
+
+        return GW.TILE_COLOR_0 + jax.random.choice(
+            rng_key,
+            NUM_COLORS,
+            (GRID_SIZE, GRID_SIZE),
+            replace=False,
+            p=p,
+        )
+
     def _generate_map(self, rng_key: jax.Array) -> jax.Array:
         grid_a_key, grid_b_key = jax.random.split(rng_key, 2)
-        grid_a_colors = (
-            jax.random.choice(
-                grid_a_key, NUM_COLORS, (GRID_SIZE, GRID_SIZE), replace=False
-            )
-            + GW.TILE_COLOR_0
-        )
-        grid_b_colors = (
-            jax.random.choice(
-                grid_b_key, NUM_COLORS, (GRID_SIZE, GRID_SIZE), replace=False
-            )
-            + GW.TILE_COLOR_0
-        )
+        grid_a_colors = self._sample_colors(grid_a_key)
+        grid_b_colors = self._sample_colors(grid_b_key)
 
         separator = jnp.full((1, GRID_SIZE), GW.TILE_WALL)
 
@@ -304,7 +317,8 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
         return {"rewards": jnp.float32(0.0)}
 
     def create_logs(self, state: EmbodiedCommState):
-        return {"rewards": state.rewards / state.episodes}
+        safe_episodes = jnp.where(state.episodes == 0, 1, 0)
+        return {"rewards": state.rewards / safe_episodes}
 
     def get_render_state(self, state: EmbodiedCommState) -> GridRenderState:
         return GridRenderState(
