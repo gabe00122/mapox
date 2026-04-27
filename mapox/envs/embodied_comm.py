@@ -23,7 +23,7 @@ class EmbodiedCommConfig(BaseModel):
     view_height: int = 9
     win_reward: float = 1.0
     full_info: bool = False
-    color_probs: list[float] | None = None
+    color_probs: tuple[float, ...] | None = None
 
 
 class EmbodiedCommState(NamedTuple):
@@ -317,7 +317,7 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
         return {"rewards": jnp.float32(0.0)}
 
     def create_logs(self, state: EmbodiedCommState):
-        safe_episodes = jnp.where(state.episodes == 0, 1, 0)
+        safe_episodes = jnp.where(state.episodes == 0, 1, state.episodes)
         return {"rewards": state.rewards / safe_episodes}
 
     def get_render_state(self, state: EmbodiedCommState) -> GridRenderState:
