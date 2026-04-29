@@ -226,7 +226,7 @@ class EmbodiedCommEnv(Environment[EmbodiedCommState]):
         next_state = self._maybe_reset(state, all_committed, rng_key)
 
         return next_state, self.encode_observations(
-            state,
+            next_state,
             action,
             rewards,
             terminated,
