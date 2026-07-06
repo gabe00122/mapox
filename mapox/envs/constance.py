@@ -2,7 +2,7 @@ from jax import numpy as jnp
 
 from mapox.specs import ObservationSpec
 
-NUM_TYPES = 19
+NUM_TYPES = 21
 
 # Unified tile ids across gridworld environments
 TILE_EMPTY = 0  # empty space
@@ -33,6 +33,9 @@ TILE_GOAL = 15
 AGENT_BALL = 16
 TILE_GRASS = 17
 TILE_FOOD = 18
+
+AGENT_SNAKE_HEAD = 19
+AGENT_SNAKE_BODY = 20
 
 
 # Actions

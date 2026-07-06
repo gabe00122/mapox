@@ -1,9 +1,9 @@
-from typing import NamedTuple
 from importlib.resources import files
+from typing import NamedTuple
 
+import jax
 import numpy as np
 import pygame
-import jax
 
 import mapox.envs.constance as GW
 from mapox.utils.video_writer import save_video
@@ -86,6 +86,8 @@ tilemap = {
     GW.AGENT_BALL: (104, 1),
     GW.TILE_GRASS: (6, 9),
     GW.TILE_FOOD: (8, 18),
+    GW.AGENT_SNAKE_HEAD: (0, 0),
+    GW.AGENT_SNAKE_BODY: (0, 0),
 }
 
 

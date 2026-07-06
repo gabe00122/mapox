@@ -126,6 +126,9 @@ https://github.com/user-attachments/assets/af009d24-c65e-4195-99af-0a4e703652cd
 
 https://github.com/user-attachments/assets/3483745f-7c53-46e9-b838-3cc76b9e3ee4
 
+- **Snake** (`SnakeEnv`, `SnakeConfig`)  
+  Multiplayer snake. Eat pellets to grow; crashing into a wall or any snake body is fatal. Half of a dead snake's body turns into food pellets and the snake respawns. Reversing direction is masked out per step via `action_mask`.
+
 ## Wrappers
 
 - `VectorWrapper(env, vec_count)`  

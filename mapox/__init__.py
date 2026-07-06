@@ -18,6 +18,7 @@ from mapox.config import (
     EnvironmentConfig,
     FindReturnConfig,
     PreyConfig,
+    SnakeConfig,
     EnvironmentFactory,
 )
 
@@ -38,4 +39,5 @@ __all__ = [
     "EnvironmentConfig",
     "FindReturnConfig",
     "PreyConfig",
+    "SnakeConfig",
 ]

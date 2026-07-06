@@ -12,6 +12,7 @@ from mapox.environment import Environment, EnvState
 from mapox.envs.king_hill import KingHillConfig
 from mapox.envs.prey import PreyConfig
 from mapox.envs.scouts import ScoutsConfig
+from mapox.envs.snake import SnakeConfig
 from mapox.envs.traveling_salesman import TravelingSalesmanConfig
 from mapox.timestep import TimeStep
 
@@ -136,6 +137,7 @@ def main():
             "traveling_salesman",
             "king_hill",
             "prey",
+            "snake",
         ],
         help="Which environment to run",
     )
@@ -149,6 +151,7 @@ def main():
         "traveling_salesman": TravelingSalesmanConfig,
         "king_hill": KingHillConfig,
         "prey": PreyConfig,
+        "snake": SnakeConfig,
     }[args.env]()
 
     env, _ = env_factory.create_env(config, 512)
