@@ -1,3 +1,5 @@
+from jax import numpy as jnp
+import jax
 from typing import Iterable, Self, cast, Iterator
 
 class FrozenVocabularyError(Exception): ...
@@ -7,7 +9,6 @@ class Vocabulary:
     def __init__(self, symbols: Iterable[str] = ()):
         self._symbols: list[str] = []
         self._ids: dict[str, int] = {}
-        self._next_id = 0
         self._frozen = False
 
         self.extend(symbols)
@@ -15,8 +16,11 @@ class Vocabulary:
     def add(self, symbol: str) -> int:
         id = self._ids.get(symbol)
         if id is None:
-            id = self._next_id
-            self._next_id += 1
+            if self._frozen:
+                raise FrozenVocabularyError()
+
+            id = len(self._symbols)
+            self._symbols.append(symbol)
             self._ids[symbol] = id
 
         return id
@@ -34,10 +38,18 @@ class Vocabulary:
     def add_block(self, symbols: Iterable[str]) -> range:
         ids = [self.get(s) for s in symbols]
         nones = [id is None for id in ids]
+
+        if len(ids) == 0:
+            raise ValueError("Add block should not be empty")
         if all(nones):
-            ids = [self.add(s) for s in symbols]
-            return range(ids[0], ids[-1])
-        elif any(nones):
+            ids: list[int] = []
+            for s in symbols:
+                if self.get(s) is not None:
+                    raise ValueError("Duplicate symbol")
+                ids.append(self.add(s))
+
+            return range(ids[0], ids[-1] + 1)
+        if any(nones):
             raise ValueError("Some ids did not exist")
         ids = cast(list[int], ids)
 
@@ -48,7 +60,7 @@ class Vocabulary:
 
             id = next_id
 
-        return range(ids[0], ids[-1])
+        return range(ids[0], ids[-1] + 1)
 
 
     def get(self, symbol: str) -> int | None:
@@ -56,7 +68,7 @@ class Vocabulary:
 
     @property
     def symbols(self) -> tuple[str, ...]:
-        return tuple(*self._symbols)
+        return tuple(self._symbols)
 
     @property
     def frozen(self) -> bool:
@@ -80,3 +92,14 @@ class Vocabulary:
             return self.symbols == other.symbols
         else:
             return False
+
+    def lut_to(self, target: "Vocabulary", *, default: int | None = None, dtype: jnp.dtype = jnp.int32) -> jax.Array:
+        ids: list[int] = []
+        for s in self.symbols:
+            if default is None:
+                ids.append(target.id(s))
+            else:
+                id = target.get(s)
+                ids.append(id if id is not None else default)
+
+        return jnp.array(ids, dtype=dtype)
