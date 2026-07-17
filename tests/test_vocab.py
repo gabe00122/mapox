@@ -1,3 +1,6 @@
+from functools import partial
+
+import jax
 import jax.numpy as jnp
 import pytest
 
@@ -190,6 +193,32 @@ def test_eq_ignores_frozen():
 
 def test_eq_non_vocabulary():
     assert Vocabulary(["a"]) != ["a"]
+
+
+# --- hashing / jit static args ---
+
+
+def test_unfrozen_vocab_is_unhashable():
+    with pytest.raises(TypeError, match="freeze"):
+        hash(Vocabulary(["a"]))
+
+
+def test_frozen_vocabs_hash_by_content():
+    a = Vocabulary(["x", "y"]).freeze()
+    b = Vocabulary(["x", "y"]).freeze()
+    assert hash(a) == hash(b)
+    assert len({a, b}) == 1
+
+
+def test_frozen_vocab_as_jit_static_arg():
+    @partial(jax.jit, static_argnums=0)
+    def f(vocab, x):
+        return x + len(vocab)
+
+    v = Vocabulary(["a", "b"]).freeze()
+    assert f(v, jnp.int32(1)) == 3
+    # An equal-but-distinct frozen vocab hits the same cache entry.
+    assert f(Vocabulary(["a", "b"]).freeze(), jnp.int32(2)) == 4
 
 
 # --- lut_to ---

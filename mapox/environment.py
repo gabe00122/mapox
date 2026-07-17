@@ -59,6 +59,9 @@ class Environment(ABC, Generic[EnvState]):
     def get_render_state(self, state: EnvState) -> GridRenderState: ...
 
     @property
-    def obs_vocab(self) -> Vocabulary: ... # bridge default
+    @abstractmethod
+    def obs_vocab(self) -> Vocabulary: ...
+
     @property
+    @abstractmethod
     def action_vocab(self) -> Vocabulary: ...

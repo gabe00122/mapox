@@ -68,6 +68,9 @@ class Vocabulary:
     def get(self, symbol: str) -> int | None:
         return self._ids.get(symbol)
 
+    def all_ids(self, symbols: Iterable[str]) -> list[int]:
+        return [self.id(s) for s in symbols]
+
     @property
     def symbols(self) -> tuple[str, ...]:
         return tuple(self._symbols)
@@ -94,6 +97,16 @@ class Vocabulary:
             return self.symbols == other.symbols
         else:
             return False
+
+    def __hash__(self) -> int:
+        # jit caches are keyed on static-argument hashes, so only an immutable
+        # (frozen) vocab may be hashed; equal frozen vocabs share cache entries.
+        if not self._frozen:
+            raise TypeError(
+                "Vocabulary is unhashable until frozen; call freeze() before "
+                "using it as a jit static argument"
+            )
+        return hash(self.symbols)
 
     def lut_to(self, target: "Vocabulary", *, default: int | None = None, dtype: jnp.dtype = jnp.int32) -> jax.Array:
         ids: list[int] = []

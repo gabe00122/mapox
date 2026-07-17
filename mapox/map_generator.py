@@ -1,6 +1,8 @@
+from mapox.vocab import Vocabulary
 from jax import numpy as jnp, random
 import jax
 import mapox.envs.constants as GW
+import mapox.symbols as SB
 
 
 def interpolant(t):
@@ -78,16 +80,18 @@ def fractal_noise(width: int, height: int, res: list[int], rng_key: jax.Array):
 
     return noise
 
+def register_decore_tiles(vocab: Vocabulary) -> range:
+    return vocab.add_block([SB.TILE_DECOR_1, SB.TILE_DECOR_2, SB.TILE_DECOR_3, SB.TILE_DECOR_4])
 
-def generate_decor_tiles(width: int, height: int, rng_key: jax.Array):
+def generate_decor_tiles(width: int, height: int, vocab: Vocabulary, rng_key: jax.Array):
     tile_ids = jnp.array(
-        [
-            GW.TILE_EMPTY,
-            GW.TILE_DECOR_1,
-            GW.TILE_DECOR_2,
-            GW.TILE_DECOR_3,
-            GW.TILE_DECOR_4,
-        ],
+        vocab.all_ids([
+            SB.TILE_EMPTY,
+            SB.TILE_DECOR_1,
+            SB.TILE_DECOR_2,
+            SB.TILE_DECOR_3,
+            SB.TILE_DECOR_4,
+        ]),
         dtype=jnp.int8,
     )
     tile_probs = jnp.array([0.90, 0.04, 0.04, 0.015, 0.005])

@@ -21,7 +21,6 @@ TILE_DESTRUCTIBLE_WALL = "tile/destructible_wall"
 TILE_FLAG = "tile/flag"
 TILE_FLAG_UNLOCKED = "tile/flag_unlocked"  # scouts: flag made available for taking
 TILE_ARROW = "tile/arrow"  # king_hill: projectile in flight
-TILE_GOAL = "tile/goal"
 TILE_GRASS = "tile/grass"
 TILE_FOOD = "tile/food"
 

@@ -4,7 +4,8 @@ from functools import partial
 import jax
 import pygame
 
-import mapox.envs.constants as GW
+import mapox.symbols as SB
+
 from mapox.agent import Agent, AgentState, RandomAgent
 from mapox.client import GridworldClient
 from mapox.config import EnvironmentFactory, FindReturnConfig
@@ -17,25 +18,25 @@ from mapox.envs.traveling_salesman import TravelingSalesmanConfig
 from mapox.timestep import TimeStep
 
 
-def get_action_from_keydown(event: pygame.event.Event | None):
+def get_action_from_keydown(event: pygame.event.Event | None) -> str | None:
     if event is None or event.type != pygame.KEYDOWN:
         return None
 
     key = event.key
     if key in (pygame.K_w, pygame.K_UP):
-        return GW.MOVE_UP
+        return SB.MOVE_UP
     elif key in (pygame.K_s, pygame.K_DOWN):
-        return GW.MOVE_DOWN
+        return SB.MOVE_DOWN
     elif key in (pygame.K_a, pygame.K_LEFT):
-        return GW.MOVE_LEFT
+        return SB.MOVE_LEFT
     elif key in (pygame.K_d, pygame.K_RIGHT):
-        return GW.MOVE_RIGHT
+        return SB.MOVE_RIGHT
     elif key == pygame.K_PERIOD:
-        return GW.STAY
+        return SB.STAY
     elif key == pygame.K_SPACE:
-        return GW.PRIMARY_ACTION
+        return SB.PRIMARY_ACTION
     elif key == pygame.K_e:
-        return GW.DIG_ACTION
+        return SB.DIG_ACTION
 
     return None
 
@@ -103,8 +104,8 @@ def enjoy(
                 agent_state, timestep, rng_key
             )
 
-            if human_control:
-                actions = actions.at[focused_agent].set(human_action)
+            if human_control and human_action is not None:
+                actions = actions.at[focused_agent].set(env.action_vocab.id(human_action))
 
             env_state, timestep, rng_key = step(
                 env, env_state, actions, rng_key

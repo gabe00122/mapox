@@ -1,3 +1,4 @@
+from mapox.vocab import Vocabulary
 from functools import cached_property, partial
 from typing import NamedTuple, Literal
 
@@ -8,14 +9,15 @@ from pydantic import BaseModel, ConfigDict
 from mapox.map_generator import (
     fractal_noise,
     generate_decor_tiles,
-    choose_positions,
+    choose_positions, register_decore_tiles,
 )
 from mapox.map_loader import load_map
 from mapox.environment import Environment
 from mapox.specs import DiscreteActionSpec, ObservationSpec
 from mapox.timestep import TimeStep
 from mapox.renderer import GridRenderSettings, GridRenderState
-import mapox.envs.constants as GW
+import mapox.symbols as SB
+from mapox.envs.common import make_action_mask, make_obs_spec, DIRECTIONS
 
 
 class FindReturnConfig(BaseModel):
@@ -58,6 +60,16 @@ class FindReturnEnv(Environment[FindReturnState]):
         self._config = config
         self._length = length
 
+        self._obs_vocab = Vocabulary()
+        self._action_vocab = Vocabulary()
+
+        register_decore_tiles(self._obs_vocab)
+        self._tile_empty = self._obs_vocab.add(SB.TILE_EMPTY)
+        self._tile_destructible_wall = self._obs_vocab.add(SB.TILE_DESTRUCTIBLE_WALL)
+        self._tile_wall = self._obs_vocab.add(SB.TILE_WALL)
+        self._tile_flag = self._obs_vocab.add(SB.TILE_FLAG)
+        self._agent_generic = self._obs_vocab.add(SB.AGENT_GENERIC)
+
         self.view_width = config.view_width
         self.view_height = config.view_height
         self.pad_width = self.view_width // 2
@@ -82,34 +94,35 @@ class FindReturnEnv(Environment[FindReturnState]):
         self.width = self.unpadded_width + self.pad_width
         self.height = self.unpadded_height + self.pad_height
 
-        self._action_mask = GW.make_action_mask(
-            [
-                GW.MOVE_UP,
-                GW.MOVE_RIGHT,
-                GW.MOVE_DOWN,
-                GW.MOVE_LEFT,
-            ],
-            self.num_agents,
-        )
+        direction_actions = self._action_vocab.add_block([
+            SB.MOVE_UP,
+            SB.MOVE_RIGHT,
+            SB.MOVE_DOWN,
+            SB.MOVE_LEFT,
+        ])
+        self._action_mask = make_action_mask(list(direction_actions), len(self._action_vocab), self.num_agents)
+
+        self._action_vocab.freeze()
+        self._obs_vocab.freeze()
 
     def _generate_map(self, rng_key):
-        walls_key, decor_key, rng_key = jax.random.split(rng_key, 3)
+        walls_key, decor_key = jax.random.split(rng_key, 2)
         noise = fractal_noise(
             self.unpadded_width, self.unpadded_height, [2, 4, 5, 8, 10], walls_key
         )
 
         tiles = generate_decor_tiles(
-            self.unpadded_width, self.unpadded_height, decor_key
+            self.unpadded_width, self.unpadded_height, self.obs_vocab, decor_key
         )
-        tiles = jnp.where(noise > 0.05, jnp.int8(GW.TILE_DESTRUCTIBLE_WALL), tiles)
+        tiles = jnp.where(noise > 0.05, jnp.int8(self._tile_destructible_wall), tiles)
 
         # get the empty tiles for spawning
         x_spawns, y_spawns = jnp.where(
-            tiles == GW.TILE_EMPTY,
+            tiles == self._tile_empty,
             size=self.unpadded_width * self.unpadded_height,
             fill_value=jnp.int8(-1),
         )
-        spawn_count = jnp.sum(tiles == GW.TILE_EMPTY)
+        spawn_count = jnp.sum(tiles == self._tile_empty)
 
         # pad the tiles
         tiles = jnp.pad(
@@ -119,7 +132,7 @@ class FindReturnEnv(Environment[FindReturnState]):
                 (self.pad_height, self.pad_height),
             ),
             mode="constant",
-            constant_values=GW.TILE_WALL,
+            constant_values=self._tile_wall,
         )
 
         # pad the empty tiles
@@ -139,7 +152,7 @@ class FindReturnEnv(Environment[FindReturnState]):
                 self.unpadded_width, self.unpadded_height, map_key
             )
             unpadded_map = jnp.where(
-                unpadded_map == GW.TILE_EMPTY, decor, unpadded_map
+                unpadded_map == self._tile_empty, decor, unpadded_map
             )
 
             # pad with walls
@@ -150,16 +163,16 @@ class FindReturnEnv(Environment[FindReturnState]):
                     (self.pad_height, self.pad_height),
                 ),
                 mode="constant",
-                constant_values=GW.TILE_WALL,
+                constant_values=self._tile_empty,
             )
 
             # compute spawn positions after decor
             x_spawns, y_spawns = jnp.where(
-                unpadded_map == GW.TILE_EMPTY,
+                unpadded_map == self._tile_empty,
                 size=self.unpadded_width * self.unpadded_height,
                 fill_value=jnp.int8(-1),
             )
-            spawn_count = jnp.sum(unpadded_map == GW.TILE_EMPTY)
+            spawn_count = jnp.sum(unpadded_map == self._tile_empty)
             x_spawns = x_spawns + self.pad_width
             y_spawns = y_spawns + self.pad_height
             spawn_pos = jnp.stack((x_spawns, y_spawns), axis=1)
@@ -194,7 +207,7 @@ class FindReturnEnv(Environment[FindReturnState]):
             flag_pos = positions[: self.num_flags]
             agents_pos = positions[self.num_flags :]
 
-            map = map.at[flag_pos[:, 0], flag_pos[:, 1]].set(GW.TILE_FLAG)
+            map = map.at[flag_pos[:, 0], flag_pos[:, 1]].set(self._tile_flag)
 
         state = FindReturnState(
             map=map,
@@ -214,11 +227,11 @@ class FindReturnEnv(Environment[FindReturnState]):
 
     @cached_property
     def observation_spec(self) -> ObservationSpec:
-        return GW.make_obs_spec(self.view_width, self.view_height)
+        return make_obs_spec(self.view_width, self.view_height, len(self.obs_vocab))
 
     @cached_property
     def action_spec(self) -> DiscreteActionSpec:
-        return DiscreteActionSpec(n=GW.NUM_ACTIONS)
+        return DiscreteActionSpec(n=len(self.action_vocab))
 
     @property
     def num_agents(self) -> int:
@@ -233,20 +246,20 @@ class FindReturnEnv(Environment[FindReturnState]):
                 return local_position, local_position, timeout - 1, 0.0
 
             def _step_move(local_position, timeout, local_action, random_position):
-                target_pos = local_position + GW.DIRECTIONS[local_action]
+                target_pos = local_position + DIRECTIONS[local_action]
 
                 new_tile = state.map[target_pos[0], target_pos[1]]
 
                 # don't move if we are moving into a wall
                 new_pos = jnp.where(
                     jnp.logical_or(
-                        new_tile == GW.TILE_WALL, new_tile == GW.TILE_DESTRUCTIBLE_WALL
+                        new_tile == self._tile_wall, new_tile == self._tile_destructible_wall
                     ),
                     local_position,
                     target_pos,
                 )
 
-                found_treasure = new_tile == GW.TILE_FLAG
+                found_treasure = new_tile == self._tile_flag
                 reward = jnp.where(found_treasure, self.treasure_reward, 0.0)
 
                 # randomize position if the agent finds the reward
@@ -254,7 +267,7 @@ class FindReturnEnv(Environment[FindReturnState]):
 
                 # sets a timeout of the tile is dug
                 timeout = jnp.where(
-                    new_tile == GW.TILE_DESTRUCTIBLE_WALL, self.digging_timeout, 0
+                    new_tile == self._tile_destructible_wall, self.digging_timeout, 0
                 )
 
                 return new_pos, target_pos, timeout, reward
@@ -282,7 +295,7 @@ class FindReturnEnv(Environment[FindReturnState]):
         target_tiles = state.map[target_pos[:, 0], target_pos[:, 1]]
         map = state.map.at[target_pos[:, 0], target_pos[:, 1]].set(
             jnp.where(
-                target_tiles == GW.TILE_DESTRUCTIBLE_WALL, GW.TILE_EMPTY, target_tiles
+                target_tiles == self._tile_destructible_wall, self._tile_empty, target_tiles
             )
         )
         # /dig actions
@@ -301,7 +314,7 @@ class FindReturnEnv(Environment[FindReturnState]):
     def _render_tiles(self, state: FindReturnState):
         tiles = state.map
         tiles = tiles.at[state.agents_pos[:, 0], state.agents_pos[:, 1]].set(
-            GW.AGENT_GENERIC
+            self._agent_generic
         )
 
         directions = jnp.zeros_like(tiles, dtype=jnp.int8)
@@ -359,10 +372,20 @@ class FindReturnEnv(Environment[FindReturnState]):
             agent_positions=state.agents_pos,
         )
 
+
     def get_render_settings(self) -> GridRenderSettings:
         return GridRenderSettings(
+            obs_vocab=self.obs_vocab,
             tile_width=self.unpadded_width,
             tile_height=self.unpadded_height,
             view_width=self.view_width,
             view_height=self.view_height,
         )
+
+    @property
+    def obs_vocab(self) -> Vocabulary:
+        return self._obs_vocab
+
+    @property
+    def action_vocab(self) -> Vocabulary:
+        return self._action_vocab

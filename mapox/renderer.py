@@ -1,3 +1,4 @@
+from mapox.vocab import Vocabulary
 from importlib.resources import files
 from typing import NamedTuple
 
@@ -5,7 +6,8 @@ import jax
 import numpy as np
 import pygame
 
-import mapox.envs.constants as GW
+import mapox.symbols as SB
+
 from mapox.utils.video_writer import save_video
 
 
@@ -42,6 +44,7 @@ class GridRenderState(NamedTuple):
 
 
 class GridRenderSettings(NamedTuple):
+    obs_vocab: Vocabulary
     tile_width: int
     tile_height: int
     view_width: int
@@ -49,15 +52,15 @@ class GridRenderSettings(NamedTuple):
 
 
 tilemap = {
-    GW.TILE_EMPTY: (17, 0),
-    GW.TILE_WALL: (20, 3),
-    GW.TILE_DESTRUCTIBLE_WALL: (20, 3),
-    GW.TILE_FLAG: [(29, 23), (29, 31), (29, 32)],
-    GW.TILE_FLAG_UNLOCKED: (29, 23),
-    GW.AGENT_GENERIC: (104, 0),
-    GW.AGENT_HARVESTER: (13, 14),
-    GW.AGENT_SCOUT: (3, 16),
-    GW.AGENT_KNIGHT: [
+    SB.TILE_EMPTY: (17, 0),
+    SB.TILE_WALL: (20, 3),
+    SB.TILE_DESTRUCTIBLE_WALL: (20, 3),
+    SB.TILE_FLAG: [(29, 23), (29, 31), (29, 32)],
+    SB.TILE_FLAG_UNLOCKED: (29, 23),
+    SB.AGENT_GENERIC: (104, 0),
+    SB.AGENT_HARVESTER: (13, 14),
+    SB.AGENT_SCOUT: (3, 16),
+    SB.AGENT_KNIGHT: [
         None,
         [
             [(35, 31), (31, 31)],
@@ -72,22 +75,20 @@ tilemap = {
             [(38, 32), (34, 32)],
         ],  # blue
     ],
-    GW.AGENT_ARCHER: [
+    SB.AGENT_ARCHER: [
         None,
         [(39, 31), (40, 31), (41, 31), (42, 31)],  # red
         [(39, 32), (40, 32), (41, 32), (42, 32)],  # blue
     ],
-    GW.TILE_DECOR_1: (15, 5),
-    GW.TILE_DECOR_2: (16, 5),
-    GW.TILE_DECOR_3: (17, 5),
-    GW.TILE_DECOR_4: (14, 5),
-    GW.TILE_ARROW: (80, 21),
-    GW.TILE_GOAL: (18, 0),
-    GW.AGENT_BALL: (104, 1),
-    GW.TILE_GRASS: (6, 9),
-    GW.TILE_FOOD: (8, 18),
-    GW.AGENT_SNAKE_HEAD: (0, 0),
-    GW.AGENT_SNAKE_BODY: (0, 0),
+    SB.TILE_DECOR_1: (15, 5),
+    SB.TILE_DECOR_2: (16, 5),
+    SB.TILE_DECOR_3: (17, 5),
+    SB.TILE_DECOR_4: (14, 5),
+    SB.TILE_ARROW: (80, 21),
+    SB.TILE_GRASS: (6, 9),
+    SB.TILE_FOOD: (8, 18),
+    SB.AGENT_SNAKE_HEAD: (0, 0),
+    SB.AGENT_SNAKE_BODY: (0, 0),
 }
 
 
@@ -121,6 +122,7 @@ class GridworldRenderer:
         self._spritesheet = SpriteSheet(str(path))
 
     def set_env(self, env_settings: GridRenderSettings):
+        self._obs_vocab = env_settings.obs_vocab
         self._tile_width = env_settings.tile_width
         self._tile_height = env_settings.tile_height
         self._view_width = env_settings.view_width
@@ -244,8 +246,9 @@ class GridworldRenderer:
                 ty = self._pad_height + y
                 tile = tiles[tx][ty]
                 tile_type_id = tile[0]
+                tile_type_symbol = self._obs_vocab.symbols[tile_type_id]
 
-                image = self._tilecache[tile_type_id]
+                image = self._tilecache[tile_type_symbol]
                 if isinstance(image, list):
                     image = image[tile[2]]
                 if isinstance(image, list):
@@ -290,8 +293,9 @@ class GridworldRenderer:
                 ty = start_y + vy
                 tile_data = tiles[tx][ty]
                 tile_type_id = tile_data[0]
+                tile_type_symbol = self._obs_vocab.symbols[tile_type_id]
 
-                image = tilecache.get(tile_type_id)
+                image = tilecache.get(tile_type_symbol)
 
                 if isinstance(image, list):
                     image = image[tile_data[2]]
