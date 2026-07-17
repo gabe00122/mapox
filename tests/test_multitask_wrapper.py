@@ -3,7 +3,7 @@
 import jax
 from jax import numpy as jnp
 
-from mapox.envs.constance import MOVE_UP
+from mapox.envs.constants import MOVE_UP
 from mapox.config import EnvironmentFactory, MultiTaskConfig, MultiTaskEnvConfig
 
 

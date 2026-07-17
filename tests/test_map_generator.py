@@ -4,7 +4,7 @@ import jax
 from jax import numpy as jnp
 
 from mapox.map_generator import choose_positions
-from mapox.envs.constance import TILE_EMPTY, TILE_WALL
+from mapox.envs.constants import TILE_EMPTY, TILE_WALL
 
 
 def _make_mixed_grid():

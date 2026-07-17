@@ -6,7 +6,7 @@ from jax import numpy as jnp
 import pytest
 
 from mapox.map_loader import load_map
-import mapox.envs.constance as GW
+import mapox.envs.constants as GW
 
 FIXTURE_PATH = str(Path(__file__).parent / "fixtures" / "test_map.json")
 

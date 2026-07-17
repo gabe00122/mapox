@@ -9,7 +9,7 @@ from mapox.map_generator import generate_decor_tiles
 from mapox.specs import DiscreteActionSpec, ObservationSpec
 from mapox.timestep import TimeStep
 from mapox.renderer import GridRenderSettings, GridRenderState
-import mapox.envs.constance as GW
+import mapox.envs.constants as GW
 
 
 class TravelingSalesmanConfig(BaseModel):

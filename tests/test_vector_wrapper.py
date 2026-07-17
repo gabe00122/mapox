@@ -4,7 +4,7 @@ import jax
 from jax import numpy as jnp
 
 from mapox.envs.find_return import FindReturnConfig, FindReturnEnv
-from mapox.envs.constance import MOVE_UP
+from mapox.envs.constants import MOVE_UP
 from mapox.wrappers.vector import VectorWrapper
 
 LENGTH = 32

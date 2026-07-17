@@ -5,7 +5,7 @@ import jax
 import numpy as np
 import pygame
 
-import mapox.envs.constance as GW
+import mapox.envs.constants as GW
 from mapox.utils.video_writer import save_video
 
 

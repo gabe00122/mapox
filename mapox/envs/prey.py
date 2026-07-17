@@ -6,7 +6,7 @@ import jax
 from jax import numpy as jnp
 from pydantic import BaseModel, ConfigDict
 
-import mapox.envs.constance as GW
+import mapox.envs.constants as GW
 from mapox.environment import Environment
 from mapox.map_generator import generate_decor_tiles, generate_perlin_noise_2d
 from mapox.renderer import GridRenderSettings, GridRenderState

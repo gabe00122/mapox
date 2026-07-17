@@ -74,7 +74,7 @@ The renderer can show the full map or the focused agent’s POV (a local crop). 
 
 ## Observation & action format
 
-All environments share a unified discrete encoding defined in `mapox/envs/constance.py`.
+All environments share a unified discrete encoding defined in `mapox/envs/constants.py`.
 
 ### Actions
 

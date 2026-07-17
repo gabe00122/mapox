@@ -2,7 +2,7 @@
 
 from jax import numpy as jnp
 
-from mapox.envs.constance import (
+from mapox.envs.constants import (
     make_action_mask,
     NUM_ACTIONS,
     MOVE_UP,

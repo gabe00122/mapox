@@ -1,6 +1,6 @@
 from jax import numpy as jnp, random
 import jax
-import mapox.envs.constance as GW
+import mapox.envs.constants as GW
 
 
 def interpolant(t):

@@ -13,7 +13,7 @@ from mapox.map_generator import (
 from mapox.specs import DiscreteActionSpec, ObservationSpec
 from mapox.timestep import TimeStep
 from mapox.renderer import GridRenderSettings, GridRenderState
-import mapox.envs.constance as GW
+import mapox.envs.constants as GW
 
 
 class KingHillConfig(BaseModel):

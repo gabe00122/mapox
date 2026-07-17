@@ -7,7 +7,7 @@ Training pipelines silently break if these shapes are wrong.
 import jax
 from jax import numpy as jnp
 
-from mapox.envs.constance import MOVE_UP
+from mapox.envs.constants import MOVE_UP
 
 
 def test_reset_obs_shape(env, rng_key):

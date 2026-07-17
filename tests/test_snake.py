@@ -9,7 +9,7 @@ import jax
 from jax import numpy as jnp
 import pytest
 
-from mapox.envs.constance import (
+from mapox.envs.constants import (
     AGENT_SNAKE_BODY,
     AGENT_SNAKE_HEAD,
     MOVE_DOWN,

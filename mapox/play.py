@@ -4,7 +4,7 @@ from functools import partial
 import jax
 import pygame
 
-import mapox.envs.constance as GW
+import mapox.envs.constants as GW
 from mapox.agent import Agent, AgentState, RandomAgent
 from mapox.client import GridworldClient
 from mapox.config import EnvironmentFactory, FindReturnConfig
