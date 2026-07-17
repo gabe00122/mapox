@@ -41,13 +41,15 @@ class Vocabulary:
 
         if len(ids) == 0:
             raise ValueError("Add block should not be empty")
-        if all(nones):
-            ids: list[int] = []
-            for s in symbols:
-                if self.get(s) is not None:
-                    raise ValueError("Duplicate symbol")
-                ids.append(self.add(s))
 
+        symbol_set = set()
+        for s in symbols:
+            if s in symbol_set:
+                raise ValueError("Duplicate symbol found")
+            symbol_set.add(s)
+
+        if all(nones):
+            ids = [self.add(s) for s in symbols]
             return range(ids[0], ids[-1] + 1)
         if any(nones):
             raise ValueError("Some ids did not exist")

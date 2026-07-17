@@ -221,10 +221,6 @@ class FindReturnEnv(Environment[FindReturnState]):
         return DiscreteActionSpec(n=GW.NUM_ACTIONS)
 
     @property
-    def is_jittable(self) -> bool:
-        return True
-
-    @property
     def num_agents(self) -> int:
         return self._num_agents
 

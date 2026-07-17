@@ -66,10 +66,6 @@ class MultiTaskWrapper(Environment):
         return DiscreteActionSpec(num_actions)
 
     @property
-    def is_jittable(self) -> bool:
-        return all([env.is_jittable for env in self._envs])
-
-    @property
     def num_agents(self) -> int:
         return sum([env.num_agents for env in self._envs])
 

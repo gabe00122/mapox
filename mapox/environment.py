@@ -1,3 +1,4 @@
+from mapox.vocab import Vocabulary
 from mapox.renderer import GridRenderState, GridRenderSettings
 from abc import ABC, abstractmethod
 from functools import cached_property
@@ -48,10 +49,6 @@ class Environment(ABC, Generic[EnvState]):
     def num_agents(self) -> int: ...
 
     @property
-    @abstractmethod
-    def is_jittable(self) -> bool: ...
-
-    @property
     def teams(self) -> jax.Array | None:
         return None
 
@@ -60,3 +57,8 @@ class Environment(ABC, Generic[EnvState]):
 
     @abstractmethod
     def get_render_state(self, state: EnvState) -> GridRenderState: ...
+
+    @property
+    def obs_vocab(self) -> Vocabulary: ... # bridge default
+    @property
+    def action_vocab(self) -> Vocabulary: ...

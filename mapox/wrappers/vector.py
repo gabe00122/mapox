@@ -65,10 +65,6 @@ class VectorWrapper(Environment[EnvState]):
     def create_placeholder_logs(self) -> dict[str, Any]:
         return self._env.create_placeholder_logs()
 
-    @property
-    def is_jittable(self) -> bool:
-        return self._env.is_jittable
-
     def get_render_settings(self) -> GridRenderSettings:
         return self._env.get_render_settings()
 
