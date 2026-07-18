@@ -124,8 +124,19 @@ class MultiTaskWrapper(Environment):
         return len(self._envs)
 
     @property
-    def teams(self) -> jax.Array:
-        return jnp.concatenate([env.teams for env in self._envs], axis=0)
+    def teams(self) -> jax.Array | None:
+        all_teams = [env.teams for env in self._envs]
+        if all(teams is None for teams in all_teams):
+            return None
+
+        # Envs without teams count as a single team (team 0)
+        return jnp.concatenate(
+            [
+                teams if teams is not None else jnp.zeros(env.num_agents, jnp.int8)
+                for env, teams in zip(self._envs, all_teams)
+            ],
+            axis=0,
+        )
 
     def create_placeholder_logs(self):
         return {

@@ -157,3 +157,36 @@ def test_untranslatable_action_is_safe():
 
     assert jnp.all(ts.last_action < len(wrapper.action_vocab))
     assert jnp.all(ts.last_action[2:] == stay)
+
+
+def test_teams_none_when_no_env_has_teams():
+    wrapper, _ = _make_wrapper()
+    assert wrapper.teams is None
+
+
+def test_teams_forwarded_through_task_id_wrapper():
+    config = MultiTaskConfig(
+        envs=(
+            MultiTaskEnvConfig(
+                name="fr",
+                env={"env_type": "find_return", "num_agents": 2, "num_flags": 2},
+            ),
+            MultiTaskEnvConfig(
+                name="kh",
+                env={"env_type": "king_hill"},
+            ),
+        ),
+    )
+    factory = EnvironmentFactory()
+    wrapper, _ = factory.create_env(config, LENGTH)
+
+    teams = wrapper.teams
+    assert teams is not None
+    assert teams.shape == (wrapper.num_agents,)
+    # find_return agents default to team 0, king_hill splits into teams 0 and 1
+    assert jnp.array_equal(teams[:2], jnp.zeros(2, teams.dtype))
+    assert teams.max() == 1
+
+    single, _ = factory.create_env(config, LENGTH, env_name="kh")
+    assert single.teams is not None
+    assert jnp.array_equal(single.teams, wrapper.teams[2:])
