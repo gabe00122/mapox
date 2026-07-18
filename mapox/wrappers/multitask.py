@@ -1,3 +1,4 @@
+from mapox.vocab import Vocabulary
 from functools import cached_property
 
 import jax
@@ -14,10 +15,24 @@ def _stack_pytree(batch):
 
 class MultiTaskWrapper(Environment):
     def __init__(self, envs: tuple[Environment], env_names: tuple[str]) -> None:
-        envs = [TaskIdWrapper(env, task_id) for task_id, env in enumerate(envs)]
+        self._action_vocab = Vocabulary()
+        self._obs_vocab = Vocabulary()
+
+        envs: tuple[Environment, ...] = [TaskIdWrapper(env, task_id) for task_id, env in enumerate(envs)]
+
+        for env in envs:
+            self._action_vocab.extend(env.action_vocab.symbols)
+            self._obs_vocab.extend(env.obs_vocab.symbols)
 
         self._envs = envs
         self._env_names = env_names
+
+        self._global_to_local_action = tuple([self.action_vocab.lut_to(env.action_vocab) for env in self._envs])
+        self._local_to_global_action = tuple([env.action_vocab.lut_to(self.action_vocab) for env in self._envs])
+        self._local_to_global_obs = tuple([env.obs_vocab.lut_to(self.obs_vocab) for env in self._envs])
+
+        self._action_vocab.freeze()
+        self._obs_vocab.freeze()
 
     def reset(self, rng_key: jax.Array):
         rng_keys = jax.random.split(rng_key, len(self._envs))
@@ -26,7 +41,15 @@ class MultiTaskWrapper(Environment):
         timesteps = []
 
         for i, env in enumerate(self._envs):
+            action_lut = self._local_to_global_action[i]
+            obs_lut = self._local_to_global_obs[i]
+
             s, t = env.reset(rng_keys[i])
+            t = t._replace(
+                last_action=action_lut[t.last_action],
+                obs=obs_lut[t.obs]
+            )
+
             states.append(s)
             timesteps.append(t)
 
@@ -40,9 +63,21 @@ class MultiTaskWrapper(Environment):
 
         start = 0
         for i, env in enumerate(self._envs):
+            action_lut = self._global_to_local_action[i]
+
             end = start + env.num_agents
-            s, t = env.step(states[i], actions[start:end], rng_keys[i])
+            env_actions = actions[start:end]
+            env_actions = action_lut[env_actions]
+
+            s, t = env.step(states[i], env_actions, rng_keys[i])
             start = end
+
+            action_lut = self._local_to_global_action[i]
+            obs_lut = self._local_to_global_obs[i]
+            t = t._replace(
+                last_action=action_lut[t.last_action],
+                obs=obs_lut[t.obs]
+            )
 
             state_out.append(s)
             timesteps.append(t)
@@ -51,29 +86,23 @@ class MultiTaskWrapper(Environment):
 
     @property
     def obs_vocab(self):
-        # TODO(step 6, docs/vocab-design.md): merge child vocabs and wrap each
-        # child in a VocabWrapper; until then this wrapper has no global vocab.
-        raise NotImplementedError("MultiTaskWrapper vocab merge is not implemented yet")
+        return self._obs_vocab
 
     @property
     def action_vocab(self):
-        raise NotImplementedError("MultiTaskWrapper vocab merge is not implemented yet")
+        return self._action_vocab
 
     @cached_property
     def observation_spec(self) -> ObservationSpec:
-        # max_channel = max([env.observation_spec.max_value for env in self._envs])
-        # dtype = self._envs[0].observation_spec.dtype
-        # shape = self._envs[0].observation_spec.shape
+        first_spec = self._envs[0].observation_spec
+        if first_spec.max_value is None:
+            raise ValueError("Obs must have a max value")
 
-        return self._envs[
-            0
-        ].observation_spec  # todo: we shouldn't assume they are all the same
+        return first_spec._replace(max_value=len(self.obs_vocab))
 
     @cached_property
     def action_spec(self) -> ActionSpec:
-        num_actions = max([env.action_spec.n for env in self._envs])
-
-        return DiscreteActionSpec(num_actions)
+        return DiscreteActionSpec(len(self.action_vocab))
 
     @property
     def num_agents(self) -> int:
