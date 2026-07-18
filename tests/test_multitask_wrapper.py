@@ -1,38 +1,28 @@
-"""MultiTaskWrapper — action slicing and timestep concatenation."""
+"""MultiTaskWrapper — vocab merge, boundary translation, and concatenation.
+
+The wrapper presents heterogeneous local-vocab envs as one global-vocab env:
+global ids in, global ids out, per-env translation at the boundary.
+"""
 
 import jax
 from jax import numpy as jnp
 
-import pytest
-
+import mapox.symbols as SB
 from mapox.config import EnvironmentFactory, MultiTaskConfig, MultiTaskEnvConfig
-
-# The wrapper has no merged action vocab yet (step 6); move/up is local id 0
-# in every env because they all register SB.MOVES first via add_block.
-MOVE_UP = 0
-
-# Envs now have differently sized local action spaces (find_return: 4,
-# traveling_salesman: 5), so concatenating per-env masks fails until the
-# step-6 VocabWrapper lifts them into one global action space.
-pending_step6 = pytest.mark.skip(
-    reason="pending step 6 (docs/vocab-design.md): VocabWrapper mask scatter"
-)
-
+from mapox.envs.find_return import FindReturnConfig, FindReturnEnv
+from mapox.envs.traveling_salesman import TravelingSalesmanConfig, TravelingSalesmanEnv
 
 LENGTH = 32
+
+FR_CONFIG = {"env_type": "find_return", "num_agents": 2, "num_flags": 2}
+TS_CONFIG = {"env_type": "traveling_salesman", "num_agents": 2, "num_flags": 3}
 
 
 def _make_wrapper():
     config = MultiTaskConfig(
         envs=(
-            MultiTaskEnvConfig(
-                name="fr",
-                env={"env_type": "find_return", "num_agents": 2, "num_flags": 2},
-            ),
-            MultiTaskEnvConfig(
-                name="ts",
-                env={"env_type": "traveling_salesman", "num_agents": 2, "num_flags": 3},
-            ),
+            MultiTaskEnvConfig(name="fr", env=FR_CONFIG),
+            MultiTaskEnvConfig(name="ts", env=TS_CONFIG),
         ),
     )
     factory = EnvironmentFactory()
@@ -50,7 +40,32 @@ def test_num_tasks():
     assert num_tasks == 2
 
 
-@pending_step6
+def test_merged_vocabs():
+    wrapper, _ = _make_wrapper()
+
+    # Union of both envs; shared symbols appear once.
+    assert SB.TILE_DESTRUCTIBLE_WALL in wrapper.obs_vocab  # fr only
+    assert SB.TILE_FLAG in wrapper.obs_vocab  # shared
+    assert set(wrapper.action_vocab.symbols) == {*SB.MOVES, SB.STAY}
+
+    assert wrapper.obs_vocab.frozen
+    assert wrapper.action_vocab.frozen
+
+
+def test_action_spec_is_global_width():
+    wrapper, _ = _make_wrapper()
+    assert wrapper.action_spec.n == len(wrapper.action_vocab) == 5
+
+
+def test_observation_spec_keeps_channel_structure():
+    wrapper, _ = _make_wrapper()
+    max_value = wrapper.observation_spec.max_value
+
+    # Channel 0 grows to the global vocab; the structural channels
+    # (direction, team, health) keep their fixed sizes.
+    assert max_value == (len(wrapper.obs_vocab), 5, 3, 3)
+
+
 def test_reset_concatenates():
     wrapper, _ = _make_wrapper()
     key = jax.random.key(0)
@@ -59,10 +74,9 @@ def test_reset_concatenates():
     assert ts.obs.shape[0] == wrapper.num_agents
     assert ts.reward.shape == (wrapper.num_agents,)
     assert ts.terminated.shape == (wrapper.num_agents,)
-    assert ts.action_mask.shape[0] == wrapper.num_agents
+    assert ts.action_mask.shape == (wrapper.num_agents, len(wrapper.action_vocab))
 
 
-@pending_step6
 def test_task_ids():
     wrapper, _ = _make_wrapper()
     key = jax.random.key(0)
@@ -74,19 +88,72 @@ def test_task_ids():
     assert jnp.array_equal(ts.task_ids, expected)
 
 
-@pending_step6
-def test_step_action_slicing():
+def test_action_mask_lifted_to_global_slots():
+    wrapper, _ = _make_wrapper()
+    _, ts = wrapper.reset(jax.random.key(0))
+
+    stay = wrapper.action_vocab.id(SB.STAY)
+    moves = [wrapper.action_vocab.id(s) for s in SB.MOVES]
+
+    # Moves are legal for every agent; stay only exists for ts (rows 2-3).
+    for m in moves:
+        assert jnp.all(ts.action_mask[:, m])
+    assert not ts.action_mask[0, stay]
+    assert not ts.action_mask[1, stay]
+    assert ts.action_mask[2, stay]
+    assert ts.action_mask[3, stay]
+
+
+def test_obs_translates_only_the_tile_channel():
+    wrapper, _ = _make_wrapper()
+    key = jax.random.key(0)
+    _, ts = wrapper.reset(key)
+
+    # Rebuild the raw envs identically and replay the wrapper's key split:
+    # the wrapper's obs must be the raw obs with channel 0 mapped through
+    # the local->global LUT and channels 1..3 untouched.
+    raw = [
+        FindReturnEnv(FindReturnConfig(**{k: v for k, v in FR_CONFIG.items() if k != "env_type"}), LENGTH),
+        TravelingSalesmanEnv(TravelingSalesmanConfig(**{k: v for k, v in TS_CONFIG.items() if k != "env_type"}), LENGTH),
+    ]
+    keys = jax.random.split(key, 2)
+
+    start = 0
+    for env, env_key in zip(raw, keys):
+        _, raw_ts = env.reset(env_key)
+        lut = env.obs_vocab.lut_to(wrapper.obs_vocab)
+        got = ts.obs[start : start + env.num_agents]
+
+        assert jnp.array_equal(got[..., 0], lut[raw_ts.obs[..., 0]])
+        assert jnp.array_equal(got[..., 1:], raw_ts.obs[..., 1:])
+        start += env.num_agents
+
+
+def test_step_translates_global_actions():
     wrapper, _ = _make_wrapper()
     k1, k2 = jax.random.split(jax.random.key(0))
 
     states, _ = wrapper.reset(k1)
-    actions = jnp.full((wrapper.num_agents,), MOVE_UP, dtype=jnp.int32)
+    move_up = wrapper.action_vocab.id(SB.MOVE_UP)
+    actions = jnp.full((wrapper.num_agents,), move_up, dtype=jnp.int32)
     _, ts = wrapper.step(states, actions, k2)
 
     assert ts.obs.shape[0] == wrapper.num_agents
     assert ts.reward.shape == (wrapper.num_agents,)
+    # last_action comes back in global ids.
+    assert jnp.all(ts.last_action == move_up)
 
 
-def test_action_spec():
+def test_untranslatable_action_is_safe():
+    # stay is not in find_return's vocabulary; sending it must not crash,
+    # and ts agents (who do have stay) must see it echoed back globally.
     wrapper, _ = _make_wrapper()
-    assert wrapper.action_spec.n >= 5
+    k1, k2 = jax.random.split(jax.random.key(0))
+
+    states, _ = wrapper.reset(k1)
+    stay = wrapper.action_vocab.id(SB.STAY)
+    actions = jnp.full((wrapper.num_agents,), stay, dtype=jnp.int32)
+    _, ts = wrapper.step(states, actions, k2)
+
+    assert jnp.all(ts.last_action < len(wrapper.action_vocab))
+    assert jnp.all(ts.last_action[2:] == stay)
