@@ -37,6 +37,14 @@ class TaskIdWrapper(Environment):
     def action_spec(self):
         return self._env.action_spec
 
+    @property
+    def obs_vocab(self):
+        return self._env.obs_vocab
+
+    @property
+    def action_vocab(self):
+        return self._env.action_vocab
+
     def create_placeholder_logs(self) -> dict[str, Any]:
         return self._env.create_placeholder_logs()
 

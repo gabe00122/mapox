@@ -1,7 +1,6 @@
 from mapox.vocab import Vocabulary
 from jax import numpy as jnp, random
 import jax
-import mapox.envs.constants as GW
 import mapox.symbols as SB
 
 
@@ -80,7 +79,7 @@ def fractal_noise(width: int, height: int, res: list[int], rng_key: jax.Array):
 
     return noise
 
-def register_decore_tiles(vocab: Vocabulary) -> range:
+def register_decor_tiles(vocab: Vocabulary) -> range:
     return vocab.add_block([SB.TILE_DECOR_1, SB.TILE_DECOR_2, SB.TILE_DECOR_3, SB.TILE_DECOR_4])
 
 def generate_decor_tiles(width: int, height: int, vocab: Vocabulary, rng_key: jax.Array):
@@ -101,7 +100,7 @@ def generate_decor_tiles(width: int, height: int, vocab: Vocabulary, rng_key: ja
 
 
 def choose_positions(
-    tiles: jax.Array, n: int, rng_key: jax.Array, replace: bool = False
+    tiles: jax.Array, n: int, empty_id: int, rng_key: jax.Array, replace: bool = False
 ):
     """
     Chooses 'n' non-repeating empty tile positions
@@ -109,7 +108,7 @@ def choose_positions(
     width, height = tiles.shape
     size = width * height
 
-    available_tiles = (tiles == GW.TILE_EMPTY).flatten()
+    available_tiles = (tiles == empty_id).flatten()
 
     prob_mask = available_tiles / jnp.sum(available_tiles)
 
@@ -126,6 +125,7 @@ def choose_positions(
 def choose_positions_in_rect(
     tiles: jax.Array,
     n: int,
+    empty_id: int,
     rng_key: jax.Array,
     x: int,
     y: int,
@@ -134,7 +134,7 @@ def choose_positions_in_rect(
     replace: bool = False,
 ):
     tiles = tiles[x : x + width, y : y + height]
-    choice_x, choice_y = choose_positions(tiles, n, rng_key, replace=replace)
+    choice_x, choice_y = choose_positions(tiles, n, empty_id, rng_key, replace=replace)
     choice_x = choice_x + x
     choice_y = choice_y + y
 

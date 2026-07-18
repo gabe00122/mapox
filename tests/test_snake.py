@@ -9,17 +9,13 @@ import jax
 from jax import numpy as jnp
 import pytest
 
-from mapox.envs.constants import (
-    AGENT_SNAKE_BODY,
-    AGENT_SNAKE_HEAD,
-    MOVE_DOWN,
-    MOVE_LEFT,
-    MOVE_RIGHT,
-    MOVE_UP,
-    STAY,
-    TILE_WALL,
-)
+import mapox.symbols as SB
 from mapox.envs.snake import SnakeConfig, SnakeEnv
+
+# Local action ids: snake registers SB.MOVES via add_block, so the moves are
+# always 0..3 and they are the whole action space.
+MOVE_UP, MOVE_RIGHT, MOVE_DOWN, MOVE_LEFT = range(4)
+NON_MOVE = 4  # out-of-vocab id: snake coerces any non-move input to straight
 
 LENGTH = 128
 
@@ -118,9 +114,9 @@ def test_reverse_is_coerced_straight(env, rng_key):
     assert not ts.terminated[0]
 
 
-def test_stay_is_coerced_straight(env, rng_key):
+def test_non_move_is_coerced_straight(env, rng_key):
     state = make_state(env, rng_key, [([(8, 8), (9, 8)], MOVE_RIGHT), FAR_SNAKE])
-    actions = jnp.array([STAY, MOVE_UP], dtype=jnp.int32)
+    actions = jnp.array([NON_MOVE, MOVE_UP], dtype=jnp.int32)
 
     state, _ = env.step(state, actions, rng_key)
 
@@ -317,7 +313,8 @@ def test_action_mask_blocks_reverse(env, rng_key):
     assert ts.action_mask[0, MOVE_UP]
     assert ts.action_mask[0, MOVE_RIGHT]
     assert ts.action_mask[0, MOVE_DOWN]
-    assert not ts.action_mask[0, STAY]
+    # The action space is only the four moves.
+    assert ts.action_mask.shape[1] == 4
 
 
 def test_observation_is_egocentric(env, rng_key):
@@ -336,14 +333,16 @@ def test_observation_is_egocentric(env, rng_key):
     ts = env.encode_observations(state, zeros_i, zeros_f, zeros_b)
 
     cx, cy = env.view_width // 2, env.view_height // 2
+    head = env.obs_vocab.id(SB.AGENT_SNAKE_HEAD)
+    body = env.obs_vocab.id(SB.AGENT_SNAKE_BODY)
     # Own head at the view center, marked as team 1.
-    assert ts.obs[0, cx, cy, 0] == AGENT_SNAKE_HEAD
+    assert ts.obs[0, cx, cy, 0] == head
     assert ts.obs[0, cx, cy, 2] == 1
     # Own body behind the head.
-    assert ts.obs[0, cx - 1, cy, 0] == AGENT_SNAKE_BODY
+    assert ts.obs[0, cx - 1, cy, 0] == body
     assert ts.obs[0, cx - 1, cy, 2] == 1
     # The other snake's head, two cells ahead, is marked as team 2.
-    assert ts.obs[0, cx + 2, cy, 0] == AGENT_SNAKE_HEAD
+    assert ts.obs[0, cx + 2, cy, 0] == head
     assert ts.obs[0, cx + 2, cy, 2] == 2
 
 
@@ -377,7 +376,8 @@ def test_rollout_invariants(rng_key):
             )
             assert tuple(state.head_pos[a].tolist()) in cells[a]
             # Heads never rest on walls.
-            assert state.tiles[state.head_pos[a, 0], state.head_pos[a, 1]] != TILE_WALL
+            wall = env.obs_vocab.id(SB.TILE_WALL)
+            assert state.tiles[state.head_pos[a, 0], state.head_pos[a, 1]] != wall
             # Consecutive segments are adjacent (or stacked, right after a
             # respawn while the body still grows out of the spawn cell).
             max_length = env._config.max_length

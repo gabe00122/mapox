@@ -2,30 +2,25 @@
 
 from jax import numpy as jnp
 
-from mapox.envs.constants import (
-    make_action_mask,
-    NUM_ACTIONS,
-    MOVE_UP,
-    MOVE_DOWN,
-    MOVE_RIGHT,
-    STAY,
-)
+from mapox.envs.common import make_action_mask
+
+NUM_ACTIONS = 6
 
 
 def test_shape():
-    mask = make_action_mask([MOVE_UP, MOVE_DOWN, STAY], num_agents=3)
+    mask = make_action_mask([0, 2, 4], NUM_ACTIONS, num_agents=3)
     assert mask.shape == (3, NUM_ACTIONS)
 
 
 def test_values():
-    mask = make_action_mask([MOVE_UP, STAY], num_agents=2)
+    mask = make_action_mask([0, 4], NUM_ACTIONS, num_agents=2)
 
-    assert jnp.all(mask[:, MOVE_UP])
-    assert jnp.all(mask[:, STAY])
-    assert not jnp.any(mask[:, MOVE_RIGHT])
-    assert not jnp.any(mask[:, MOVE_DOWN])
+    assert jnp.all(mask[:, 0])
+    assert jnp.all(mask[:, 4])
+    assert not jnp.any(mask[:, 1])
+    assert not jnp.any(mask[:, 2])
 
 
 def test_dtype():
-    mask = make_action_mask([MOVE_UP], num_agents=1)
+    mask = make_action_mask([0], NUM_ACTIONS, num_agents=1)
     assert mask.dtype == jnp.bool_

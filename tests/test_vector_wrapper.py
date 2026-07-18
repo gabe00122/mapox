@@ -3,8 +3,8 @@
 import jax
 from jax import numpy as jnp
 
+import mapox.symbols as SB
 from mapox.envs.find_return import FindReturnConfig, FindReturnEnv
-from mapox.envs.constants import MOVE_UP
 from mapox.wrappers.vector import VectorWrapper
 
 LENGTH = 32
@@ -40,7 +40,9 @@ def test_step_works():
     k1, k2 = jax.random.split(jax.random.key(0))
 
     state, _ = jax.jit(venv.reset)(k1)
-    actions = jnp.full((venv.num_agents,), MOVE_UP, dtype=jnp.int32)
+    actions = jnp.full(
+        (venv.num_agents,), inner.action_vocab.id(SB.MOVE_UP), dtype=jnp.int32
+    )
     _, ts = jax.jit(venv.step)(state, actions, k2)
 
     assert ts.obs.shape == (venv.num_agents, *inner.observation_spec.shape)

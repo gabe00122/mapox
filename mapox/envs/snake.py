@@ -5,9 +5,11 @@ import jax
 from jax import numpy as jnp
 from pydantic import BaseModel, ConfigDict
 
-import mapox.envs.constants as GW
+import mapox.symbols as SB
 from mapox.environment import Environment
-from mapox.map_generator import generate_decor_tiles
+from mapox.envs.common import DIRECTIONS, make_action_mask, make_obs_spec
+from mapox.map_generator import generate_decor_tiles, register_decor_tiles
+from mapox.vocab import Vocabulary
 from mapox.renderer import GridRenderSettings, GridRenderState
 from mapox.specs import DiscreteActionSpec, ObservationSpec
 from mapox.timestep import TimeStep
@@ -84,10 +86,25 @@ class SnakeEnv(Environment[SnakeState]):
         self.padded_width = self.unpadded_width + self.pad_width * 2
         self.padded_height = self.unpadded_height + self.pad_height * 2
 
-        self._base_action_mask = GW.make_action_mask(
-            [GW.MOVE_UP, GW.MOVE_RIGHT, GW.MOVE_DOWN, GW.MOVE_LEFT],
-            self.num_agents,
+        self._obs_vocab = Vocabulary()
+        self._action_vocab = Vocabulary()
+
+        register_decor_tiles(self._obs_vocab)
+        self._tile_empty = self._obs_vocab.add(SB.TILE_EMPTY)
+        self._tile_wall = self._obs_vocab.add(SB.TILE_WALL)
+        self._tile_food = self._obs_vocab.add(SB.TILE_FOOD)
+        self._agent_snake_head = self._obs_vocab.add(SB.AGENT_SNAKE_HEAD)
+        self._agent_snake_body = self._obs_vocab.add(SB.AGENT_SNAKE_BODY)
+
+        moves = self._action_vocab.add_block(SB.MOVES)
+        assert moves == range(0, 4)  # DIRECTIONS indexing and reversal math
+
+        self._base_action_mask = make_action_mask(
+            list(moves), len(self._action_vocab), self.num_agents
         )
+
+        self._obs_vocab.freeze()
+        self._action_vocab.freeze()
 
     def _sample_open_cells(self, open_mask: jax.Array, n: int, rng_key: jax.Array):
         """Uniformly sample n distinct open cells (random scores + top-k)."""
@@ -130,7 +147,7 @@ class SnakeEnv(Environment[SnakeState]):
         cfg = self._config
 
         tiles = generate_decor_tiles(
-            self.unpadded_width, self.unpadded_height, decor_key
+            self.unpadded_width, self.unpadded_height, self._obs_vocab, decor_key
         )
         tiles = jnp.pad(
             tiles,
@@ -139,10 +156,10 @@ class SnakeEnv(Environment[SnakeState]):
                 (self.pad_height, self.pad_height),
             ),
             mode="constant",
-            constant_values=GW.TILE_WALL,
+            constant_values=self._tile_wall,
         )
 
-        head_pos = self._sample_open_cells(tiles != GW.TILE_WALL, n, spawn_key)
+        head_pos = self._sample_open_cells(tiles != self._tile_wall, n, spawn_key)
         direction = jax.random.randint(dir_key, (n,), minval=0, maxval=4)
         length = jnp.full(n, cfg.initial_length, dtype=jnp.int32)
 
@@ -155,7 +172,7 @@ class SnakeEnv(Environment[SnakeState]):
             .at[head_pos[:, 0], head_pos[:, 1]]
             .set(True)
         )
-        open_for_food = (tiles != GW.TILE_WALL) & ~occupied
+        open_for_food = (tiles != self._tile_wall) & ~occupied
         food_cells = self._sample_open_cells(open_for_food, cfg.initial_food, food_key)
         food = jnp.zeros((self.padded_width, self.padded_height), dtype=jnp.bool_)
         food = food.at[food_cells[:, 0], food_cells[:, 1]].set(True)
@@ -192,7 +209,7 @@ class SnakeEnv(Environment[SnakeState]):
         opposite = (state.direction + 2) % 4
         is_move = (action >= 0) & (action < 4) & (action != opposite)
         heading = jnp.where(is_move, action, state.direction)
-        new_head = state.head_pos + GW.DIRECTIONS[heading]
+        new_head = state.head_pos + DIRECTIONS[heading]
         hx, hy = new_head[:, 0], new_head[:, 1]
 
         eats = state.food[hx, hy]  # provisional: dying snakes don't consume, see below
@@ -212,7 +229,7 @@ class SnakeEnv(Environment[SnakeState]):
 
         # Deaths: walls, any post-tail body (own, other, or same-step corpse),
         # two heads on one cell, or two heads passing through each other.
-        hit_wall = state.tiles[hx, hy] == GW.TILE_WALL
+        hit_wall = state.tiles[hx, hy] == self._tile_wall
         hit_body = occupied[hx, hy]
         not_self = ~jnp.eye(n, dtype=jnp.bool_)
         same_target = jnp.all(new_head[:, None] == new_head[None, :], axis=-1)
@@ -242,7 +259,7 @@ class SnakeEnv(Environment[SnakeState]):
             .at[hx, hy]
             .max(~respawned)
         )
-        spawn_open = (state.tiles != GW.TILE_WALL) & ~occ & ~food
+        spawn_open = (state.tiles != self._tile_wall) & ~occ & ~food
         spawn_pos = self._sample_open_cells(spawn_open, n, spawn_key)
 
         head_pos = jnp.where(respawned[:, None], spawn_pos, new_head)
@@ -261,7 +278,7 @@ class SnakeEnv(Environment[SnakeState]):
 
         # Random food drop on a uniformly chosen open cell.
         occupied_now = occ.at[head_pos[:, 0], head_pos[:, 1]].set(True)
-        drop_open = (state.tiles != GW.TILE_WALL) & ~occupied_now & ~food
+        drop_open = (state.tiles != self._tile_wall) & ~occupied_now & ~food
         scores = jnp.where(
             drop_open.reshape(-1),
             jax.random.uniform(drop_cell_key, (drop_open.size,)),
@@ -298,10 +315,10 @@ class SnakeEnv(Environment[SnakeState]):
     def _render_channels(self, state: SnakeState):
         owner = self._owner_grid(state.body, state.head_slot, state.length)
 
-        tiles = jnp.where(state.food, jnp.int8(GW.TILE_FOOD), state.tiles)
-        tiles = jnp.where(owner > 0, jnp.int8(GW.AGENT_SNAKE_BODY), tiles)
+        tiles = jnp.where(state.food, jnp.int8(self._tile_food), state.tiles)
+        tiles = jnp.where(owner > 0, jnp.int8(self._agent_snake_body), tiles)
         tiles = tiles.at[state.head_pos[:, 0], state.head_pos[:, 1]].set(
-            jnp.int8(GW.AGENT_SNAKE_HEAD)
+            jnp.int8(self._agent_snake_head)
         )
 
         directions = jnp.zeros_like(state.tiles)
@@ -359,15 +376,23 @@ class SnakeEnv(Environment[SnakeState]):
 
     @cached_property
     def observation_spec(self) -> ObservationSpec:
-        return GW.make_obs_spec(self.view_width, self.view_height)
+        return make_obs_spec(self.view_width, self.view_height, len(self._obs_vocab))
 
     @cached_property
     def action_spec(self) -> DiscreteActionSpec:
-        return DiscreteActionSpec(n=GW.NUM_ACTIONS)
+        return DiscreteActionSpec(n=len(self._action_vocab))
 
     @property
     def num_agents(self) -> int:
         return self._config.num_agents
+
+    @property
+    def obs_vocab(self) -> Vocabulary:
+        return self._obs_vocab
+
+    @property
+    def action_vocab(self) -> Vocabulary:
+        return self._action_vocab
 
     def create_placeholder_logs(self):
         return {"rewards": jnp.float32(0.0), "deaths": jnp.float32(0.0)}
@@ -386,6 +411,7 @@ class SnakeEnv(Environment[SnakeState]):
 
     def get_render_settings(self) -> GridRenderSettings:
         return GridRenderSettings(
+            obs_vocab=self._obs_vocab,
             tile_width=self.unpadded_width,
             tile_height=self.unpadded_height,
             view_width=self.view_width,

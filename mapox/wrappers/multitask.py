@@ -49,6 +49,16 @@ class MultiTaskWrapper(Environment):
 
         return tuple(state_out), _stack_pytree(timesteps)
 
+    @property
+    def obs_vocab(self):
+        # TODO(step 6, docs/vocab-design.md): merge child vocabs and wrap each
+        # child in a VocabWrapper; until then this wrapper has no global vocab.
+        raise NotImplementedError("MultiTaskWrapper vocab merge is not implemented yet")
+
+    @property
+    def action_vocab(self):
+        raise NotImplementedError("MultiTaskWrapper vocab merge is not implemented yet")
+
     @cached_property
     def observation_spec(self) -> ObservationSpec:
         # max_channel = max([env.observation_spec.max_value for env in self._envs])

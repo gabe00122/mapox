@@ -1,7 +1,14 @@
 {
-  "version": 1,
+  "version": 2,
   "width": 10,
   "height": 10,
+  "legend": {
+    "0": "tile/empty",
+    "1": "tile/wall",
+    "2": "tile/destructible_wall",
+    "3": "tile/flag",
+    "10": "tile/decor_1"
+  },
   "tiles": [
     [0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 1, 0, 0, 0, 0, 0, 0],

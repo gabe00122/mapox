@@ -5,11 +5,13 @@ import jax
 from jax import numpy as jnp
 from pydantic import BaseModel, ConfigDict
 from mapox.environment import Environment
-from mapox.map_generator import generate_decor_tiles
+from mapox.envs.common import DIRECTIONS, make_action_mask, make_obs_spec
+from mapox.map_generator import generate_decor_tiles, register_decor_tiles
 from mapox.specs import DiscreteActionSpec, ObservationSpec
 from mapox.timestep import TimeStep
 from mapox.renderer import GridRenderSettings, GridRenderState
-import mapox.envs.constants as GW
+from mapox.vocab import Vocabulary
+import mapox.symbols as SB
 
 
 class TravelingSalesmanConfig(BaseModel):
@@ -55,16 +57,25 @@ class TravelingSalesmanEnv(Environment[TravelingSalesmanState]):
         self.pad_width = self.view_width // 2
         self.pad_height = self.view_height // 2
 
-        self._action_mask = GW.make_action_mask(
-            [
-                GW.MOVE_UP,
-                GW.MOVE_RIGHT,
-                GW.MOVE_DOWN,
-                GW.MOVE_LEFT,
-                GW.STAY,
-            ],
-            self.num_agents,
+        self._obs_vocab = Vocabulary()
+        self._action_vocab = Vocabulary()
+
+        register_decor_tiles(self._obs_vocab)
+        self._tile_empty = self._obs_vocab.add(SB.TILE_EMPTY)
+        self._tile_wall = self._obs_vocab.add(SB.TILE_WALL)
+        self._tile_flag = self._obs_vocab.add(SB.TILE_FLAG)
+        self._agent_generic = self._obs_vocab.add(SB.AGENT_GENERIC)
+
+        moves = self._action_vocab.add_block(SB.MOVES)
+        assert moves == range(0, 4)  # step() uses `action < 4` + DIRECTIONS[action]
+        self._stay = self._action_vocab.add(SB.STAY)
+
+        self._action_mask = make_action_mask(
+            [*moves, self._stay], len(self._action_vocab), self.num_agents
         )
+
+        self._obs_vocab.freeze()
+        self._action_vocab.freeze()
 
     def _random_positions(
         self, rng_key: jax.Array, count: int, replace: bool = True, pad: bool = True
@@ -97,20 +108,20 @@ class TravelingSalesmanEnv(Environment[TravelingSalesmanState]):
 
     def _generate_map(self, rng_key):
         decor_key, flag_key = jax.random.split(rng_key)
-        tiles = generate_decor_tiles(self.width, self.height, decor_key)
+        tiles = generate_decor_tiles(self.width, self.height, self._obs_vocab, decor_key)
 
         flag_pos = self._random_positions(
             flag_key, self._config.num_flags, replace=False, pad=False
         )
 
-        tiles = tiles.at[flag_pos[:, 0], flag_pos[:, 1]].set(GW.TILE_FLAG)
+        tiles = tiles.at[flag_pos[:, 0], flag_pos[:, 1]].set(self._tile_flag)
 
         flag_index_map = jnp.full_like(tiles, 0, dtype=jnp.int32)
         flag_index_map = flag_index_map.at[flag_pos[:, 0], flag_pos[:, 1]].set(
             jnp.arange(self._config.num_flags, dtype=jnp.int8)
         )
 
-        tiles = self._pad_tiles(tiles, GW.TILE_WALL)
+        tiles = self._pad_tiles(tiles, self._tile_wall)
         flag_index_map = self._pad_tiles(flag_index_map, 0)
 
         return tiles, flag_index_map
@@ -142,15 +153,23 @@ class TravelingSalesmanEnv(Environment[TravelingSalesmanState]):
 
     @cached_property
     def observation_spec(self) -> ObservationSpec:
-        return GW.make_obs_spec(self.view_width, self.view_height)
+        return make_obs_spec(self.view_width, self.view_height, len(self._obs_vocab))
 
     @cached_property
     def action_spec(self) -> DiscreteActionSpec:
-        return DiscreteActionSpec(n=GW.NUM_ACTIONS)
+        return DiscreteActionSpec(n=len(self._action_vocab))
 
     @property
     def num_agents(self) -> int:
         return self._num_agents
+
+    @property
+    def obs_vocab(self) -> Vocabulary:
+        return self._obs_vocab
+
+    @property
+    def action_vocab(self) -> Vocabulary:
+        return self._action_vocab
 
     def step(
         self, state: TravelingSalesmanState, action: jax.Array, rng_key: jax.Array
@@ -165,20 +184,20 @@ class TravelingSalesmanEnv(Environment[TravelingSalesmanState]):
             # Move only for movement actions; otherwise stay
             proposed = jnp.where(
                 local_action < 4,
-                local_position + GW.DIRECTIONS[local_action],
+                local_position + DIRECTIONS[local_action],
                 local_position,
             )
 
             new_tile = state.map[proposed[0], proposed[1]]
 
             # don't move if we are moving into a wall
-            new_pos = jnp.where(new_tile == GW.TILE_WALL, local_position, proposed)
+            new_pos = jnp.where(new_tile == self._tile_wall, local_position, proposed)
 
             flag_index = state.flag_index_map[new_pos[0], new_pos[1]]
             current_flag_available = flag_available[flag_index]
 
             found_flag = jnp.logical_and(
-                state.map[new_pos[0], new_pos[1]] == GW.TILE_FLAG,
+                state.map[new_pos[0], new_pos[1]] == self._tile_flag,
                 current_flag_available,
             )
 
@@ -225,7 +244,7 @@ class TravelingSalesmanEnv(Environment[TravelingSalesmanState]):
     def _render_tiles(self, state: TravelingSalesmanState):
         tiles = state.map
         tiles = tiles.at[state.agents_pos[:, 0], state.agents_pos[:, 1]].set(
-            GW.AGENT_GENERIC
+            self._agent_generic
         )
 
         directions = jnp.zeros_like(tiles, dtype=jnp.int8)
@@ -285,6 +304,7 @@ class TravelingSalesmanEnv(Environment[TravelingSalesmanState]):
 
     def get_render_settings(self) -> GridRenderSettings:
         return GridRenderSettings(
+            obs_vocab=self._obs_vocab,
             tile_width=self.width,
             tile_height=self.height,
             view_width=self.view_width,

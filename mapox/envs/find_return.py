@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict
 from mapox.map_generator import (
     fractal_noise,
     generate_decor_tiles,
-    choose_positions, register_decore_tiles,
+    choose_positions, register_decor_tiles,
 )
 from mapox.map_loader import load_map
 from mapox.environment import Environment
@@ -63,7 +63,7 @@ class FindReturnEnv(Environment[FindReturnState]):
         self._obs_vocab = Vocabulary()
         self._action_vocab = Vocabulary()
 
-        register_decore_tiles(self._obs_vocab)
+        register_decor_tiles(self._obs_vocab)
         self._tile_empty = self._obs_vocab.add(SB.TILE_EMPTY)
         self._tile_destructible_wall = self._obs_vocab.add(SB.TILE_DESTRUCTIBLE_WALL)
         self._tile_wall = self._obs_vocab.add(SB.TILE_WALL)
@@ -85,7 +85,7 @@ class FindReturnEnv(Environment[FindReturnState]):
         self.mapgen_threshold = config.mapgen_threshold
 
         if config.map_path is not None:
-            self._loaded_tiles = load_map(config.map_path)
+            self._loaded_tiles = load_map(config.map_path, self._obs_vocab)
             self.unpadded_width = self._loaded_tiles.shape[0]
             self.unpadded_height = self._loaded_tiles.shape[1]
         else:
@@ -149,7 +149,7 @@ class FindReturnEnv(Environment[FindReturnState]):
             # sprinkle decor tiles on empty cells
             unpadded_map = self._loaded_tiles
             decor = generate_decor_tiles(
-                self.unpadded_width, self.unpadded_height, map_key
+                self.unpadded_width, self.unpadded_height, self.obs_vocab, map_key
             )
             unpadded_map = jnp.where(
                 unpadded_map == self._tile_empty, decor, unpadded_map
@@ -163,7 +163,7 @@ class FindReturnEnv(Environment[FindReturnState]):
                     (self.pad_height, self.pad_height),
                 ),
                 mode="constant",
-                constant_values=self._tile_empty,
+                constant_values=self._tile_wall,
             )
 
             # compute spawn positions after decor
@@ -180,6 +180,7 @@ class FindReturnEnv(Environment[FindReturnState]):
             pos_x, pos_y = choose_positions(
                 unpadded_map,
                 self.num_agents,
+                self._tile_empty,
                 pos_key,
                 replace=False,
             )
@@ -197,6 +198,7 @@ class FindReturnEnv(Environment[FindReturnState]):
             pos_x, pos_y = choose_positions(
                 unpadded_map,
                 self.num_flags + self.num_agents,
+                self._tile_empty,
                 pos_key,
                 replace=False,
             )

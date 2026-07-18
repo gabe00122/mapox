@@ -6,9 +6,15 @@ import jax
 from jax import numpy as jnp
 from pydantic import BaseModel, ConfigDict
 
-import mapox.envs.constants as GW
+import mapox.symbols as SB
 from mapox.environment import Environment
-from mapox.map_generator import generate_decor_tiles, generate_perlin_noise_2d
+from mapox.envs.common import DIRECTIONS, make_action_mask, make_obs_spec
+from mapox.map_generator import (
+    generate_decor_tiles,
+    generate_perlin_noise_2d,
+    register_decor_tiles,
+)
+from mapox.vocab import Vocabulary
 from mapox.renderer import GridRenderSettings, GridRenderState
 from mapox.specs import DiscreteActionSpec, ObservationSpec
 from mapox.timestep import TimeStep
@@ -73,28 +79,45 @@ class PreyEnv(Environment[PreyState]):
             ]
         )
 
-        self._action_mask = GW.make_action_mask(
-            [GW.MOVE_UP, GW.MOVE_RIGHT, GW.MOVE_DOWN, GW.MOVE_LEFT, GW.STAY],
-            self.num_agents,
+        self._obs_vocab = Vocabulary()
+        self._action_vocab = Vocabulary()
+
+        register_decor_tiles(self._obs_vocab)
+        self._tile_empty = self._obs_vocab.add(SB.TILE_EMPTY)
+        self._tile_wall = self._obs_vocab.add(SB.TILE_WALL)
+        self._tile_grass = self._obs_vocab.add(SB.TILE_GRASS)
+        self._tile_food = self._obs_vocab.add(SB.TILE_FOOD)
+        self._agent_sneaker = self._obs_vocab.add(SB.AGENT_PREY)
+        self._agent_chaser = self._obs_vocab.add(SB.AGENT_PREDATOR)
+
+        moves = self._action_vocab.add_block(SB.MOVES)
+        assert moves == range(0, 4)  # DIRECTIONS indexing in step
+        self._stay = self._action_vocab.add(SB.STAY)
+
+        self._action_mask = make_action_mask(
+            [*moves, self._stay], len(self._action_vocab), self.num_agents
         )
+
+        self._obs_vocab.freeze()
+        self._action_vocab.freeze()
 
     def _generate_map(self, rng_key):
         wall_key, grass_key, decor_key, rng_key = jax.random.split(rng_key, 4)
 
         w, h = self.unpadded_width, self.unpadded_height
 
-        decor = generate_decor_tiles(w, h, decor_key)
+        decor = generate_decor_tiles(w, h, self._obs_vocab, decor_key)
 
         # Perlin noise for walls (res must divide dimensions)
         wall_noise = generate_perlin_noise_2d((w, h), (8, 8), rng_key=wall_key)
-        tiles = jnp.where(wall_noise > 0.1, jnp.int8(GW.TILE_WALL), decor)
+        tiles = jnp.where(wall_noise > 0.1, jnp.int8(self._tile_wall), decor)
 
         # Perlin noise for grass
         grass_noise = generate_perlin_noise_2d((w, h), (8, 8), rng_key=grass_key)
         is_grass = (grass_noise < self._config.grass_threshold) & (
-            tiles != GW.TILE_WALL
+            tiles != self._tile_wall
         )
-        tiles = jnp.where(is_grass, jnp.int8(GW.TILE_GRASS), tiles)
+        tiles = jnp.where(is_grass, jnp.int8(self._tile_grass), tiles)
 
         # Pad tiles
         tiles = jnp.pad(
@@ -104,7 +127,7 @@ class PreyEnv(Environment[PreyState]):
                 (self.pad_height, self.pad_height),
             ),
             mode="constant",
-            constant_values=GW.TILE_WALL,
+            constant_values=self._tile_wall,
         )
 
         return tiles
@@ -116,9 +139,9 @@ class PreyEnv(Environment[PreyState]):
             self.pad_width : self.pad_width + w,
             self.pad_height : self.pad_height + h,
         ]
-        is_open = inner != GW.TILE_WALL
+        is_open = inner != self._tile_wall
         if not allow_grass:
-            is_open = is_open & (inner != GW.TILE_GRASS)
+            is_open = is_open & (inner != self._tile_grass)
         max_open = w * h
         x_open, y_open = jnp.where(is_open, size=max_open, fill_value=-1)
         open_count = jnp.sum(is_open)
@@ -175,12 +198,12 @@ class PreyEnv(Environment[PreyState]):
             agent_idx = order[i]
             agent_action = action[agent_idx]
 
-            direction = GW.DIRECTIONS[jnp.minimum(agent_action, 3)]
-            is_stay = agent_action == GW.STAY
+            direction = DIRECTIONS[jnp.minimum(agent_action, 3)]
+            is_stay = agent_action == self._stay
             proposed = positions[agent_idx] + direction
             proposed = jnp.where(is_stay, positions[agent_idx], proposed)
 
-            is_wall = tiles[proposed[0], proposed[1]] == GW.TILE_WALL
+            is_wall = tiles[proposed[0], proposed[1]] == self._tile_wall
 
             other_mask = jnp.arange(num_agents) != agent_idx
             is_occupied = jnp.any(jnp.all(positions == proposed, axis=-1) & other_mask)
@@ -288,14 +311,14 @@ class PreyEnv(Environment[PreyState]):
         food_present = state.food_timer == 0
         food_tile_vals = jnp.where(
             food_present,
-            GW.TILE_FOOD,
+            self._tile_food,
             tiles[state.food_pos[:, 0], state.food_pos[:, 1]],
         )
         tiles = tiles.at[state.food_pos[:, 0], state.food_pos[:, 1]].set(food_tile_vals)
 
         def _apply_agents(tiles, pos, agent_tile, team_id):
             if conceal:
-                on_grass = state.tiles[pos[:, 0], pos[:, 1]] == GW.TILE_GRASS
+                on_grass = state.tiles[pos[:, 0], pos[:, 1]] == self._tile_grass
                 visible = ~on_grass
                 tile_vals = jnp.where(visible, agent_tile, tiles[pos[:, 0], pos[:, 1]])
             else:
@@ -303,8 +326,8 @@ class PreyEnv(Environment[PreyState]):
             tiles = tiles.at[pos[:, 0], pos[:, 1]].set(tile_vals)
             return tiles
 
-        tiles = _apply_agents(tiles, state.sneaker_pos, GW.AGENT_SCOUT, 1)
-        tiles = _apply_agents(tiles, state.chaser_pos, GW.AGENT_HARVESTER, 2)
+        tiles = _apply_agents(tiles, state.sneaker_pos, self._agent_sneaker, 1)
+        tiles = _apply_agents(tiles, state.chaser_pos, self._agent_chaser, 2)
 
         # Map fullness to health channel: 0=starving, 1=low, 2=high
         half = self._config.max_fullness // 2
@@ -314,7 +337,7 @@ class PreyEnv(Environment[PreyState]):
             jnp.where(state.fullness <= half, jnp.int8(1), jnp.int8(2)),
         )
         if conceal:
-            on_grass = state.tiles[agents_pos[:, 0], agents_pos[:, 1]] == GW.TILE_GRASS
+            on_grass = state.tiles[agents_pos[:, 0], agents_pos[:, 1]] == self._tile_grass
             agent_health = jnp.where(on_grass, jnp.int8(0), agent_health)
         health = health.at[agents_pos[:, 0], agents_pos[:, 1]].set(agent_health)
 
@@ -362,15 +385,23 @@ class PreyEnv(Environment[PreyState]):
 
     @cached_property
     def observation_spec(self) -> ObservationSpec:
-        return GW.make_obs_spec(self.view_width, self.view_height)
+        return make_obs_spec(self.view_width, self.view_height, len(self._obs_vocab))
 
     @cached_property
     def action_spec(self) -> DiscreteActionSpec:
-        return DiscreteActionSpec(n=GW.NUM_ACTIONS)
+        return DiscreteActionSpec(n=len(self._action_vocab))
 
     @property
     def num_agents(self) -> int:
         return self._num_sneakers + self._num_chasers
+
+    @property
+    def obs_vocab(self) -> Vocabulary:
+        return self._obs_vocab
+
+    @property
+    def action_vocab(self) -> Vocabulary:
+        return self._action_vocab
 
     @property
     def teams(self) -> jax.Array:
@@ -392,6 +423,7 @@ class PreyEnv(Environment[PreyState]):
 
     def get_render_settings(self) -> GridRenderSettings:
         return GridRenderSettings(
+            obs_vocab=self._obs_vocab,
             tile_width=self.unpadded_width,
             tile_height=self.unpadded_height,
             view_width=self.view_width,

@@ -7,6 +7,7 @@ from einops import rearrange
 
 from mapox.environment import Environment, EnvState
 from mapox.specs import ActionSpec, ObservationSpec
+from mapox.vocab import Vocabulary
 from mapox.timestep import TimeStep
 
 
@@ -55,6 +56,14 @@ class VectorWrapper(Environment[EnvState]):
     @cached_property
     def action_spec(self) -> ActionSpec:
         return self._env.action_spec
+
+    @property
+    def obs_vocab(self) -> Vocabulary:
+        return self._env.obs_vocab
+
+    @property
+    def action_vocab(self) -> Vocabulary:
+        return self._env.action_vocab
 
     def create_logs(self, state):
         log_updates = jax.vmap(self._env.create_logs)(state)

@@ -99,13 +99,17 @@ def enjoy(
 
                 human_action = get_action_from_keydown(event)
 
-        if human_action is not None or not human_control:
+        human_action_id = (
+            env.action_vocab.get(human_action) if human_action is not None else None
+        )
+
+        if human_action_id is not None or not human_control:
             agent_state, actions, rng_key = agent.sample_actions(
                 agent_state, timestep, rng_key
             )
 
-            if human_control and human_action is not None:
-                actions = actions.at[focused_agent].set(env.action_vocab.id(human_action))
+            if human_control and human_action_id is not None:
+                actions = actions.at[focused_agent].set(human_action_id)
 
             env_state, timestep, rng_key = step(
                 env, env_state, actions, rng_key

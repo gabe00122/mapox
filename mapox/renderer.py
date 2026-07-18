@@ -60,6 +60,8 @@ tilemap = {
     SB.AGENT_GENERIC: (104, 0),
     SB.AGENT_HARVESTER: (13, 14),
     SB.AGENT_SCOUT: (3, 16),
+    SB.AGENT_PREY: (3, 16),  # same art as scout for now
+    SB.AGENT_PREDATOR: (13, 14),  # same art as harvester for now
     SB.AGENT_KNIGHT: [
         None,
         [
