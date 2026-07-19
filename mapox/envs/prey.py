@@ -91,8 +91,21 @@ class PreyEnv(Environment[PreyState]):
         self._agent_chaser = self._obs_vocab.add(SB.AGENT_PREDATOR)
 
         moves = self._action_vocab.add_block(SB.MOVES)
-        assert moves == range(0, 4)  # DIRECTIONS indexing in step
+        assert moves == range(0, 4)  # _move_deltas indexing in step
         self._stay = self._action_vocab.add(SB.STAY)
+        assert self._stay == 4
+
+        # Row 4 (STAY) is a zero delta, so moves and stay share one lookup.
+        self._move_deltas = jnp.concatenate(
+            [DIRECTIONS, jnp.zeros((1, 2), DIRECTIONS.dtype)]
+        )
+
+        self._agent_tiles = jnp.concatenate(
+            [
+                jnp.full(config.num_sneakers, self._agent_sneaker, jnp.int8),
+                jnp.full(config.num_chasers, self._agent_chaser, jnp.int8),
+            ]
+        )
 
         self._action_mask = make_action_mask(
             [*moves, self._stay], len(self._action_vocab), self.num_agents
@@ -102,7 +115,7 @@ class PreyEnv(Environment[PreyState]):
         self._action_vocab.freeze()
 
     def _generate_map(self, rng_key):
-        wall_key, grass_key, decor_key, rng_key = jax.random.split(rng_key, 4)
+        wall_key, grass_key, decor_key = jax.random.split(rng_key, 3)
 
         w, h = self.unpadded_width, self.unpadded_height
 
@@ -179,7 +192,7 @@ class PreyEnv(Environment[PreyState]):
     def step(
         self, state: PreyState, action: jax.Array, rng_key: jax.Array
     ) -> tuple[PreyState, TimeStep]:
-        move_key, respawn_key, food_key, rng_key = jax.random.split(rng_key, 4)
+        move_key, respawn_key, food_key = jax.random.split(rng_key, 3)
 
         num_agents = self.num_agents
         ns = self._num_sneakers
@@ -198,10 +211,7 @@ class PreyEnv(Environment[PreyState]):
             agent_idx = order[i]
             agent_action = action[agent_idx]
 
-            direction = DIRECTIONS[jnp.minimum(agent_action, 3)]
-            is_stay = agent_action == self._stay
-            proposed = positions[agent_idx] + direction
-            proposed = jnp.where(is_stay, positions[agent_idx], proposed)
+            proposed = positions[agent_idx] + self._move_deltas[agent_action]
 
             is_wall = tiles[proposed[0], proposed[1]] == self._tile_wall
 
@@ -227,9 +237,9 @@ class PreyEnv(Environment[PreyState]):
         # --- Food eating (sneakers only, gated by fullness) ---
         food_present = state.food_timer == 0  # (num_food,)
 
-        food_sneaker_diff = state.food_pos[:, None, :] - new_sneaker_pos[None, :, :]
         food_sneaker_match = (
-            jnp.all(food_sneaker_diff == 0, axis=-1) & sneaker_can_eat[None, :]
+            jnp.all(state.food_pos[:, None, :] == new_sneaker_pos[None, :, :], axis=-1)
+            & sneaker_can_eat[None, :]
         )  # (num_food, num_sneakers)
 
         food_eaten = food_present & jnp.any(food_sneaker_match, axis=1)  # (num_food,)
@@ -240,15 +250,12 @@ class PreyEnv(Environment[PreyState]):
         sneaker_gain = jnp.zeros(ns, dtype=jnp.int32).at[first_eater].add(eaten_gain)
 
         # Update food timers
-        new_food_timer = jnp.where(
-            food_eaten, cfg.food_regrow_time, state.food_timer
-        )
-        new_food_timer = jnp.where(
-            new_food_timer > 0, new_food_timer - 1, new_food_timer
-        )
+        new_food_timer = jnp.where(food_eaten, cfg.food_regrow_time, state.food_timer)
+        new_food_timer = jnp.maximum(new_food_timer - 1, 0)
 
-        # Respawn food that just hit 0
-        food_respawning = (state.food_timer == 1) & (~food_eaten)
+        # Respawn food that just hit 0 (timer 1 implies not present, so it
+        # cannot also have been eaten this step)
+        food_respawning = state.food_timer == 1
         respawn_food_pos = self._spawn(tiles, nf, food_key, allow_grass=True)
         new_food_pos = jnp.where(
             food_respawning[:, None], respawn_food_pos, state.food_pos
@@ -271,8 +278,8 @@ class PreyEnv(Environment[PreyState]):
         # --- Termination: starvation or caught ---
         starving = fullness == 0
         time_up = jnp.equal(state.time + 1, self._length)
-        terminated = starving | time_up
-        terminated = terminated.at[:ns].set(terminated[:ns] | sneaker_caught)
+        caught = jnp.pad(sneaker_caught, (0, self._num_chasers))
+        terminated = starving | time_up | caught
 
         # --- Respawn terminated agents ---
         respawn_pos = self._spawn(tiles, num_agents, respawn_key)
@@ -316,29 +323,24 @@ class PreyEnv(Environment[PreyState]):
         )
         tiles = tiles.at[state.food_pos[:, 0], state.food_pos[:, 1]].set(food_tile_vals)
 
-        def _apply_agents(tiles, pos, agent_tile, team_id):
-            if conceal:
-                on_grass = state.tiles[pos[:, 0], pos[:, 1]] == self._tile_grass
-                visible = ~on_grass
-                tile_vals = jnp.where(visible, agent_tile, tiles[pos[:, 0], pos[:, 1]])
-            else:
-                tile_vals = agent_tile
-            tiles = tiles.at[pos[:, 0], pos[:, 1]].set(tile_vals)
-            return tiles
-
-        tiles = _apply_agents(tiles, state.sneaker_pos, self._agent_sneaker, 1)
-        tiles = _apply_agents(tiles, state.chaser_pos, self._agent_chaser, 2)
+        agents_pos = jnp.concatenate([state.sneaker_pos, state.chaser_pos], axis=0)
+        agent_tiles = self._agent_tiles
 
         # Map fullness to health channel: 0=starving, 1=low, 2=high
         half = self._config.max_fullness // 2
-        agents_pos = jnp.concatenate([state.sneaker_pos, state.chaser_pos], axis=0)
         agent_health = jnp.where(
             state.fullness == 0, jnp.int8(0),
             jnp.where(state.fullness <= half, jnp.int8(1), jnp.int8(2)),
         )
+
         if conceal:
             on_grass = state.tiles[agents_pos[:, 0], agents_pos[:, 1]] == self._tile_grass
+            agent_tiles = jnp.where(
+                on_grass, tiles[agents_pos[:, 0], agents_pos[:, 1]], agent_tiles
+            )
             agent_health = jnp.where(on_grass, jnp.int8(0), agent_health)
+
+        tiles = tiles.at[agents_pos[:, 0], agents_pos[:, 1]].set(agent_tiles)
         health = health.at[agents_pos[:, 0], agents_pos[:, 1]].set(agent_health)
 
         return jnp.concatenate(
@@ -364,7 +366,7 @@ class PreyEnv(Environment[PreyState]):
                 (
                     self.view_width,
                     self.view_height,
-                    self.observation_spec.shape[-1],
+                    tiles.shape[-1],
                 ),
             )
 
@@ -372,7 +374,7 @@ class PreyEnv(Environment[PreyState]):
         agents_pos = jnp.concatenate([state.sneaker_pos, state.chaser_pos], axis=0)
         view = _encode_view(tiles, agents_pos)
 
-        time = jnp.repeat(state.time[None], self.num_agents, axis=0)
+        time = jnp.full(self.num_agents, state.time)
 
         return TimeStep(
             obs=view,
