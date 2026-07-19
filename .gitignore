@@ -11,3 +11,7 @@ wheels/
 
 .ruff_cache/
 .claude/
+
+# Rust
+target/
+*.so

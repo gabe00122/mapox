@@ -1,13 +1,13 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["maturin>=1.9,<2.0"]
+build-backend = "maturin"
 
 [project]
 name = "mapox"
-version = "1.0.0"
 description = "Multi-Agent Partially Observable gridworlds in JAX"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
+dynamic = ["version"]
 license = { file = "LICENSE" }
 authors = [
     { name = "Gabriel Keith", email = "gfk1995@gmail.com" }
@@ -34,8 +34,14 @@ Homepage = "https://github.com/gabe00122/mapox"
 Repository = "https://github.com/gabe00122/mapox"
 Issues = "https://github.com/gabe00122/mapox/issues"
 
-[tool.hatch.build.targets.wheel]
-packages = ["mapox"]
+[tool.maturin]
+features = ["pyo3/extension-module"]
+python-source = "python"
+module-name = "mapox._core"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["python"]
 
 [dependency-groups]
 dev = [
