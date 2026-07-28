@@ -23,7 +23,7 @@ classifiers = [
 
 dependencies = [
     "einops>=0.8.1",
-    "jax>=0.7.2",
+    "jax>=0.9",
     "pydantic>=2.12.5",
     "pygame-ce>=2.5.6",
     "python-ffmpeg>=2.0.12",
