@@ -1,5 +1,7 @@
 use rand::{Rng, rngs::SmallRng};
 
+use crate::env::Environment;
+
 pub struct FindReturnConfig {
     pub num_agents: usize,
     pub num_flags: usize,
@@ -33,6 +35,12 @@ pub struct FindReturn {
 
 impl FindReturn {
     fn new() {}
+}
+
+impl Environment for FindReturn {
+    fn reset(&mut self, seed: u64, timestep: &mut crate::timestep::TimeStepMut) {}
+
+    fn step(&mut self, actions: &[i32], timestep: &mut crate::timestep::TimeStepMut) {}
 }
 
 // impl Env for FindReturnConfig {

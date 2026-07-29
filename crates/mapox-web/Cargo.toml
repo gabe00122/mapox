@@ -8,7 +8,7 @@ repository.workspace = true
 authors.workspace = true
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib"]
 
 # macroquad ships its own JS glue (mq_js_bundle.js) rather than using
 # wasm-bindgen, so the viewer is a plain wasm binary alongside the cdylib.
