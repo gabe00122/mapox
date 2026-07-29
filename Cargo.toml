@@ -11,7 +11,7 @@ authors = ["Gabriel Keith <gfk1995@gmail.com>"]
 
 # One release profile for every target, tuned for throughput: env stepping is
 # the hot path (native, via the python extension) and the wasm viewer just
-# inherits it. Size is not traded for here -- scripts/build-web.sh runs
+# inherits it. Size is not traded for here -- scripts/build_web.py runs
 # `wasm-opt -Oz` on the staged binary, which is where web size belongs.
 #
 # `panic` stays at the default "unwind" on purpose: pyo3 catches Rust panics

@@ -9,7 +9,7 @@ authors.workspace = true
 
 # miniquad (under macroquad) ships its own JS glue and instantiates the module
 # itself, so this is a plain wasm binary built by `cargo build --target
-# wasm32-unknown-unknown` -- not a wasm-bindgen cdylib. See scripts/build-web.sh.
+# wasm32-unknown-unknown` -- not a wasm-bindgen cdylib. See scripts/build_web.py.
 [[bin]]
 name = "mapox-web-demo"
 path = "src/bin/demo.rs"
