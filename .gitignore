@@ -11,7 +11,14 @@ wheels/
 
 .ruff_cache/
 .claude/
+.pytest_cache/
 
 # Rust
 target/
 *.so
+
+# wasm-pack
+pkg/
+
+# copied wasm demo artifact
+crates/mapox-web/web/*.wasm

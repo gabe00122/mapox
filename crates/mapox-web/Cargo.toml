@@ -1,0 +1,24 @@
+[package]
+name = "mapox-web"
+description = "WebAssembly bindings for mapox"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+# macroquad ships its own JS glue (mq_js_bundle.js) rather than using
+# wasm-bindgen, so the viewer is a plain wasm binary alongside the cdylib.
+[[bin]]
+name = "mapox-web-demo"
+path = "src/bin/demo.rs"
+
+[dependencies]
+mapox-core.workspace = true
+wasm-bindgen.workspace = true
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-Oz"]

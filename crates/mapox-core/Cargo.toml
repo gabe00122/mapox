@@ -1,0 +1,18 @@
+[package]
+name = "mapox-core"
+description = "Multi-agent partially observable gridworld environments"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "mapox_core"
+
+[dependencies]
+fastnoise-lite.workspace = true
+rand.workspace = true
+ndarray.workspace = true
+macroquad = { workspace = true }
+rayon.workspace = true

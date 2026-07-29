@@ -35,6 +35,7 @@ Repository = "https://github.com/gabe00122/mapox"
 Issues = "https://github.com/gabe00122/mapox/issues"
 
 [tool.maturin]
+manifest-path = "crates/mapox-py/Cargo.toml"
 features = ["pyo3/extension-module"]
 python-source = "python"
 module-name = "mapox._core"

@@ -1,0 +1,5 @@
+[target.wasm32-unknown-unknown]
+# miniquad (under macroquad) declares its GL/platform externs as plain wasm
+# imports resolved at runtime by mq_js_bundle.js. rustc no longer passes
+# --allow-undefined for this target by default, so lld rejects them.
+rustflags = ["-C", "link-arg=--allow-undefined"]

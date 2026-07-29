@@ -1,15 +1,22 @@
-[package]
-name = "mapox"
+[workspace]
+members = ["crates/mapox-core", "crates/mapox-py", "crates/mapox-web"]
+resolver = "3"
+
+[workspace.package]
 version = "1.0.0"
 edition = "2024"
+license = "MIT"
+repository = "https://github.com/gabe00122/mapox"
+authors = ["Gabriel Keith <gfk1995@gmail.com>"]
 
-[lib]
-name = "_core"
-crate-type = ["cdylib"]
+[workspace.dependencies]
+mapox-core = { path = "crates/mapox-core" }
 
-[dependencies]
 fastnoise-lite = "1.1.1"
+rand = { version = "0.10.2", default-features = false, features = ["std"] }
+rayon = "1.12.0"
 numpy = "0.29.0"
 pyo3 = "0.29.0"
-rand = "0.10.2"
-rayon = "1.12.0"
+ndarray = "0.17.2"
+wasm-bindgen = "0.2"
+macroquad = { version = "0.4.15", default-features = false }

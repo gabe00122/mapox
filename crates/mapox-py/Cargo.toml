@@ -1,0 +1,17 @@
+[package]
+name = "mapox-py"
+description = "Python bindings for mapox"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[lib]
+name = "_core"
+crate-type = ["cdylib"]
+
+[dependencies]
+mapox-core.workspace = true
+numpy.workspace = true
+pyo3.workspace = true

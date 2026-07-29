@@ -3,6 +3,7 @@
 from importlib.metadata import version
 __version__ = version("mapox")
 
+from mapox._core import run_demo
 from mapox.timestep import TimeStep
 from mapox.environment import Environment
 from mapox.specs import ActionSpec, ObservationSpec
@@ -23,6 +24,7 @@ from mapox.config import (
 )
 
 __all__ = [
+    "run_demo",
     "TimeStep",
     "ActionSpec",
     "ObservationSpec",
