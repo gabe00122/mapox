@@ -1,5 +1,18 @@
+# NOT PORTABLE, on purpose. Builds here target this machine's CPU (Zen 4:
+# AVX-512 + VNNI/BF16, FMA, BMI1/2) instead of the x86-64 baseline, which only
+# guarantees SSE2. Anything built on this box -- including maturin wheels for
+# mapox-py -- will die with SIGILL on an older CPU. If you ever build wheels
+# for another machine or a cluster, drop this line or switch it to a portable
+# floor such as `target-cpu=x86-64-v3` (AVX2, ~2015 and newer).
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "target-cpu=native"]
+
 [target.wasm32-unknown-unknown]
 # miniquad (under macroquad) declares its GL/platform externs as plain wasm
 # imports resolved at runtime by mq_js_bundle.js. rustc no longer passes
 # --allow-undefined for this target by default, so lld rejects them.
-rustflags = ["-C", "link-arg=--allow-undefined"]
+#
+# `strip=debuginfo` counteracts the workspace profile's `debug =
+# "line-tables-only"`, which exists for native `perf` runs. Carrying DWARF into
+# the wasm nearly triples it (1.1 MB -> 2.9 MB) and no browser here reads it.
+rustflags = ["-C", "link-arg=--allow-undefined", "-C", "strip=debuginfo"]

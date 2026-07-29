@@ -9,6 +9,26 @@ license = "MIT"
 repository = "https://github.com/gabe00122/mapox"
 authors = ["Gabriel Keith <gfk1995@gmail.com>"]
 
+# One release profile for every target, tuned for throughput: env stepping is
+# the hot path (native, via the python extension) and the wasm viewer just
+# inherits it. Size is not traded for here -- scripts/build-web.sh runs
+# `wasm-opt -Oz` on the staged binary, which is where web size belongs.
+#
+# `panic` stays at the default "unwind" on purpose: pyo3 catches Rust panics
+# and re-raises them as Python exceptions, which "abort" would turn into a
+# killed interpreter.
+[profile.release]
+opt-level = 3
+lto = "fat"        # cross-crate inlining, incl. into ndarray/rayon/fastnoise
+codegen-units = 1  # no parallel-codegen inlining barriers within a crate
+debug = "line-tables-only" # keeps `perf` output readable; costs no speed
+
+# Dependencies are compiled optimized even in dev builds, so a debug-built env
+# still steps fast enough to iterate against. Our own crates stay unoptimized
+# and fully debuggable.
+[profile.dev.package."*"]
+opt-level = 3
+
 [workspace.dependencies]
 mapox-core = { path = "crates/mapox-core" }
 
@@ -18,5 +38,4 @@ rayon = "1.12.0"
 numpy = "0.29.0"
 pyo3 = "0.29.0"
 ndarray = "0.17.2"
-wasm-bindgen = "0.2"
 macroquad = { version = "0.4.15", default-features = false }
