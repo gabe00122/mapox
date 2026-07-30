@@ -28,7 +28,6 @@ debug = "line-tables-only" # keeps `perf` output readable; costs no speed
 # and fully debuggable.
 [profile.dev.package."*"]
 opt-level = 3
-
 [workspace.dependencies]
 mapox-core = { path = "crates/mapox-core" }
 
@@ -38,4 +37,29 @@ rayon = "1.12.0"
 numpy = "0.29.0"
 pyo3 = "0.29.0"
 ndarray = "0.17.2"
-macroquad = { version = "0.4.15", default-features = false }
+
+# On the web wgpu means WebGPU first with a WebGL2 fallback compiled in, both
+# handled by wgpu itself -- no cfg flags or JS shims required.
+#
+# Pinned to a git rev past 0.35.0: when the page loads in a *hidden* tab
+# (background tab, prerender), Chrome delivers no rendering updates, so
+# eframe's first paint is skipped. Released 0.35.0 then panics once the tab
+# becomes visible ("Tried to update a texture that has not been allocated
+# yet" -- the font atlas full upload was dropped with the skipped frame);
+# this rev survives a hidden start. Drop the pin at the next release.
+eframe = { git = "https://github.com/emilk/egui.git", rev = "c69834e65a0681d4fa40c30545b006ce39527034", default-features = false, features = [
+    "accesskit",
+    "default_fonts",
+    "wayland",
+    "web_screen_reader",
+    "wgpu",
+    "x11",
+] }
+egui = { git = "https://github.com/emilk/egui.git", rev = "c69834e65a0681d4fa40c30545b006ce39527034" }
+image = { version = "0.25.10", default-features = false, features = ["png"] }
+wasm-bindgen = "0.2.126"
+# the expansion of `#[wasm_bindgen]` on an async fn refers to this crate
+wasm-bindgen-futures = "0.4.76"
+web-sys = { version = "0.3.103", features = ["HtmlCanvasElement"] }
+console_error_panic_hook = "0.1.7"
+log = "0.4"

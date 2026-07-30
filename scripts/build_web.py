@@ -5,16 +5,15 @@
 # ///
 """Build the wasm demo and stage everything the page needs in crates/mapox-web/web/.
 
-Two artifacts have to stay in lockstep: the wasm binary, and miniquad's JS glue
-(mq_js_bundle.js). miniquad declares its GL/platform functions as plain wasm
-imports that the glue resolves at runtime, so a mismatched pair does not fail at
-link time -- it fails inside WebAssembly.instantiate with a LinkError and a blank
-canvas. Hence the glue is re-copied from the exact miniquad the lockfile
-resolved, on every build, rather than pinned by hand.
+Two artifacts have to stay in lockstep: the wasm binary and the JS module that
+loads it (mapox_web.js). Both come out of the wasm-bindgen CLI, but the CLI
+bakes an ABI shared with the wasm-bindgen *crate* the binary was compiled
+against, and a mismatched pair fails at instantiation time in the browser, not
+at build time. Hence the CLI version is checked against the exact wasm-bindgen
+the lockfile resolved, on every build.
 """
 
 import argparse
-import filecmp
 import functools
 import http.server
 import json
@@ -27,7 +26,8 @@ from typing import NoReturn
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WEB_DIR = REPO_ROOT / "crates" / "mapox-web" / "web"
 TARGET = "wasm32-unknown-unknown"
-BIN = "mapox-web-demo"
+# cargo package mapox-web -> cdylib mapox_web.wasm -> bindgen mapox_web.js
+LIB = "mapox_web"
 
 
 def info(message: str) -> None:
@@ -55,30 +55,21 @@ def ensure_target() -> None:
 
 def build(release: bool) -> Path:
     profile = "release" if release else "debug"
-    info(f"building {BIN} ({profile})")
-    cmd = ["cargo", "build", "--package", "mapox-web", "--bin", BIN, "--target", TARGET]
+    info(f"building {LIB} ({profile})")
+    cmd = ["cargo", "build", "--package", "mapox-web", "--lib", "--target", TARGET]
     if release:
         cmd.append("--release")
     run(*cmd)
-    return REPO_ROOT / "target" / TARGET / profile / f"{BIN}.wasm"
+    return REPO_ROOT / "target" / TARGET / profile / f"{LIB}.wasm"
 
 
-def stage_wasm(artifact: Path, release: bool) -> None:
-    """Copy the binary into the web dir (gitignored; the page loads it by relative path)."""
-    dest = WEB_DIR / f"{BIN}.wasm"
-    shutil.copy2(artifact, dest)
-    if release and shutil.which("wasm-opt"):
-        info("wasm-opt -Oz")
-        run("wasm-opt", "-Oz", dest, "-o", dest)
+def required_bindgen_version() -> str:
+    """The wasm-bindgen version the dependency graph actually resolved.
 
-
-def sync_glue() -> None:
-    """Copy gl.js out of the miniquad the dependency graph actually resolved.
-
-    `cargo metadata` reports the unpacked source directory directly, so there is
-    no version string to parse out of Cargo.lock and no registry path to guess.
-    It also downloads and unpacks anything missing as a side effect of reading
-    the manifests, which covers a fresh clone or an unfetched version bump.
+    `cargo metadata` reads it out of the lockfile directly, so there is no
+    version string to parse out of Cargo.lock by hand. It also downloads and
+    unpacks anything missing as a side effect of reading the manifests, which
+    covers a fresh clone or an unfetched version bump.
     """
     meta = json.loads(
         run(
@@ -93,25 +84,51 @@ def sync_glue() -> None:
         ).stdout
     )
 
-    packages = [pkg for pkg in meta["packages"] if pkg["name"] == "miniquad"]
-    if not packages:
-        die("no miniquad in the dependency graph -- is it still a dependency?")
-    if len(packages) > 1:
-        found = ", ".join(sorted(pkg["version"] for pkg in packages))
-        die(f"expected one miniquad, found {len(packages)}: {found}")
+    versions = sorted(
+        pkg["version"] for pkg in meta["packages"] if pkg["name"] == "wasm-bindgen"
+    )
+    if not versions:
+        die("no wasm-bindgen in the dependency graph -- is it still a dependency?")
+    if len(versions) > 1:
+        die(f"expected one wasm-bindgen, found {len(versions)}: {', '.join(versions)}")
+    return versions[0]
 
-    version = packages[0]["version"]
-    glue = Path(packages[0]["manifest_path"]).parent / "js" / "gl.js"
-    if not glue.is_file():
-        die(f"miniquad {version} ships no {glue}")
 
-    dest = WEB_DIR / "mq_js_bundle.js"
-    if dest.is_file() and filecmp.cmp(glue, dest, shallow=False):
-        state = "unchanged"
-    else:
-        shutil.copy2(glue, dest)
-        state = "updated"
-    info(f"glue: miniquad {version} ({state})")
+def bindgen(artifact: Path) -> None:
+    """Generate mapox_web.js + mapox_web_bg.wasm into the web dir."""
+    version = required_bindgen_version()
+    if not shutil.which("wasm-bindgen"):
+        die(
+            "wasm-bindgen CLI not found -- install the version the lockfile "
+            f"expects:\n  cargo install wasm-bindgen-cli --version {version} --locked"
+        )
+    installed = run(
+        "wasm-bindgen", "--version", stdout=subprocess.PIPE, text=True
+    ).stdout.split()[-1]
+    if installed != version:
+        die(
+            f"wasm-bindgen CLI is {installed} but the crate in Cargo.lock is "
+            f"{version}; the pair shares an ABI, so match them:\n"
+            f"  cargo install wasm-bindgen-cli --version {version} --locked"
+        )
+
+    info(f"wasm-bindgen {version}")
+    run(
+        "wasm-bindgen",
+        "--target",
+        "web",
+        "--no-typescript",
+        "--out-dir",
+        WEB_DIR,
+        artifact,
+    )
+
+
+def optimize(release: bool) -> None:
+    if release and shutil.which("wasm-opt"):
+        info("wasm-opt -Oz")
+        staged = WEB_DIR / f"{LIB}_bg.wasm"
+        run("wasm-opt", "-Oz", staged, "-o", staged)
 
 
 def human(size: float) -> str:
@@ -124,7 +141,7 @@ def human(size: float) -> str:
 
 def report() -> None:
     info(f"{WEB_DIR}/")
-    for name in ("index.html", "mq_js_bundle.js", f"{BIN}.wasm"):
+    for name in ("index.html", f"{LIB}.js", f"{LIB}_bg.wasm"):
         print(f"    {name:<24} {human((WEB_DIR / name).stat().st_size)}")
 
 
@@ -169,8 +186,8 @@ def main() -> None:
     args = parser.parse_args()
 
     ensure_target()
-    stage_wasm(build(args.release), args.release)
-    sync_glue()
+    bindgen(build(args.release))
+    optimize(args.release)
     report()
     if args.serve is not None:
         serve(args.serve)

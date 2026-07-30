@@ -8,11 +8,7 @@
 rustflags = ["-C", "target-cpu=native"]
 
 [target.wasm32-unknown-unknown]
-# miniquad (under macroquad) declares its GL/platform externs as plain wasm
-# imports resolved at runtime by mq_js_bundle.js. rustc no longer passes
-# --allow-undefined for this target by default, so lld rejects them.
-#
 # `strip=debuginfo` counteracts the workspace profile's `debug =
 # "line-tables-only"`, which exists for native `perf` runs. Carrying DWARF into
-# the wasm nearly triples it (1.1 MB -> 2.9 MB) and no browser here reads it.
-rustflags = ["-C", "link-arg=--allow-undefined", "-C", "strip=debuginfo"]
+# the wasm inflates it severalfold and no browser here reads it.
+rustflags = ["-C", "strip=debuginfo"]

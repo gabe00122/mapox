@@ -1,14 +1,13 @@
 //! The Urizen sprite sheet: where each tile lives in it, and how to draw one.
 
-use macroquad::prelude::*;
+use egui::{Color32, ColorImage, Rect, TextureHandle, TextureOptions, Vec2, pos2};
 
 /// Urizen Onebit Tileset by Vurmux — <https://vurmux.itch.io/urizen-onebit-tileset>
 ///
-/// The sheet is baked into the binary rather than loaded through
-/// `load_texture`, so one code path serves every host: the python extension
-/// has no asset directory to point at, and wasm has no filesystem at all
-/// (macroquad turns a load there into an HTTP fetch the page must serve).
-/// The cost is ~250 KiB of `.rodata` in every artifact.
+/// The sheet is baked into the binary rather than loaded from disk, so one
+/// code path serves every host: the python extension has no asset directory to
+/// point at, and wasm has no filesystem at all. The cost is ~250 KiB of
+/// `.rodata` in every artifact.
 const TILESET_PNG: &[u8] = include_bytes!("../../assets/urizen_onebit_tileset__v2d0.png");
 
 /// Side of one tile, in sheet pixels.
@@ -22,50 +21,60 @@ pub const TILESET_ROWS: u32 = 50;
 
 /// The Urizen sheet, uploaded once and sampled per tile.
 pub struct Tileset {
-    texture: Texture2D,
+    texture: TextureHandle,
 }
 
 impl Tileset {
     /// Decodes and uploads the embedded sheet.
     ///
-    /// Needs a live graphics context, so call it from inside the macroquad
-    /// window (i.e. within [`super::run`]), not before [`super::open_window`].
-    pub fn embedded() -> Self {
-        let texture = Texture2D::from_file_with_format(TILESET_PNG, Some(ImageFormat::Png));
+    /// Call from inside a frame (i.e. within [`eframe::App::ui`]): before the
+    /// backend delivers input, the context still reports a placeholder max
+    /// texture side of 2048 and debug builds assert the 2679px sheet against it.
+    pub fn embedded(ctx: &egui::Context) -> Self {
+        let rgba = image::load_from_memory_with_format(TILESET_PNG, image::ImageFormat::Png)
+            .expect("embedded tileset is a valid png")
+            .into_rgba8();
+        let size = [rgba.width() as usize, rgba.height() as usize];
+        let pixels = ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
         // Pixel art, and neighbouring tiles sit one pixel away: interpolating
         // would bleed the separator and the next sprite into every edge.
-        texture.set_filter(FilterMode::Nearest);
+        let texture = ctx.load_texture("urizen-tileset", pixels, TextureOptions::NEAREST);
         Self { texture }
     }
 
-    pub fn texture(&self) -> &Texture2D {
+    pub fn texture(&self) -> &TextureHandle {
         &self.texture
+    }
+
+    /// Sheet size in texels, which is also its size in points at 100% zoom.
+    pub fn sheet_size(&self) -> Vec2 {
+        self.texture.size_vec2()
     }
 
     /// Source rect of tile `(col, row)` in sheet pixels.
     fn source(col: u32, row: u32) -> Rect {
-        Rect::new(
-            col as f32 * (TILE_SIZE + TILE_PAD) + TILE_PAD,
-            row as f32 * (TILE_SIZE + TILE_PAD) + TILE_PAD,
-            TILE_SIZE,
-            TILE_SIZE,
+        Rect::from_min_size(
+            pos2(
+                col as f32 * (TILE_SIZE + TILE_PAD) + TILE_PAD,
+                row as f32 * (TILE_SIZE + TILE_PAD) + TILE_PAD,
+            ),
+            Vec2::splat(TILE_SIZE),
         )
     }
 
-    /// Draws tile `(col, row)` as a `size`x`size` square with its top-left at
-    /// `(x, y)`.
-    pub fn draw(&self, col: u32, row: u32, x: f32, y: f32, size: f32, tint: Color) {
-        draw_texture_ex(
-            &self.texture,
-            x,
-            y,
-            tint,
-            DrawTextureParams {
-                dest_size: Some(Vec2::splat(size)),
-                source: Some(Self::source(col, row)),
-                ..Default::default()
-            },
-        );
+    /// The same rect in the 0..=1 texture coordinates the painter samples with.
+    fn uv(&self, col: u32, row: u32) -> Rect {
+        let sheet = self.sheet_size();
+        let src = Self::source(col, row);
+        Rect::from_min_max(
+            pos2(src.min.x / sheet.x, src.min.y / sheet.y),
+            pos2(src.max.x / sheet.x, src.max.y / sheet.y),
+        )
+    }
+
+    /// Draws tile `(col, row)` filling `rect`.
+    pub fn draw(&self, painter: &egui::Painter, col: u32, row: u32, rect: Rect, tint: Color32) {
+        painter.image(self.texture.id(), rect, self.uv(col, row), tint);
     }
 }
 
@@ -103,11 +112,14 @@ mod tests {
     #[test]
     fn source_rects_match_the_python_layout() {
         let first = Tileset::source(0, 0);
-        assert_eq!((first.x, first.y, first.w, first.h), (1.0, 1.0, 12.0, 12.0));
+        assert_eq!(
+            (first.min.x, first.min.y, first.width(), first.height()),
+            (1.0, 1.0, 12.0, 12.0)
+        );
 
         // tile/wall, as used by both renderers.
         let wall = Tileset::source(20, 3);
-        assert_eq!((wall.x, wall.y), (20.0 * 13.0 + 1.0, 3.0 * 13.0 + 1.0));
+        assert_eq!((wall.min.x, wall.min.y), (20.0 * 13.0 + 1.0, 3.0 * 13.0 + 1.0));
     }
 
     /// The last row and column have to land inside the texture, or every tile
@@ -117,7 +129,7 @@ mod tests {
         let (width, height) = png_dimensions(TILESET_PNG);
         let last = Tileset::source(TILESET_COLS - 1, TILESET_ROWS - 1);
 
-        assert!(last.right() <= width as f32);
-        assert!(last.bottom() <= height as f32);
+        assert!(last.max.x <= width as f32);
+        assert!(last.max.y <= height as f32);
     }
 }

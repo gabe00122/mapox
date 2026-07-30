@@ -1,9 +1,10 @@
-//! Window setup and, for now, a demo that draws the tileset so the atlas math
-//! can be checked by eye.
+//! The egui demo app that draws the tileset so the atlas math can be checked
+//! by eye, plus the native window that hosts it. On the web the same
+//! [`DemoApp`] is hosted by `mapox-web`'s wasm-bindgen entry point instead.
 
 pub mod tileset;
 
-use macroquad::prelude::*;
+use egui::{Align2, Color32, FontId, Rect, RichText, Vec2, pos2, vec2};
 
 use tileset::{TILESET_COLS, TILESET_ROWS, Tileset};
 
@@ -29,24 +30,6 @@ const SHOWCASE: &[(&str, u32, u32)] = &[
     ("decor_3", 17, 5),
 ];
 
-pub fn window_conf() -> Conf {
-    Conf {
-        window_title: "mapox".to_owned(),
-        window_width: 800,
-        window_height: 600,
-        high_dpi: true,
-        ..Default::default()
-    }
-}
-
-pub fn open_window() {
-    macroquad::Window::from_config(window_conf(), run());
-}
-
-/// Height of a text overlay strip, and so the space the key hint reserves at
-/// the bottom of the window.
-const HINT_BAR_H: f32 = 28.0;
-
 /// Which half of the tileset demo is on screen.
 enum View {
     /// Named tiles at a readable size.
@@ -55,184 +38,223 @@ enum View {
     Atlas,
 }
 
-pub async fn run() {
-    prevent_quit();
+pub struct DemoApp {
+    /// Uploaded on the first frame, not in [`DemoApp::new`]: until the
+    /// backend delivers input, the context reports a placeholder 2048 max
+    /// texture side and `load_texture` debug-asserts the 2679px sheet against
+    /// it. The real wgpu device allows 8192.
+    tileset: Option<Tileset>,
+    view: View,
+    /// Scene-space region of the atlas in view. Starts as
+    /// [`Rect::NOTHING`] so the first atlas frame auto-fits the whole sheet;
+    /// after that it persists across view toggles like the old pan/zoom did.
+    scene_rect: Rect,
+}
 
-    let tileset = Tileset::embedded();
-    let mut view = View::Showcase;
-    let mut zoom = 2.0f32;
-    let mut pan = Vec2::ZERO;
+impl DemoApp {
+    pub fn new() -> Self {
+        Self {
+            tileset: None,
+            view: View::Showcase,
+            scene_rect: Rect::NOTHING,
+        }
+    }
 
-    while !is_quit_requested() && !is_key_pressed(KeyCode::Escape) {
-        clear_background(BLACK);
+    /// The sheet texture, valid any time after the top of [`eframe::App::ui`].
+    fn tileset(&self) -> &Tileset {
+        self.tileset.as_ref().expect("uploaded at the top of ui()")
+    }
 
-        if is_key_pressed(KeyCode::Space) {
-            view = match view {
+    /// Named tiles in a centred grid, each with its sheet coordinates underneath.
+    fn showcase_ui(&self, ui: &mut egui::Ui) {
+        /// Room under each tile for the name and the coordinate line.
+        const LABEL_H: f32 = 36.0;
+        /// Horizontal breathing room between columns.
+        const GUTTER: f32 = 16.0;
+        /// Past this the sprites are just blurry, so stop growing.
+        const MAX_TILE: f32 = 72.0;
+
+        let area = ui.max_rect();
+
+        // The window is whatever the host gives us — a python script's default,
+        // a browser canvas, a resized frame — so pick the column count that
+        // makes the tiles largest rather than assuming one.
+        let (cols, tile) = (1..=SHOWCASE.len())
+            .map(|cols| {
+                let rows = SHOWCASE.len().div_ceil(cols);
+                let tile = (area.width() / cols as f32 - GUTTER)
+                    .min(area.height() / rows as f32 - LABEL_H)
+                    .min(MAX_TILE);
+                (cols, tile)
+            })
+            // Strictly-greater keeps the first winner, so once the tile size caps
+            // out the fewest columns win and the last row stays as full as it can.
+            .reduce(|best, candidate| {
+                if candidate.1 > best.1 {
+                    candidate
+                } else {
+                    best
+                }
+            })
+            .unwrap();
+        let tile = tile.max(4.0);
+
+        let rows = SHOWCASE.len().div_ceil(cols);
+        let cell_w = area.width() / cols as f32;
+        let cell_h = tile + LABEL_H;
+        let origin_y = area.top() + (area.height() - rows as f32 * cell_h).max(0.0) / 2.0;
+        let painter = ui.painter();
+
+        for (i, (label, col, row)) in SHOWCASE.iter().enumerate() {
+            let centre_x = area.left() + ((i % cols) as f32 + 0.5) * cell_w;
+            let cell_y = origin_y + (i / cols) as f32 * cell_h;
+
+            let rect = Rect::from_min_size(
+                pos2(centre_x - tile / 2.0, cell_y),
+                Vec2::splat(tile),
+            );
+            self.tileset().draw(painter, *col, *row, rect, Color32::WHITE);
+
+            let text_w = cell_w - 6.0;
+            centred_text(painter, label, centre_x, cell_y + tile + 4.0, 15.0, text_w, Color32::WHITE);
+            centred_text(
+                painter,
+                &format!("{col},{row}"),
+                centre_x,
+                cell_y + tile + 20.0,
+                14.0,
+                text_w,
+                Color32::DARK_GRAY,
+            );
+        }
+    }
+
+    /// The whole sheet, so a missing or misaligned tile is visible at a glance.
+    fn atlas_ui(&mut self, ui: &mut egui::Ui) {
+        const PAN_SPEED: f32 = 600.0;
+
+        let viewport = ui.max_rect();
+
+        let (dt, delta) = ui.input(|i| {
+            use egui::Key::*;
+            let axis = |neg1, neg2, pos1, pos2| {
+                (i.key_down(pos1) || i.key_down(pos2)) as i8 as f32
+                    - (i.key_down(neg1) || i.key_down(neg2)) as i8 as f32
+            };
+            (
+                i.stable_dt,
+                vec2(axis(A, ArrowLeft, D, ArrowRight), axis(W, ArrowUp, S, ArrowDown)),
+            )
+        });
+        // Keys move the camera in screen pixels per second; the scene rect is
+        // in sheet texels, so divide by the zoom to keep the speed constant.
+        if self.scene_rect.is_positive() {
+            let zoom = viewport.width() / self.scene_rect.width();
+            self.scene_rect = self.scene_rect.translate(delta * PAN_SPEED * dt / zoom);
+        }
+
+        let tileset = self.tileset.as_ref().expect("uploaded at the top of ui()");
+        egui::Scene::new()
+            .zoom_range(0.25..=12.0)
+            .show(ui, &mut self.scene_rect, |ui| {
+                ui.add(egui::Image::from_texture(tileset.texture()));
+            });
+
+        // Zoom readout on a dimmed strip, painted after the scene so it stays
+        // on top of the sheet.
+        if self.scene_rect.is_positive() {
+            let zoom = viewport.width() / self.scene_rect.width();
+            let strip = Rect::from_min_size(viewport.min, vec2(viewport.width(), 24.0));
+            let painter = ui.painter();
+            painter.rect_filled(strip, egui::CornerRadius::ZERO, Color32::from_black_alpha(191));
+            painter.text(
+                strip.left_center() + vec2(12.0, 0.0),
+                Align2::LEFT_CENTER,
+                format!("{TILESET_COLS}x{TILESET_ROWS} tiles @ {:.0}%", zoom * 100.0),
+                FontId::proportional(14.0),
+                Color32::LIGHT_GRAY,
+            );
+        }
+    }
+}
+
+impl eframe::App for DemoApp {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        if self.tileset.is_none() {
+            self.tileset = Some(Tileset::embedded(ui.ctx()));
+        }
+
+        if ui.input(|i| i.key_pressed(egui::Key::Space)) {
+            self.view = match self.view {
                 View::Showcase => View::Atlas,
                 View::Atlas => View::Showcase,
             };
         }
+        #[cfg(not(target_arch = "wasm32"))]
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+        }
 
-        let hint = match view {
-            View::Showcase => {
-                draw_showcase(&tileset);
-                "space: full atlas   esc: quit"
-            }
-            View::Atlas => {
-                draw_atlas(&tileset, &mut zoom, &mut pan);
-                "wasd/arrows: pan   wheel: zoom   space: showcase   esc: quit"
-            }
+        let hint = match self.view {
+            View::Showcase => "space: full atlas",
+            View::Atlas => "drag/wasd: pan   ctrl+wheel: zoom   space: showcase",
         };
-        overlay_text(hint, 12.0, screen_height() - HINT_BAR_H, 18.0);
+        let hint = if cfg!(target_arch = "wasm32") {
+            hint.to_owned()
+        } else {
+            format!("{hint}   esc: quit")
+        };
 
-        next_frame().await
+        egui::Panel::bottom("hint")
+            .show(ui, |ui| ui.label(RichText::new(hint).weak()));
+        egui::CentralPanel::default()
+            .frame(egui::Frame::NONE.fill(Color32::BLACK))
+            .show(ui, |ui| match self.view {
+                View::Showcase => self.showcase_ui(ui),
+                View::Atlas => self.atlas_ui(ui),
+            });
     }
 }
 
-/// Named tiles in a centred grid, each with its sheet coordinates underneath.
-fn draw_showcase(tileset: &Tileset) {
-    /// Room under each tile for the name and the coordinate line.
-    const LABEL_H: f32 = 36.0;
-    /// Horizontal breathing room between columns.
-    const GUTTER: f32 = 16.0;
-    /// Past this the sprites are just blurry, so stop growing.
-    const MAX_TILE: f32 = 72.0;
-
-    let area_w = screen_width();
-    let area_h = (screen_height() - HINT_BAR_H).max(1.0);
-
-    // The window is whatever the host gives us — a python script's default, a
-    // browser canvas, a resized frame — so pick the column count that makes
-    // the tiles largest rather than assuming one.
-    let (cols, tile) = (1..=SHOWCASE.len())
-        .map(|cols| {
-            let rows = SHOWCASE.len().div_ceil(cols);
-            let tile = (area_w / cols as f32 - GUTTER)
-                .min(area_h / rows as f32 - LABEL_H)
-                .min(MAX_TILE);
-            (cols, tile)
-        })
-        // Strictly-greater keeps the first winner, so once the tile size caps
-        // out the fewest columns win and the last row stays as full as it can.
-        .reduce(|best, candidate| {
-            if candidate.1 > best.1 {
-                candidate
-            } else {
-                best
-            }
-        })
-        .unwrap();
-    let tile = tile.max(4.0);
-
-    let rows = SHOWCASE.len().div_ceil(cols);
-    let cell_w = area_w / cols as f32;
-    let cell_h = tile + LABEL_H;
-    let origin_y = (area_h - rows as f32 * cell_h).max(0.0) / 2.0;
-
-    for (i, (label, col, row)) in SHOWCASE.iter().enumerate() {
-        let centre_x = ((i % cols) as f32 + 0.5) * cell_w;
-        let cell_y = origin_y + (i / cols) as f32 * cell_h;
-
-        tileset.draw(*col, *row, centre_x - tile / 2.0, cell_y, tile, WHITE);
-
-        let text_w = cell_w - 6.0;
-        centred_text(label, centre_x, cell_y + tile + 16.0, 15.0, text_w, WHITE);
-        centred_text(
-            &format!("{col},{row}"),
-            centre_x,
-            cell_y + tile + 31.0,
-            14.0,
-            text_w,
-            DARKGRAY,
-        );
-    }
-}
-
-/// The whole sheet, so a missing or misaligned tile is visible at a glance.
-fn draw_atlas(tileset: &Tileset, zoom: &mut f32, pan: &mut Vec2) {
-    const PAN_SPEED: f32 = 600.0;
-
-    let (_, wheel_y) = mouse_wheel();
-    if wheel_y != 0.0 {
-        *zoom = (*zoom * if wheel_y > 0.0 { 1.1 } else { 1.0 / 1.1 }).clamp(0.25, 12.0);
-    }
-
-    let dt = get_frame_time();
-    let mut delta = Vec2::ZERO;
-    if is_key_down(KeyCode::A) || is_key_down(KeyCode::Left) {
-        delta.x += 1.0;
-    }
-    if is_key_down(KeyCode::D) || is_key_down(KeyCode::Right) {
-        delta.x -= 1.0;
-    }
-    if is_key_down(KeyCode::W) || is_key_down(KeyCode::Up) {
-        delta.y += 1.0;
-    }
-    if is_key_down(KeyCode::S) || is_key_down(KeyCode::Down) {
-        delta.y -= 1.0;
-    }
-    *pan += delta * PAN_SPEED * dt;
-
-    let texture = tileset.texture();
-    let size = vec2(texture.width(), texture.height()) * *zoom;
-
-    // Keep at least a corner of the sheet on screen no matter how far you pan.
-    let limit = size + vec2(screen_width(), screen_height()) / 2.0;
-    *pan = pan.clamp(-limit, limit);
-
-    draw_texture_ex(
-        texture,
-        pan.x,
-        pan.y,
-        WHITE,
-        DrawTextureParams {
-            dest_size: Some(size),
-            ..Default::default()
-        },
-    );
-
-    overlay_text(
-        &format!(
-            "{TILESET_COLS}x{TILESET_ROWS} tiles @ {:.0}%",
-            *zoom * 100.0
-        ),
-        12.0,
-        0.0,
-        18.0,
-    );
-}
-
-/// Draws a line of text on a dimmed strip spanning the window, so it stays
-/// legible on top of the sheet.
-fn overlay_text(text: &str, x: f32, strip_top: f32, size: f32) {
-    draw_rectangle(
-        0.0,
-        strip_top,
-        screen_width(),
-        HINT_BAR_H,
-        Color::new(0.0, 0.0, 0.0, 0.75),
-    );
-    draw_text(text, x, strip_top + HINT_BAR_H - 8.0, size, LIGHTGRAY);
+/// Opens the native demo window and blocks until it closes. The web build
+/// instead starts [`DemoApp`] through `mapox-web`'s wasm-bindgen entry point.
+#[cfg(not(target_arch = "wasm32"))]
+pub fn open_window() -> eframe::Result {
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_title("mapox")
+            .with_inner_size([800.0, 600.0]),
+        ..Default::default()
+    };
+    eframe::run_native("mapox", options, Box::new(|_cc| Ok(Box::new(DemoApp::new()))))
 }
 
 /// Centres `text` on `centre_x`, shrinking it until it fits `max_width` so
 /// long symbol names in narrow cells stay separate words.
-fn centred_text(text: &str, centre_x: f32, y: f32, size: f32, max_width: f32, color: Color) {
+fn centred_text(
+    painter: &egui::Painter,
+    text: &str,
+    centre_x: f32,
+    top: f32,
+    size: f32,
+    max_width: f32,
+    color: Color32,
+) {
     let mut size = size;
-    let mut width = measure_text(text, None, size as u16, 1.0).width;
-    while width > max_width && size > 7.0 {
+    let mut galley = painter.layout_no_wrap(text.to_owned(), FontId::proportional(size), color);
+    while galley.size().x > max_width && size > 7.0 {
         size -= 1.0;
-        width = measure_text(text, None, size as u16, 1.0).width;
+        galley = painter.layout_no_wrap(text.to_owned(), FontId::proportional(size), color);
     }
-    draw_text(text, centre_x - width / 2.0, y, size, color);
+    painter.galley(pos2(centre_x - galley.size().x / 2.0, top), galley, color);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Off-grid coordinates would draw a source rect from past the edge of the
-    /// texture, which macroquad happily clamps into something wrong-looking
+    /// Off-grid coordinates would sample a uv rect from past the edge of the
+    /// texture, which the sampler happily clamps into something wrong-looking
     /// rather than reporting. The grid test in [`tileset`] pins the tile counts
     /// to the sheet, so being in range here is enough to be on the sheet.
     #[test]

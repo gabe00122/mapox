@@ -6,47 +6,39 @@
     <title>mapox</title>
     <style>
       html,
-      body,
-      canvas {
+      body {
         margin: 0;
         padding: 0;
         width: 100%;
         height: 100%;
         overflow: hidden;
-        position: absolute;
         background: black;
-        z-index: 0;
+      }
+      /* The canvas is sized by CSS; eframe only sets the backing-store
+         resolution (CSS size x DPR). Leaving the CSS size off instead makes
+         the element grow to its backing size and feedback-loop bigger on
+         every ResizeObserver delivery. */
+      canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
       }
     </style>
   </head>
   <body>
-    <canvas id="glcanvas" tabindex="1"></canvas>
+    <canvas id="mapox-canvas"></canvas>
     <!--
-      miniquad's JS glue (macroquad sits on miniquad; this is not macroquad's),
-      vendored byte-for-byte from the miniquad crate's own js/gl.js. It shares
-      an ABI with the wasm, so scripts/build-web.sh re-copies it from whatever
-      version Cargo.lock resolved on every build -- don't edit it by hand, and
-      don't swap it for the CDN copy at not-fl3.github.io, which is older and
-      is missing GL imports this binary needs.
+      mapox_web.js and mapox_web_bg.wasm are generated in lockstep by the
+      wasm-bindgen CLI (scripts/build_web.py) -- don't edit or pin them by hand.
     -->
-    <script src="./mq_js_bundle.js"></script>
-    <script>
-      // `plugins` is a global from the bundle; `on_init` fires after the module
-      // is instantiated and before `main()`, so `wasm_exports` is ready here.
-      plugins.push({
-        name: "mapox",
-        version: 1,
-        register_plugin: () => {},
-        on_init: () => {
-          const version = UTF8ToString(
-            wasm_exports.version_ptr(),
-            wasm_exports.version_len(),
-          );
-          console.log("mapox version:", version);
-        },
-      });
-
-      load("./mapox-web-demo.wasm");
+    <script type="module">
+      import init, { start, version } from "./mapox_web.js";
+      await init();
+      console.log("mapox version:", version());
+      await start(document.getElementById("mapox-canvas"));
     </script>
   </body>
 </html>
