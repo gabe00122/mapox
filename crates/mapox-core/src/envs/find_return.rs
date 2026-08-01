@@ -1,4 +1,4 @@
-use ndarray::Array2;
+use ndarray::{Array2, s};
 use rand::{RngExt, SeedableRng, rngs::StdRng};
 
 use crate::{
@@ -10,7 +10,7 @@ use crate::{
         AGENT_GENERIC, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, TILE_DESTRUCTIBLE_WALL,
         TILE_EMPTY, TILE_FLAG, TILE_WALL,
     },
-    timestep::{OBS_CHANNELS, TimeStepMut},
+    timestep::TimeStepMut,
     vocab::Vocabulary,
 };
 
@@ -154,50 +154,42 @@ impl FindReturn {
         }
     }
 
-    fn blocked(&self, tile: u8) -> bool {
+    fn blocked(&self, tile: i8) -> bool {
         let tile = tile as usize;
         tile == self.obs_tile_wall || tile == self.obs_tile_destructible_wall
     }
 
-    fn obs_base(&self, agent_id: usize, view_x: i32, view_y: i32) -> usize {
-        ((agent_id * self.config.view_width as usize + view_x as usize)
-            * self.config.view_height as usize
-            + view_y as usize)
-            * OBS_CHANNELS
-    }
-
     fn encode_observations(&self, state: &FindReturnState, timestep: &mut TimeStepMut) {
-        let view_width = self.config.view_width as usize;
-        let view_height = self.config.view_height as usize;
+        let view_width = self.config.view_width;
+        let view_height = self.config.view_height;
 
         for (agent_id, agent) in state.agents.iter().enumerate() {
-            let x0 = agent.position.x as usize - view_width / 2;
-            let y0 = agent.position.y as usize - view_height / 2;
+            // wall padding keeps the view window inside the map
+            let x0 = agent.position.x - view_width / 2;
+            let y0 = agent.position.y - view_height / 2;
 
-            for view_x in 0..view_width {
-                for view_y in 0..view_height {
-                    let map_x = x0 + view_x;
-                    let map_y = y0 + view_y;
-
-                    let tile = state.map[[map_x, map_y]];
-                    timestep.obs[[agent_id, x0, y0, 0]] = tile as i8;
-                }
-            }
+            let window = state.map.slice(s![
+                x0 as usize..(x0 + view_width) as usize,
+                y0 as usize..(y0 + view_height) as usize,
+            ]);
+            timestep
+                .obs
+                .slice_mut(s![agent_id, .., .., 0])
+                .assign(&window);
 
             for other in &state.agents {
                 let view_x = other.position.x - x0;
                 let view_y = other.position.y - y0;
                 if (0..view_width).contains(&view_x) && (0..view_height).contains(&view_y) {
-                    timestep.obs[self.obs_base(agent_id, view_x, view_y)] =
+                    timestep.obs[[agent_id, view_x as usize, view_y as usize, 0]] =
                         self.obs_agent_generic as i8;
                 }
             }
-
-            timestep.time[agent_id] = state.time;
-            timestep.terminated[agent_id] = 0;
-            timestep.task_ids[agent_id] = 0;
         }
 
+        timestep.time.fill(state.time);
+        timestep.terminated.fill(0);
+        timestep.task_ids.fill(0);
         // all move actions are always valid
         timestep.action_mask.fill(1);
     }
@@ -214,23 +206,20 @@ impl Environment for FindReturn {
         let mut rng = StdRng::seed_from_u64(seed);
 
         state.time = 0;
-        state.map.clear();
-        state.map.resize(
-            (self.width * self.height) as usize,
-            self.obs_tile_empty as u8,
-        );
 
-        for x in 0..self.width {
-            for y in 0..self.height {
-                let interior = x >= self.pad_width
-                    && x < self.width - self.pad_width
-                    && y >= self.pad_height
-                    && y < self.height - self.pad_height;
-                if !interior {
-                    state.map[self.idx(x, y)] = self.obs_tile_wall as u8;
-                }
-            }
+        let dim = (self.width as usize, self.height as usize);
+        if state.map.dim() != dim {
+            state.map = Array2::zeros(dim);
         }
+        // wall border, empty interior
+        state.map.fill(self.obs_tile_wall as i8);
+        state
+            .map
+            .slice_mut(s![
+                self.pad_width as usize..(self.width - self.pad_width) as usize,
+                self.pad_height as usize..(self.height - self.pad_height) as usize,
+            ])
+            .fill(self.obs_tile_empty as i8);
 
         state.agents.clear();
         for _ in 0..self.config.num_agents {
@@ -255,7 +244,7 @@ impl Environment for FindReturn {
             let target_x = agent.position.x + dx;
             let target_y = agent.position.y + dy;
 
-            if !self.blocked(state.map[self.idx(target_x, target_y)]) {
+            if !self.blocked(state.map[[target_x as usize, target_y as usize]]) {
                 state.agents[agent_id].position = Position {
                     x: target_x,
                     y: target_y,
@@ -302,7 +291,9 @@ impl Environment for FindReturn {
 
     fn render_state_into(&self, state: &Self::EnvState, grid_render_state: &mut GridRenderState) {
         grid_render_state.tilemap.clear();
-        grid_render_state.tilemap.extend_from_slice(&state.map);
+        grid_render_state
+            .tilemap
+            .extend(state.map.iter().map(|&tile| tile as u8));
         grid_render_state.agent_positions.clear();
 
         for agent in &state.agents {
@@ -316,68 +307,87 @@ impl Environment for FindReturn {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::timestep::OBS_CHANNELS;
+    use ndarray::{Array1, Array4};
 
-    fn make_timestep_buffers(
-        env: &FindReturn,
-    ) -> (
-        Vec<i8>,
-        Vec<i32>,
-        Vec<u8>,
-        Vec<i32>,
-        Vec<f32>,
-        Vec<u8>,
-        Vec<i32>,
-    ) {
-        let n = env.num_agents();
-        let obs_spec = env.observation_spec();
-        let obs_len = n * obs_spec.width as usize * obs_spec.height as usize * OBS_CHANNELS;
-        (
-            vec![0; obs_len],
-            vec![0; n],
-            vec![0; n],
-            vec![0; n],
-            vec![0.0; n],
-            vec![0; n * env.action_spec().num_actions],
-            vec![0; n],
-        )
+    struct TimeStepBuffers {
+        obs: Array4<i8>,
+        time: Array1<i32>,
+        terminated: Array1<u8>,
+        last_action: Array1<i32>,
+        reward: Array1<f32>,
+        action_mask: Array2<u8>,
+        task_ids: Array1<i32>,
+    }
+
+    impl TimeStepBuffers {
+        fn new(env: &FindReturn) -> Self {
+            let n = env.num_agents();
+            let obs_spec = env.observation_spec();
+            Self {
+                obs: Array4::zeros((
+                    n,
+                    obs_spec.width as usize,
+                    obs_spec.height as usize,
+                    OBS_CHANNELS,
+                )),
+                time: Array1::zeros(n),
+                terminated: Array1::zeros(n),
+                last_action: Array1::zeros(n),
+                reward: Array1::zeros(n),
+                action_mask: Array2::zeros((n, env.action_spec().num_actions)),
+                task_ids: Array1::zeros(n),
+            }
+        }
+
+        fn as_mut(&mut self) -> TimeStepMut<'_> {
+            TimeStepMut {
+                obs: self.obs.view_mut(),
+                time: self.time.view_mut(),
+                terminated: self.terminated.view_mut(),
+                last_action: self.last_action.view_mut(),
+                reward: self.reward.view_mut(),
+                action_mask: self.action_mask.view_mut(),
+                task_ids: self.task_ids.view_mut(),
+            }
+        }
     }
 
     #[test]
     fn agent_moves_and_walls_block() {
         let env = FindReturn::new(&FindReturnConfig::default());
         let mut state = env.init_state();
+        let mut buffers = TimeStepBuffers::new(&env);
 
-        let (mut obs, mut time, mut terminated, mut last_action, mut reward, mut mask, mut tasks) =
-            make_timestep_buffers(&env);
-        let mut timestep = TimeStepMut {
-            obs: &mut obs,
-            time: &mut time,
-            terminated: &mut terminated,
-            last_action: &mut last_action,
-            reward: &mut reward,
-            action_mask: &mut mask,
-            task_ids: &mut tasks,
-        };
-
-        env.reset(&mut state, 0, &mut timestep);
+        env.reset(&mut state, 0, &mut buffers.as_mut());
         let start = state.agents[0].position;
 
         // moving up shifts y by +1 on an empty map
-        env.step(&mut state, &[env.action_move_up as i32], &mut timestep);
+        env.step(
+            &mut state,
+            &[env.action_move_up as i32],
+            &mut buffers.as_mut(),
+        );
         assert_eq!(state.agents[0].position.y, start.y + 1);
         assert_eq!(state.agents[0].position.x, start.x);
         assert_eq!(state.time, 1);
 
         // walking left into the wall border eventually stops the agent
         for _ in 0..env.width {
-            env.step(&mut state, &[env.action_move_left as i32], &mut timestep);
+            env.step(
+                &mut state,
+                &[env.action_move_left as i32],
+                &mut buffers.as_mut(),
+            );
         }
         assert_eq!(state.agents[0].position.x, env.pad_width);
 
         // the center of the agent's view is itself
-        let view_width = env.config.view_width as usize;
-        let view_height = env.config.view_height as usize;
-        let center = ((view_width / 2) * view_height + view_height / 2) * OBS_CHANNELS;
-        assert_eq!(timestep.obs[center], env.obs_agent_generic as i8);
+        let center_x = env.config.view_width as usize / 2;
+        let center_y = env.config.view_height as usize / 2;
+        assert_eq!(
+            buffers.obs[[0, center_x, center_y, 0]],
+            env.obs_agent_generic as i8
+        );
     }
 }

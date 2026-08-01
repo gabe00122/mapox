@@ -7,6 +7,7 @@ pub mod env;
 pub mod tileset;
 
 use egui::{Color32, Rect, RichText, Stroke, StrokeKind, pos2, vec2};
+use ndarray::{Array1, Array2, Array4};
 
 use crate::{
     env::Environment,
@@ -30,42 +31,45 @@ const TILE_ART: &[(&str, u32, u32)] = &[
 
 /// Owns the arrays a [`TimeStepMut`] borrows, sized once from the env's specs.
 struct TimeStepBuffers {
-    obs: Vec<i8>,
-    time: Vec<i32>,
-    terminated: Vec<u8>,
-    last_action: Vec<i32>,
-    reward: Vec<f32>,
-    action_mask: Vec<u8>,
-    task_ids: Vec<i32>,
+    obs: Array4<i8>,
+    time: Array1<i32>,
+    terminated: Array1<u8>,
+    last_action: Array1<i32>,
+    reward: Array1<f32>,
+    action_mask: Array2<u8>,
+    task_ids: Array1<i32>,
 }
 
 impl TimeStepBuffers {
     fn new(env: &impl Environment) -> Self {
         let num_agents = env.num_agents();
         let obs_spec = env.observation_spec();
-        let obs_len =
-            num_agents * obs_spec.width as usize * obs_spec.height as usize * OBS_CHANNELS;
 
         Self {
-            obs: vec![0; obs_len],
-            time: vec![0; num_agents],
-            terminated: vec![0; num_agents],
-            last_action: vec![0; num_agents],
-            reward: vec![0.0; num_agents],
-            action_mask: vec![0; num_agents * env.action_spec().num_actions],
-            task_ids: vec![0; num_agents],
+            obs: Array4::zeros((
+                num_agents,
+                obs_spec.width as usize,
+                obs_spec.height as usize,
+                OBS_CHANNELS,
+            )),
+            time: Array1::zeros(num_agents),
+            terminated: Array1::zeros(num_agents),
+            last_action: Array1::zeros(num_agents),
+            reward: Array1::zeros(num_agents),
+            action_mask: Array2::zeros((num_agents, env.action_spec().num_actions)),
+            task_ids: Array1::zeros(num_agents),
         }
     }
 
     fn as_mut(&mut self) -> TimeStepMut<'_> {
         TimeStepMut {
-            obs: &mut self.obs,
-            time: &mut self.time,
-            terminated: &mut self.terminated,
-            last_action: &mut self.last_action,
-            reward: &mut self.reward,
-            action_mask: &mut self.action_mask,
-            task_ids: &mut self.task_ids,
+            obs: self.obs.view_mut(),
+            time: self.time.view_mut(),
+            terminated: self.terminated.view_mut(),
+            last_action: self.last_action.view_mut(),
+            reward: self.reward.view_mut(),
+            action_mask: self.action_mask.view_mut(),
+            task_ids: self.task_ids.view_mut(),
         }
     }
 }
