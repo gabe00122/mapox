@@ -11,7 +11,7 @@ use ndarray::{Array1, Array2, Array4};
 
 use crate::{
     env::Environment,
-    envs::find_return::{FindReturn, FindReturnConfig, FindReturnState},
+    envs::find_return::{FindReturn, FindReturnConfig},
     render::env::{GridRenderSettings, GridRenderState},
     symbols,
     timestep::{OBS_CHANNELS, TimeStepMut},
@@ -82,7 +82,6 @@ pub struct DemoApp {
     tileset: Option<Tileset>,
 
     env: FindReturn,
-    state: FindReturnState,
     buffers: TimeStepBuffers,
 
     settings: GridRenderSettings,
@@ -97,8 +96,7 @@ pub struct DemoApp {
 
 impl DemoApp {
     pub fn new() -> Self {
-        let env = FindReturn::new(&FindReturnConfig::default());
-        let mut state = env.init_state();
+        let mut env = FindReturn::new(&FindReturnConfig::default());
         let mut buffers = TimeStepBuffers::new(&env);
 
         let settings = env.get_render_settings();
@@ -124,12 +122,11 @@ impl DemoApp {
         ];
 
         let seed = 0;
-        env.reset(&mut state, seed, &mut buffers.as_mut());
+        env.reset(seed, &mut buffers.as_mut());
 
         Self {
             tileset: None,
             env,
-            state,
             buffers,
             settings,
             render_state: GridRenderState::default(),
@@ -156,14 +153,12 @@ impl DemoApp {
         });
         if let Some(direction) = action {
             let actions = vec![self.move_actions[direction]; self.env.num_agents()];
-            self.env
-                .step(&mut self.state, &actions, &mut self.buffers.as_mut());
+            self.env.step(&actions, &mut self.buffers.as_mut());
         }
 
         if ui.input(|i| i.key_pressed(Key::R)) {
             self.seed += 1;
-            self.env
-                .reset(&mut self.state, self.seed, &mut self.buffers.as_mut());
+            self.env.reset(self.seed, &mut self.buffers.as_mut());
         }
     }
 
@@ -179,7 +174,10 @@ impl DemoApp {
 
         let screen_rect = |x: f32, y: f32, w: f32, h: f32| {
             Rect::from_min_size(
-                pos2(origin.x + x * tile, origin.y + (height as f32 - y - h) * tile),
+                pos2(
+                    origin.x + x * tile,
+                    origin.y + (height as f32 - y - h) * tile,
+                ),
                 vec2(w, h) * tile,
             )
         };
@@ -233,12 +231,11 @@ impl eframe::App for DemoApp {
         }
 
         self.handle_input(ui);
-        self.env
-            .render_state_into(&self.state, &mut self.render_state);
+        self.env.render_state_into(&mut self.render_state);
 
         let hint = format!(
             "t={}   arrows/wasd: move   r: reset{}",
-            self.state.time,
+            self.env.state.time,
             if cfg!(target_arch = "wasm32") {
                 ""
             } else {

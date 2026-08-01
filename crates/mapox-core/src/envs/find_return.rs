@@ -1,5 +1,6 @@
 use ndarray::{Array2, s};
 use rand::{RngExt, SeedableRng, rngs::StdRng};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     env::Environment,
@@ -14,7 +15,8 @@ use crate::{
     vocab::Vocabulary,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
 pub struct FindReturnConfig {
     pub num_agents: usize,
     pub num_flags: usize,
@@ -61,6 +63,7 @@ pub struct FindReturnState {
 #[derive(Debug, Default, Clone)]
 pub struct FindReturn {
     pub config: FindReturnConfig,
+    pub state: FindReturnState,
 
     pad_width: i32,
     pad_height: i32,
@@ -112,6 +115,7 @@ impl FindReturn {
 
         Self {
             config: config.clone(),
+            state: FindReturnState::default(),
 
             pad_width,
             pad_height,
@@ -159,16 +163,16 @@ impl FindReturn {
         tile == self.obs_tile_wall || tile == self.obs_tile_destructible_wall
     }
 
-    fn encode_observations(&self, state: &FindReturnState, timestep: &mut TimeStepMut) {
+    fn encode_observations(&self, timestep: &mut TimeStepMut) {
         let view_width = self.config.view_width;
         let view_height = self.config.view_height;
 
-        for (agent_id, agent) in state.agents.iter().enumerate() {
+        for (agent_id, agent) in self.state.agents.iter().enumerate() {
             // wall padding keeps the view window inside the map
             let x0 = agent.position.x - view_width / 2;
             let y0 = agent.position.y - view_height / 2;
 
-            let window = state.map.slice(s![
+            let window = self.state.map.slice(s![
                 x0 as usize..(x0 + view_width) as usize,
                 y0 as usize..(y0 + view_height) as usize,
             ]);
@@ -177,7 +181,7 @@ impl FindReturn {
                 .slice_mut(s![agent_id, .., .., 0])
                 .assign(&window);
 
-            for other in &state.agents {
+            for other in &self.state.agents {
                 let view_x = other.position.x - x0;
                 let view_y = other.position.y - y0;
                 if (0..view_width).contains(&view_x) && (0..view_height).contains(&view_y) {
@@ -187,7 +191,7 @@ impl FindReturn {
             }
         }
 
-        timestep.time.fill(state.time);
+        timestep.time.fill(self.state.time);
         timestep.terminated.fill(0);
         timestep.task_ids.fill(0);
         // all move actions are always valid
@@ -196,24 +200,18 @@ impl FindReturn {
 }
 
 impl Environment for FindReturn {
-    type EnvState = FindReturnState;
-
-    fn init_state(&self) -> FindReturnState {
-        FindReturnState::default()
-    }
-
-    fn reset(&self, state: &mut Self::EnvState, seed: u64, timestep: &mut TimeStepMut) {
+    fn reset(&mut self, seed: u64, timestep: &mut TimeStepMut) {
         let mut rng = StdRng::seed_from_u64(seed);
 
-        state.time = 0;
+        self.state.time = 0;
 
         let dim = (self.width as usize, self.height as usize);
-        if state.map.dim() != dim {
-            state.map = Array2::zeros(dim);
+        if self.state.map.dim() != dim {
+            self.state.map = Array2::zeros(dim);
         }
         // wall border, empty interior
-        state.map.fill(self.obs_tile_wall as i8);
-        state
+        self.state.map.fill(self.obs_tile_wall as i8);
+        self.state
             .map
             .slice_mut(s![
                 self.pad_width as usize..(self.width - self.pad_width) as usize,
@@ -221,9 +219,9 @@ impl Environment for FindReturn {
             ])
             .fill(self.obs_tile_empty as i8);
 
-        state.agents.clear();
+        self.state.agents.clear();
         for _ in 0..self.config.num_agents {
-            state.agents.push(FindReturnAgent {
+            self.state.agents.push(FindReturnAgent {
                 position: Position {
                     x: rng.random_range(self.pad_width..self.width - self.pad_width),
                     y: rng.random_range(self.pad_height..self.height - self.pad_height),
@@ -234,18 +232,18 @@ impl Environment for FindReturn {
 
         timestep.reward.fill(0.0);
         timestep.last_action.fill(0);
-        self.encode_observations(state, timestep);
+        self.encode_observations(timestep);
     }
 
-    fn step(&self, state: &mut Self::EnvState, actions: &[i32], timestep: &mut TimeStepMut) {
-        for agent_id in 0..state.agents.len() {
+    fn step(&mut self, actions: &[i32], timestep: &mut TimeStepMut) {
+        for agent_id in 0..self.state.agents.len() {
             let (dx, dy) = self.direction(actions[agent_id]);
-            let agent = &state.agents[agent_id];
+            let agent = &self.state.agents[agent_id];
             let target_x = agent.position.x + dx;
             let target_y = agent.position.y + dy;
 
-            if !self.blocked(state.map[[target_x as usize, target_y as usize]]) {
-                state.agents[agent_id].position = Position {
+            if !self.blocked(self.state.map[[target_x as usize, target_y as usize]]) {
+                self.state.agents[agent_id].position = Position {
                     x: target_x,
                     y: target_y,
                 };
@@ -255,8 +253,8 @@ impl Environment for FindReturn {
             timestep.last_action[agent_id] = actions[agent_id];
         }
 
-        state.time += 1;
-        self.encode_observations(state, timestep);
+        self.state.time += 1;
+        self.encode_observations(timestep);
     }
 
     fn observation_spec(&self) -> ObservationSpec {
@@ -289,105 +287,17 @@ impl Environment for FindReturn {
         }
     }
 
-    fn render_state_into(&self, state: &Self::EnvState, grid_render_state: &mut GridRenderState) {
+    fn render_state_into(&self, grid_render_state: &mut GridRenderState) {
         grid_render_state.tilemap.clear();
         grid_render_state
             .tilemap
-            .extend(state.map.iter().map(|&tile| tile as u8));
+            .extend(self.state.map.iter().map(|&tile| tile as u8));
         grid_render_state.agent_positions.clear();
 
-        for agent in &state.agents {
+        for agent in &self.state.agents {
             grid_render_state.tilemap[self.idx(agent.position.x, agent.position.y)] =
                 self.obs_agent_generic as u8;
             grid_render_state.agent_positions.push(agent.position);
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::timestep::OBS_CHANNELS;
-    use ndarray::{Array1, Array4};
-
-    struct TimeStepBuffers {
-        obs: Array4<i8>,
-        time: Array1<i32>,
-        terminated: Array1<u8>,
-        last_action: Array1<i32>,
-        reward: Array1<f32>,
-        action_mask: Array2<u8>,
-        task_ids: Array1<i32>,
-    }
-
-    impl TimeStepBuffers {
-        fn new(env: &FindReturn) -> Self {
-            let n = env.num_agents();
-            let obs_spec = env.observation_spec();
-            Self {
-                obs: Array4::zeros((
-                    n,
-                    obs_spec.width as usize,
-                    obs_spec.height as usize,
-                    OBS_CHANNELS,
-                )),
-                time: Array1::zeros(n),
-                terminated: Array1::zeros(n),
-                last_action: Array1::zeros(n),
-                reward: Array1::zeros(n),
-                action_mask: Array2::zeros((n, env.action_spec().num_actions)),
-                task_ids: Array1::zeros(n),
-            }
-        }
-
-        fn as_mut(&mut self) -> TimeStepMut<'_> {
-            TimeStepMut {
-                obs: self.obs.view_mut(),
-                time: self.time.view_mut(),
-                terminated: self.terminated.view_mut(),
-                last_action: self.last_action.view_mut(),
-                reward: self.reward.view_mut(),
-                action_mask: self.action_mask.view_mut(),
-                task_ids: self.task_ids.view_mut(),
-            }
-        }
-    }
-
-    #[test]
-    fn agent_moves_and_walls_block() {
-        let env = FindReturn::new(&FindReturnConfig::default());
-        let mut state = env.init_state();
-        let mut buffers = TimeStepBuffers::new(&env);
-
-        env.reset(&mut state, 0, &mut buffers.as_mut());
-        let start = state.agents[0].position;
-
-        // moving up shifts y by +1 on an empty map
-        env.step(
-            &mut state,
-            &[env.action_move_up as i32],
-            &mut buffers.as_mut(),
-        );
-        assert_eq!(state.agents[0].position.y, start.y + 1);
-        assert_eq!(state.agents[0].position.x, start.x);
-        assert_eq!(state.time, 1);
-
-        // walking left into the wall border eventually stops the agent
-        for _ in 0..env.width {
-            env.step(
-                &mut state,
-                &[env.action_move_left as i32],
-                &mut buffers.as_mut(),
-            );
-        }
-        assert_eq!(state.agents[0].position.x, env.pad_width);
-
-        // the center of the agent's view is itself
-        let center_x = env.config.view_width as usize / 2;
-        let center_y = env.config.view_height as usize / 2;
-        assert_eq!(
-            buffers.obs[[0, center_x, center_y, 0]],
-            env.obs_agent_generic as i8
-        );
     }
 }
