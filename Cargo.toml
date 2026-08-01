@@ -24,7 +24,7 @@ opt-level = 3
 mapox-core = { path = "crates/mapox-core" }
 
 fastnoise-lite = "1.1.1"
-rand = { version = "0.10.2", default-features = false, features = ["std"] }
+rand = { version = "0.10.2", default-features = false, features = ["std", "std_rng"] }
 rayon = "1.12.0"
 numpy = "0.29.0"
 pyo3 = "0.29.0"
