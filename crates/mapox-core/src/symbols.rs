@@ -1,0 +1,38 @@
+pub const TILE_EMPTY: &str = "tile/empty";
+pub const TILE_WALL: &str = "tile/wall";
+pub const TILE_DESTRUCTIBLE_WALL: &str = "tile/destructible_wall";
+pub const TILE_FLAG: &str = "tile/flag";
+pub const TILE_FLAG_UNLOCKED: &str = "tile/flag_unlocked";
+pub const TILE_ARROW: &str = "tile/arrow";
+pub const TILE_GRASS: &str = "tile/grass";
+pub const TILE_FOOD: &str = "tile/food";
+
+pub const TILE_DECOR_1: &str = "tile/decor_1";
+pub const TILE_DECOR_2: &str = "tile/decor_2";
+pub const TILE_DECOR_3: &str = "tile/decor_3";
+pub const TILE_DECOR_4: &str = "tile/decor_4";
+
+pub const TILE_DECOR: [&str; 4] = [TILE_DECOR_1, TILE_DECOR_2, TILE_DECOR_3, TILE_DECOR_4];
+
+pub const AGENT_GENERIC: &str = "agent/generic";
+pub const AGENT_SCOUT: &str = "agent/scout";
+pub const AGENT_HARVESTER: &str = "agent/harvester";
+pub const AGENT_PREY: &str = "agent/prey";
+pub const AGENT_PREDATOR: &str = "agent/predator";
+pub const AGENT_KNIGHT: &str = "agent/knight";
+pub const AGENT_ARCHER: &str = "agent/archer";
+pub const AGENT_SNAKE_HEAD: &str = "agent/snake_head";
+pub const AGENT_SNAKE_BODY: &str = "agent/snake_body";
+
+// --- action symbols ---
+
+pub const MOVE_UP: &str = "move/up";
+pub const MOVE_RIGHT: &str = "move/right";
+pub const MOVE_DOWN: &str = "move/down";
+pub const MOVE_LEFT: &str = "move/left";
+
+pub const MOVES: [&str; 4] = [MOVE_UP, MOVE_RIGHT, MOVE_DOWN, MOVE_LEFT];
+
+pub const STAY: &str = "stay";
+pub const PRIMARY_ACTION: &str = "primary";
+pub const DIG_ACTION: &str = "dig";

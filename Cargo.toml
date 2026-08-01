@@ -9,19 +9,11 @@ license = "MIT"
 repository = "https://github.com/gabe00122/mapox"
 authors = ["Gabriel Keith <gfk1995@gmail.com>"]
 
-# One release profile for every target, tuned for throughput: env stepping is
-# the hot path (native, via the python extension) and the wasm viewer just
-# inherits it. Size is not traded for here -- scripts/build_web.py runs
-# `wasm-opt -Oz` on the staged binary, which is where web size belongs.
-#
-# `panic` stays at the default "unwind" on purpose: pyo3 catches Rust panics
-# and re-raises them as Python exceptions, which "abort" would turn into a
-# killed interpreter.
 [profile.release]
 opt-level = 3
 lto = "fat"        # cross-crate inlining, incl. into ndarray/rayon/fastnoise
 codegen-units = 1  # no parallel-codegen inlining barriers within a crate
-debug = "line-tables-only" # keeps `perf` output readable; costs no speed
+debug = "line-tables-only"
 
 # Dependencies are compiled optimized even in dev builds, so a debug-built env
 # still steps fast enough to iterate against. Our own crates stay unoptimized
@@ -47,15 +39,8 @@ ndarray = "0.17.2"
 # becomes visible ("Tried to update a texture that has not been allocated
 # yet" -- the font atlas full upload was dropped with the skipped frame);
 # this rev survives a hidden start. Drop the pin at the next release.
-eframe = { git = "https://github.com/emilk/egui.git", rev = "c69834e65a0681d4fa40c30545b006ce39527034", default-features = false, features = [
-    "accesskit",
-    "default_fonts",
-    "wayland",
-    "web_screen_reader",
-    "wgpu",
-    "x11",
-] }
-egui = { git = "https://github.com/emilk/egui.git", rev = "c69834e65a0681d4fa40c30545b006ce39527034" }
+eframe = "0.35.0"
+egui = "0.35.0"
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 wasm-bindgen = "0.2.126"
 # the expansion of `#[wasm_bindgen]` on an async fn refers to this crate

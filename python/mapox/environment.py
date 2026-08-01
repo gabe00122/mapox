@@ -9,13 +9,6 @@ from jax import Array
 
 from mapox.timestep import TimeStep
 from mapox.specs import ObservationSpec, ActionSpec
-import enum
-
-
-class StepType(enum.IntEnum):
-    FIRST = 0
-    MID = 1
-    LAST = 2
 
 
 EnvState = TypeVar("EnvState")

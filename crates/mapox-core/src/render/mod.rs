@@ -2,6 +2,7 @@
 //! by eye, plus the native window that hosts it. On the web the same
 //! [`DemoApp`] is hosted by `mapox-web`'s wasm-bindgen entry point instead.
 
+pub mod env;
 pub mod tileset;
 
 use egui::{Align2, Color32, FontId, Rect, RichText, Vec2, pos2, vec2};
@@ -109,14 +110,20 @@ impl DemoApp {
             let centre_x = area.left() + ((i % cols) as f32 + 0.5) * cell_w;
             let cell_y = origin_y + (i / cols) as f32 * cell_h;
 
-            let rect = Rect::from_min_size(
-                pos2(centre_x - tile / 2.0, cell_y),
-                Vec2::splat(tile),
-            );
-            self.tileset().draw(painter, *col, *row, rect, Color32::WHITE);
+            let rect = Rect::from_min_size(pos2(centre_x - tile / 2.0, cell_y), Vec2::splat(tile));
+            self.tileset()
+                .draw(painter, *col, *row, rect, Color32::WHITE);
 
             let text_w = cell_w - 6.0;
-            centred_text(painter, label, centre_x, cell_y + tile + 4.0, 15.0, text_w, Color32::WHITE);
+            centred_text(
+                painter,
+                label,
+                centre_x,
+                cell_y + tile + 4.0,
+                15.0,
+                text_w,
+                Color32::WHITE,
+            );
             centred_text(
                 painter,
                 &format!("{col},{row}"),
@@ -143,7 +150,10 @@ impl DemoApp {
             };
             (
                 i.stable_dt,
-                vec2(axis(A, ArrowLeft, D, ArrowRight), axis(W, ArrowUp, S, ArrowDown)),
+                vec2(
+                    axis(A, ArrowLeft, D, ArrowRight),
+                    axis(W, ArrowUp, S, ArrowDown),
+                ),
             )
         });
         // Keys move the camera in screen pixels per second; the scene rect is
@@ -166,7 +176,11 @@ impl DemoApp {
             let zoom = viewport.width() / self.scene_rect.width();
             let strip = Rect::from_min_size(viewport.min, vec2(viewport.width(), 24.0));
             let painter = ui.painter();
-            painter.rect_filled(strip, egui::CornerRadius::ZERO, Color32::from_black_alpha(191));
+            painter.rect_filled(
+                strip,
+                egui::CornerRadius::ZERO,
+                Color32::from_black_alpha(191),
+            );
             painter.text(
                 strip.left_center() + vec2(12.0, 0.0),
                 Align2::LEFT_CENTER,
@@ -205,8 +219,7 @@ impl eframe::App for DemoApp {
             format!("{hint}   esc: quit")
         };
 
-        egui::Panel::bottom("hint")
-            .show(ui, |ui| ui.label(RichText::new(hint).weak()));
+        egui::Panel::bottom("hint").show(ui, |ui| ui.label(RichText::new(hint).weak()));
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(Color32::BLACK))
             .show(ui, |ui| match self.view {
@@ -226,7 +239,11 @@ pub fn open_window() -> eframe::Result {
             .with_inner_size([800.0, 600.0]),
         ..Default::default()
     };
-    eframe::run_native("mapox", options, Box::new(|_cc| Ok(Box::new(DemoApp::new()))))
+    eframe::run_native(
+        "mapox",
+        options,
+        Box::new(|_cc| Ok(Box::new(DemoApp::new()))),
+    )
 }
 
 /// Centres `text` on `centre_x`, shrinking it until it fits `max_width` so

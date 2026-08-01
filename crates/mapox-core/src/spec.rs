@@ -1,0 +1,37 @@
+#[derive(Debug, Default, Clone)]
+pub struct ActionSpec {
+    pub num_actions: usize,
+}
+
+impl ActionSpec {
+    pub fn new(num_actions: usize) -> Self {
+        Self { num_actions }
+    }
+}
+
+#[derive(Debug, Default, Clone)]
+pub struct ObservationSpec {
+    pub width: usize,
+    pub height: usize,
+    pub num_types: usize,
+}
+
+impl ObservationSpec {
+    pub fn new(width: usize, height: usize, num_types: usize) -> Self {
+        Self {
+            width,
+            height,
+            num_types,
+        }
+    }
+}
+
+pub fn action_mask_into(action_ids: impl IntoIterator<Item = usize>, mask: &mut [u8]) {
+    for m in mask.iter_mut() {
+        *m = 0;
+    }
+
+    for action_id in action_ids {
+        mask[action_id] = 1
+    }
+}
