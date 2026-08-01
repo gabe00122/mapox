@@ -15,6 +15,10 @@ impl Vocabulary {
         self.symbols.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.symbols.is_empty()
+    }
+
     pub fn add(&mut self, symbol: &'static str) -> usize {
         if let Some(&id) = self.ids.get(symbol) {
             return id;

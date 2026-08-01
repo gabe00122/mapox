@@ -1,4 +1,4 @@
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct ActionSpec {
     pub num_actions: usize,
 }
@@ -9,15 +9,15 @@ impl ActionSpec {
     }
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct ObservationSpec {
-    pub width: usize,
-    pub height: usize,
+    pub width: i32,
+    pub height: i32,
     pub num_types: usize,
 }
 
 impl ObservationSpec {
-    pub fn new(width: usize, height: usize, num_types: usize) -> Self {
+    pub fn new(width: i32, height: i32, num_types: usize) -> Self {
         Self {
             width,
             height,

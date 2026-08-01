@@ -4,16 +4,20 @@ use crate::timestep::TimeStepMut;
 use crate::vocab::Vocabulary;
 
 pub trait Environment {
-    fn reset(&mut self, seed: u64, timestep: &mut TimeStepMut);
-    fn step(&mut self, actions: &[i32], timestep: &mut TimeStepMut);
+    type EnvState;
+
+    fn init_state(&self) -> Self::EnvState;
+
+    fn reset(&self, state: &mut Self::EnvState, seed: u64, timestep: &mut TimeStepMut);
+    fn step(&self, state: &mut Self::EnvState, actions: &[i32], timestep: &mut TimeStepMut);
 
     fn observation_spec(&self) -> ObservationSpec;
     fn action_spec(&self) -> ActionSpec;
 
-    fn num_actions(&self) -> usize;
+    fn num_agents(&self) -> usize;
     fn obs_vocab(&self) -> &Vocabulary;
     fn action_vocab(&self) -> &Vocabulary;
 
     fn get_render_settings(&self) -> GridRenderSettings;
-    fn render_state_into(&self, grid_render_state: &mut GridRenderState);
+    fn render_state_into(&self, state: &Self::EnvState, grid_render_state: &mut GridRenderState);
 }
