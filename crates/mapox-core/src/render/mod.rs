@@ -33,10 +33,10 @@ const TILE_ART: &[(&str, u32, u32)] = &[
 struct TimeStepBuffers {
     obs: Array4<i8>,
     time: Array1<i32>,
-    terminated: Array1<u8>,
+    terminated: Array1<bool>,
     last_action: Array1<i32>,
     reward: Array1<f32>,
-    action_mask: Array2<u8>,
+    action_mask: Array2<bool>,
     task_ids: Array1<i32>,
 }
 
@@ -53,10 +53,10 @@ impl TimeStepBuffers {
                 OBS_CHANNELS,
             )),
             time: Array1::zeros(num_agents),
-            terminated: Array1::zeros(num_agents),
+            terminated: Array1::default(num_agents),
             last_action: Array1::zeros(num_agents),
             reward: Array1::zeros(num_agents),
-            action_mask: Array2::zeros((num_agents, env.action_spec().num_actions)),
+            action_mask: Array2::default((num_agents, env.action_spec().num_actions)),
             task_ids: Array1::zeros(num_agents),
         }
     }

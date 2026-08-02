@@ -34,7 +34,7 @@ pub struct FindReturnConfig {
 impl Default for FindReturnConfig {
     fn default() -> Self {
         Self {
-            num_agents: 1,
+            num_agents: 512,
             num_flags: 1,
             width: 40,
             height: 40,
@@ -64,6 +64,10 @@ pub struct FindReturnState {
 pub struct FindReturn {
     pub config: FindReturnConfig,
     pub state: FindReturnState,
+
+    /// Map with agents stamped on top; observation windows slice this so
+    /// encoding stays O(agents × view area) instead of O(agents²).
+    stamped_map: Array2<i8>,
 
     pad_width: i32,
     pad_height: i32,
@@ -117,6 +121,8 @@ impl FindReturn {
             config: config.clone(),
             state: FindReturnState::default(),
 
+            stamped_map: Array2::default((0, 0)),
+
             pad_width,
             pad_height,
             width,
@@ -163,16 +169,25 @@ impl FindReturn {
         tile == self.obs_tile_wall || tile == self.obs_tile_destructible_wall
     }
 
-    fn encode_observations(&self, timestep: &mut TimeStepMut) {
+    fn encode_observations(&mut self, timestep: &mut TimeStepMut) {
         let view_width = self.config.view_width;
         let view_height = self.config.view_height;
+
+        if self.stamped_map.dim() != self.state.map.dim() {
+            self.stamped_map = Array2::zeros(self.state.map.dim());
+        }
+        self.stamped_map.assign(&self.state.map);
+        for agent in &self.state.agents {
+            self.stamped_map[[agent.position.x as usize, agent.position.y as usize]] =
+                self.obs_agent_generic as i8;
+        }
 
         for (agent_id, agent) in self.state.agents.iter().enumerate() {
             // wall padding keeps the view window inside the map
             let x0 = agent.position.x - view_width / 2;
             let y0 = agent.position.y - view_height / 2;
 
-            let window = self.state.map.slice(s![
+            let window = self.stamped_map.slice(s![
                 x0 as usize..(x0 + view_width) as usize,
                 y0 as usize..(y0 + view_height) as usize,
             ]);
@@ -180,22 +195,13 @@ impl FindReturn {
                 .obs
                 .slice_mut(s![agent_id, .., .., 0])
                 .assign(&window);
-
-            for other in &self.state.agents {
-                let view_x = other.position.x - x0;
-                let view_y = other.position.y - y0;
-                if (0..view_width).contains(&view_x) && (0..view_height).contains(&view_y) {
-                    timestep.obs[[agent_id, view_x as usize, view_y as usize, 0]] =
-                        self.obs_agent_generic as i8;
-                }
-            }
         }
 
         timestep.time.fill(self.state.time);
-        timestep.terminated.fill(0);
+        timestep.terminated.fill(false);
         timestep.task_ids.fill(0);
         // all move actions are always valid
-        timestep.action_mask.fill(1);
+        timestep.action_mask.fill(false);
     }
 }
 

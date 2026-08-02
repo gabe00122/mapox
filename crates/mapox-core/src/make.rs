@@ -11,7 +11,7 @@ pub enum EnvConfig {
     FindReturn(FindReturnConfig),
 }
 
-pub fn make(config: &EnvConfig) -> Box<dyn Environment> {
+pub fn make(config: &EnvConfig) -> Box<dyn Environment + Send + Sync> {
     match config {
         EnvConfig::FindReturn(config) => Box::new(FindReturn::new(config)),
     }
