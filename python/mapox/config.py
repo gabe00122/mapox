@@ -13,7 +13,6 @@ from mapox.envs.prey import PreyConfig, PreyEnv
 from mapox.envs.snake import SnakeConfig, SnakeEnv
 
 from mapox.environment import Environment
-from mapox.wrappers.task_id_wrapper import TaskIdWrapper
 from mapox.wrappers.multitask import MultiTaskWrapper
 from mapox.wrappers.vector import VectorWrapper
 
@@ -70,30 +69,34 @@ class EnvironmentFactory:
         num_tasks = 1
 
         if env_config.env_type == "multi":
-            if env_name is not None:
-                num_tasks = len(env_config.envs)
-                for task_id, env_def in enumerate(env_config.envs):
-                    if env_def.name == env_name:
-                        return TaskIdWrapper(
-                            self.create_env(env_def.env, length, vec_count=vec_count)[
-                                0
-                            ],
-                            task_id,
-                        ), num_tasks
-                raise ValueError("Could not find environment matching env_name")
-            else:
-                out_envs = []
-                out_env_names = []
-                num_tasks = len(env_config.envs)
-                for env_def in env_config.envs:
-                    out_envs.append(
-                        self.create_env(env_def.env, length, env_def.num)[0]
-                    )
-                    out_env_names.append(env_def.name)
+            num_tasks = len(env_config.envs)
+            env_names = tuple(env_def.name for env_def in env_config.envs)
 
-                return MultiTaskWrapper(
-                    tuple(out_envs), tuple(out_env_names)
-                ), num_tasks
+            if env_name is not None:
+                if env_name not in env_names:
+                    raise ValueError("Could not find environment matching env_name")
+                task_id = env_names.index(env_name)
+
+                # Every sub-env is built so the union vocab matches training;
+                # only the selected one is kept, so the rest stay unvectorized.
+                out_envs = tuple(
+                    self.create_env(
+                        env_def.env,
+                        length,
+                        vec_count if i == task_id else 1,
+                    )[0]
+                    for i, env_def in enumerate(env_config.envs)
+                )
+                wrapper = MultiTaskWrapper(out_envs, env_names)
+
+                return wrapper.task_envs[task_id], num_tasks
+            else:
+                out_envs = tuple(
+                    self.create_env(env_def.env, length, env_def.num)[0]
+                    for env_def in env_config.envs
+                )
+
+                return MultiTaskWrapper(out_envs, env_names), num_tasks
         elif env_config.env_type in self._registry:
             env = self._registry[env_config.env_type](env_config, length)
             if vec_count > 1:

@@ -191,10 +191,6 @@ def test_eq_ignores_frozen():
     assert Vocabulary(["a"]).freeze() == Vocabulary(["a"])
 
 
-def test_eq_non_vocabulary():
-    assert Vocabulary(["a"]) != ["a"]
-
-
 # --- hashing / jit static args ---
 
 

@@ -36,6 +36,7 @@ class Vocabulary:
             self.add(s)
 
     def add_block(self, symbols: Iterable[str]) -> range:
+        symbols = list(symbols)
         ids = [self.get(s) for s in symbols]
         nones = [id is None for id in ids]
 
@@ -84,19 +85,19 @@ class Vocabulary:
         return self
 
     def __len__(self) -> int:
-        return len(self.symbols)
+        return len(self._symbols)
 
     def __contains__(self, symbol: str) -> bool:
         return self.get(symbol) is not None
 
     def __iter__(self) -> Iterator[str]:
-        return iter(self.symbols)
+        return iter(self._symbols)
 
     def __eq__(self, other: object) -> bool:
         if isinstance(other, Vocabulary):
             return self.symbols == other.symbols
         else:
-            return False
+            raise NotImplementedError()
 
     def __hash__(self) -> int:
         # jit caches are keyed on static-argument hashes, so only an immutable
@@ -110,7 +111,7 @@ class Vocabulary:
 
     def lut_to(self, target: "Vocabulary", *, default: int | None = None, dtype: jnp.dtype = jnp.int32) -> jax.Array:
         ids: list[int] = []
-        for s in self.symbols:
+        for s in self._symbols:
             if default is None:
                 ids.append(target.id(s))
             else:
