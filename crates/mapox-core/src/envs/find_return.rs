@@ -57,7 +57,7 @@ pub struct FindReturnAgent {
 pub struct FindReturnState {
     pub agents: Vec<FindReturnAgent>,
     pub time: i32,
-    pub map: Array2<i8>,
+    pub map: Array2<u8>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -67,7 +67,7 @@ pub struct FindReturn {
 
     /// Map with agents stamped on top; observation windows slice this so
     /// encoding stays O(agents × view area) instead of O(agents²).
-    stamped_map: Array2<i8>,
+    stamped_map: Array2<u8>,
 
     pad_width: i32,
     pad_height: i32,
@@ -82,10 +82,10 @@ pub struct FindReturn {
     obs_vocab: Vocabulary,
     action_vocab: Vocabulary,
 
-    obs_tile_empty: usize,
-    obs_tile_destructible_wall: usize,
-    obs_tile_wall: usize,
-    obs_agent_generic: usize,
+    obs_tile_empty: u8,
+    obs_tile_destructible_wall: u8,
+    obs_tile_wall: u8,
+    obs_agent_generic: u8,
     action_move_up: usize,
     action_move_right: usize,
     action_move_down: usize,
@@ -97,11 +97,11 @@ impl FindReturn {
         let mut action_vocab = Vocabulary::new();
         let mut obs_vocab = Vocabulary::new();
 
-        let obs_tile_empty = obs_vocab.add(TILE_EMPTY);
-        let obs_tile_destructible_wall = obs_vocab.add(TILE_DESTRUCTIBLE_WALL);
-        let obs_tile_wall = obs_vocab.add(TILE_WALL);
+        let obs_tile_empty = obs_vocab.add(TILE_EMPTY) as u8;
+        let obs_tile_destructible_wall = obs_vocab.add(TILE_DESTRUCTIBLE_WALL) as u8;
+        let obs_tile_wall = obs_vocab.add(TILE_WALL) as u8;
         obs_vocab.add(TILE_FLAG);
-        let obs_agent_generic = obs_vocab.add(AGENT_GENERIC);
+        let obs_agent_generic = obs_vocab.add(AGENT_GENERIC) as u8;
 
         let action_move_up = action_vocab.add(MOVE_UP);
         let action_move_right = action_vocab.add(MOVE_RIGHT);
@@ -145,10 +145,6 @@ impl FindReturn {
         }
     }
 
-    fn idx(&self, x: i32, y: i32) -> usize {
-        (x * self.height + y) as usize
-    }
-
     fn direction(&self, action: i32) -> (i32, i32) {
         let action = action as usize;
         if action == self.action_move_up {
@@ -164,8 +160,7 @@ impl FindReturn {
         }
     }
 
-    fn blocked(&self, tile: i8) -> bool {
-        let tile = tile as usize;
+    fn blocked(&self, tile: u8) -> bool {
         tile == self.obs_tile_wall || tile == self.obs_tile_destructible_wall
     }
 
@@ -179,7 +174,7 @@ impl FindReturn {
         self.stamped_map.assign(&self.state.map);
         for agent in &self.state.agents {
             self.stamped_map[[agent.position.x as usize, agent.position.y as usize]] =
-                self.obs_agent_generic as i8;
+                self.obs_agent_generic;
         }
 
         for (agent_id, agent) in self.state.agents.iter().enumerate() {
@@ -216,14 +211,14 @@ impl Environment for FindReturn {
             self.state.map = Array2::zeros(dim);
         }
         // wall border, empty interior
-        self.state.map.fill(self.obs_tile_wall as i8);
+        self.state.map.fill(self.obs_tile_wall);
         self.state
             .map
             .slice_mut(s![
                 self.pad_width as usize..(self.width - self.pad_width) as usize,
                 self.pad_height as usize..(self.height - self.pad_height) as usize,
             ])
-            .fill(self.obs_tile_empty as i8);
+            .fill(self.obs_tile_empty);
 
         self.state.agents.clear();
         for _ in 0..self.config.num_agents {
@@ -294,16 +289,88 @@ impl Environment for FindReturn {
     }
 
     fn render_state_into(&self, grid_render_state: &mut GridRenderState) {
-        grid_render_state.tilemap.clear();
-        grid_render_state
-            .tilemap
-            .extend(self.state.map.iter().map(|&tile| tile as u8));
-        grid_render_state.agent_positions.clear();
+        let tilemap = &mut grid_render_state.tilemap;
+        if tilemap.dim() != self.state.map.dim() {
+            *tilemap = Array2::zeros(self.state.map.dim());
+        }
+        tilemap.assign(&self.state.map);
 
+        grid_render_state.agent_positions.clear();
         for agent in &self.state.agents {
-            grid_render_state.tilemap[self.idx(agent.position.x, agent.position.y)] =
-                self.obs_agent_generic as u8;
+            tilemap[[agent.position.x as usize, agent.position.y as usize]] =
+                self.obs_agent_generic;
             grid_render_state.agent_positions.push(agent.position);
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ndarray::{Array1, Array4};
+
+    /// The render tilemap and the env's own map are both `[x, y]`-indexed
+    /// `u8`; a transposed `assign` or a stale buffer would show up here rather
+    /// than as scrambled art in the demo.
+    #[test]
+    fn render_state_matches_the_map_with_agents_stamped() {
+        let config = FindReturnConfig {
+            num_agents: 4,
+            ..Default::default()
+        };
+        let mut env = FindReturn::new(&config);
+
+        let obs_spec = env.observation_spec();
+        let mut obs = Array4::zeros((
+            config.num_agents,
+            obs_spec.width as usize,
+            obs_spec.height as usize,
+            crate::timestep::OBS_CHANNELS,
+        ));
+        let mut time = Array1::zeros(config.num_agents);
+        let mut terminated = Array1::default(config.num_agents);
+        let mut last_action = Array1::zeros(config.num_agents);
+        let mut reward = Array1::zeros(config.num_agents);
+        let mut action_mask = Array2::default((config.num_agents, env.action_spec().num_actions));
+        let mut task_ids = Array1::zeros(config.num_agents);
+        env.reset(
+            0,
+            &mut TimeStepMut {
+                obs: obs.view_mut(),
+                time: time.view_mut(),
+                terminated: terminated.view_mut(),
+                last_action: last_action.view_mut(),
+                reward: reward.view_mut(),
+                action_mask: action_mask.view_mut(),
+                task_ids: task_ids.view_mut(),
+            },
+        );
+
+        let mut render_state = GridRenderState::default();
+        env.render_state_into(&mut render_state);
+
+        assert_eq!(render_state.tilemap.dim(), env.state.map.dim());
+        assert_eq!(render_state.agent_positions.len(), config.num_agents);
+
+        // the padded border is wall, and every agent cell carries the agent id
+        assert_eq!(render_state.tilemap[[0, 0]], env.obs_tile_wall);
+        for position in &render_state.agent_positions {
+            assert_eq!(
+                render_state.tilemap[[position.x as usize, position.y as usize]],
+                env.obs_agent_generic
+            );
+        }
+
+        // cells with no agent on them still mirror the map
+        let occupied: Vec<_> = render_state
+            .agent_positions
+            .iter()
+            .map(|p| (p.x as usize, p.y as usize))
+            .collect();
+        for ((x, y), &tile) in render_state.tilemap.indexed_iter() {
+            if !occupied.contains(&(x, y)) {
+                assert_eq!(tile, env.state.map[[x, y]], "mismatch at ({x}, {y})");
+            }
         }
     }
 }

@@ -31,7 +31,7 @@ const TILE_ART: &[(&str, u32, u32)] = &[
 
 /// Owns the arrays a [`TimeStepMut`] borrows, sized once from the env's specs.
 struct TimeStepBuffers {
-    obs: Array4<i8>,
+    obs: Array4<u8>,
     time: Array1<i32>,
     terminated: Array1<bool>,
     last_action: Array1<i32>,
@@ -187,7 +187,7 @@ impl DemoApp {
 
         for x in 0..width {
             for y in 0..height {
-                let id = self.render_state.tilemap[x * height + y] as usize;
+                let id = self.render_state.tilemap[[x, y]] as usize;
                 let (col, row) = self.art[id];
                 tileset.draw(
                     painter,

@@ -1,13 +1,12 @@
 use ndarray::{ArrayViewMut1, ArrayViewMut2, ArrayViewMut4};
 
-/// Channels per observation cell: tile, direction, team, health.
 pub const OBS_CHANNELS: usize = 1;
 
 // python bool's are u8
 
 #[derive(Debug)]
 pub struct TimeStepMut<'a> {
-    pub obs: ArrayViewMut4<'a, i8>,   // (num_agents, view_w, view_h, 4)
+    pub obs: ArrayViewMut4<'a, u8>,   // (num_agents, view_w, view_h, 4)
     pub time: ArrayViewMut1<'a, i32>, // (num_agents,)
     pub terminated: ArrayViewMut1<'a, bool>, // (num_agents,)
     pub last_action: ArrayViewMut1<'a, i32>, // (num_agents,)

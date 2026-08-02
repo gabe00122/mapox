@@ -72,7 +72,7 @@ mod _core {
         fn reset(
             &mut self,
             seed: u64,
-            mut obs: PyReadwriteArray4<'_, i8>,
+            mut obs: PyReadwriteArray4<'_, u8>,
             mut time: PyReadwriteArray1<'_, i32>,
             mut terminated: PyReadwriteArray1<'_, bool>,
             mut last_action: PyReadwriteArray1<'_, i32>,
@@ -96,7 +96,7 @@ mod _core {
         fn step(
             &mut self,
             actions: PyReadonlyArray1<'_, i32>,
-            mut obs: PyReadwriteArray4<'_, i8>,
+            mut obs: PyReadwriteArray4<'_, u8>,
             mut time: PyReadwriteArray1<'_, i32>,
             mut terminated: PyReadwriteArray1<'_, bool>,
             mut last_action: PyReadwriteArray1<'_, i32>,

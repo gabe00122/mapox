@@ -6,6 +6,7 @@ pub mod spec;
 pub mod symbols;
 pub mod timestep;
 pub mod vocab;
+pub mod wrappers;
 
 /// Returns the version of the core crate.
 pub fn version() -> &'static str {

@@ -3,7 +3,7 @@ use crate::spec::{ActionSpec, ObservationSpec};
 use crate::timestep::TimeStepMut;
 use crate::vocab::Vocabulary;
 
-pub trait Environment {
+pub trait Environment: Send {
     fn reset(&mut self, seed: u64, timestep: &mut TimeStepMut);
     fn step(&mut self, actions: &[i32], timestep: &mut TimeStepMut);
 
