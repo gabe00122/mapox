@@ -2,10 +2,16 @@
 mod _core {
     use mapox_core::{
         env::Environment,
+        envs::find_return::FindReturnConfig,
         make::{EnvConfig, make},
+        policy::{Policy, PolicyError, PolicyInputs, RandomPolicy},
+        render::{RenderApp, open_window},
         timestep::{OBS_CHANNELS, TimeStepMut},
     };
-    use numpy::{PyReadonlyArray1, PyReadwriteArray1, PyReadwriteArray2, PyReadwriteArray4};
+    use numpy::{
+        AllowTypeChange, PyArray1, PyArray2, PyArray4, PyArrayLike1, PyReadonlyArray1,
+        PyReadwriteArray1, PyReadwriteArray2, PyReadwriteArray4,
+    };
     use pyo3::exceptions::{PyRuntimeError, PyValueError};
     use pyo3::prelude::*;
 
@@ -14,9 +20,76 @@ mod _core {
         mapox_core::version()
     }
 
+    /// A python callable driving the render loop's agents: called once per
+    /// env step with copies of the timestep arrays, under a freshly attached
+    /// interpreter (`run_demo` detaches for the window's whole lifetime).
+    struct PyPolicy {
+        callable: Py<PyAny>,
+    }
+
+    impl Policy for PyPolicy {
+        fn act(
+            &mut self,
+            inputs: &PolicyInputs<'_>,
+            actions: &mut [i32],
+        ) -> Result<(), PolicyError> {
+            Python::attach(|py| {
+                let result = (|| -> PyResult<()> {
+                    let obs = PyArray4::from_array(py, &inputs.obs);
+                    let reward = PyArray1::from_array(py, &inputs.reward);
+                    let terminated = PyArray1::from_array(py, &inputs.terminated);
+                    let action_mask = PyArray2::from_array(py, &inputs.action_mask);
+
+                    let returned = self
+                        .callable
+                        .call1(py, (obs, reward, terminated, action_mask))?;
+                    let returned: PyArrayLike1<'_, i32, AllowTypeChange> = returned.extract(py)?;
+                    let returned = returned.as_array();
+                    if returned.len() != actions.len() {
+                        return Err(PyValueError::new_err(format!(
+                            "policy returned {} actions for {} agents",
+                            returned.len(),
+                            actions.len()
+                        )));
+                    }
+                    // zip, not copy_from_slice: dtype coercion can hand back
+                    // a non-contiguous array
+                    for (action, &returned) in actions.iter_mut().zip(returned.iter()) {
+                        *action = returned;
+                    }
+                    Ok(())
+                })();
+                result.map_err(|err| {
+                    err.print(py);
+                    Box::new(err) as PolicyError
+                })
+            })
+        }
+    }
+
+    /// Opens the viewer window and blocks until it closes. `policy` drives
+    /// every agent (falling back to a random policy when omitted, or after
+    /// the callable raises); the keyboard overrides the focused agent.
     #[pyfunction]
-    fn run_demo(py: Python<'_>) -> PyResult<()> {
-        py.detach(mapox_core::render::open_window)
+    #[pyo3(signature = (config_json=None, policy=None))]
+    fn run_demo(
+        py: Python<'_>,
+        config_json: Option<&str>,
+        policy: Option<Py<PyAny>>,
+    ) -> PyResult<()> {
+        let config = match config_json {
+            Some(json) => serde_json::from_str::<EnvConfig>(json)
+                .map_err(|err| PyValueError::new_err(err.to_string()))?,
+            None => EnvConfig::FindReturn(FindReturnConfig::default()),
+        };
+        let env = make(&config);
+        let policy: Box<dyn Policy> = match policy {
+            Some(callable) => Box::new(PyPolicy { callable }),
+            None => Box::new(RandomPolicy::new(0)),
+        };
+
+        let app = RenderApp::new(env, policy);
+        py.detach(move || open_window(app))
             .map_err(|err| PyRuntimeError::new_err(err.to_string()))
     }
 

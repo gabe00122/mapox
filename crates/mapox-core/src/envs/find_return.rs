@@ -195,8 +195,9 @@ impl FindReturn {
         timestep.time.fill(self.state.time);
         timestep.terminated.fill(false);
         timestep.task_ids.fill(0);
-        // all move actions are always valid
-        timestep.action_mask.fill(false);
+        // all move actions are always valid; true marks a legal action, same
+        // convention as the python side (mapox.timestep.TimeStep.action_mask)
+        timestep.action_mask.fill(true);
     }
 }
 
@@ -345,6 +346,24 @@ mod tests {
                 task_ids: task_ids.view_mut(),
             },
         );
+
+        // true marks a legal action (python convention); FindReturn's moves
+        // are always legal, so an all-false mask here means the flag flipped
+        assert!(action_mask.iter().all(|&legal| legal));
+
+        env.step(
+            &vec![0; config.num_agents],
+            &mut TimeStepMut {
+                obs: obs.view_mut(),
+                time: time.view_mut(),
+                terminated: terminated.view_mut(),
+                last_action: last_action.view_mut(),
+                reward: reward.view_mut(),
+                action_mask: action_mask.view_mut(),
+                task_ids: task_ids.view_mut(),
+            },
+        );
+        assert!(action_mask.iter().all(|&legal| legal));
 
         let mut render_state = GridRenderState::default();
         env.render_state_into(&mut render_state);

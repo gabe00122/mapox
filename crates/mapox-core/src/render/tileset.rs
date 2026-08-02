@@ -119,7 +119,10 @@ mod tests {
 
         // tile/wall, as used by both renderers.
         let wall = Tileset::source(20, 3);
-        assert_eq!((wall.min.x, wall.min.y), (20.0 * 13.0 + 1.0, 3.0 * 13.0 + 1.0));
+        assert_eq!(
+            (wall.min.x, wall.min.y),
+            (20.0 * 13.0 + 1.0, 3.0 * 13.0 + 1.0)
+        );
     }
 
     /// The last row and column have to land inside the texture, or every tile

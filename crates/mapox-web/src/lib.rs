@@ -24,7 +24,7 @@ pub async fn start(canvas: web_sys::HtmlCanvasElement) -> Result<(), JsValue> {
         .start(
             canvas,
             eframe::WebOptions::default(),
-            Box::new(|_cc| Ok(Box::new(mapox_core::render::DemoApp::new()))),
+            Box::new(|_cc| Ok(Box::new(mapox_core::render::RenderApp::demo()))),
         )
         .await
 }

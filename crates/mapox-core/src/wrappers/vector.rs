@@ -46,7 +46,9 @@ fn split_timestep<'a>(
         timestep
             .last_action
             .axis_chunks_iter_mut(Axis(0), agents_per_env),
-        timestep.reward.axis_chunks_iter_mut(Axis(0), agents_per_env),
+        timestep
+            .reward
+            .axis_chunks_iter_mut(Axis(0), agents_per_env),
         timestep
             .action_mask
             .axis_chunks_iter_mut(Axis(0), agents_per_env),
