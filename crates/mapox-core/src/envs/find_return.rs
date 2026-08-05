@@ -1,15 +1,16 @@
 use ndarray::{Array2, s};
-use rand::{RngExt, SeedableRng, rngs::StdRng};
+use rand::{SeedableRng, rngs::StdRng};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     env::Environment,
     envs::common::Position,
+    map_gen::{choose_positions, fractal_noise, sprinkle_decor},
     render::env::{GridRenderSettings, GridRenderState},
     spec::{ActionSpec, ObservationSpec},
     symbols::{
-        AGENT_GENERIC, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, TILE_DESTRUCTIBLE_WALL,
-        TILE_EMPTY, TILE_FLAG, TILE_WALL,
+        AGENT_GENERIC, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, TILE_DECOR,
+        TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_FLAG, TILE_WALL,
     },
     timestep::TimeStepMut,
     vocab::Vocabulary,
@@ -34,7 +35,7 @@ pub struct FindReturnConfig {
 impl Default for FindReturnConfig {
     fn default() -> Self {
         Self {
-            num_agents: 512,
+            num_agents: 32,
             num_flags: 1,
             width: 40,
             height: 40,
@@ -85,6 +86,7 @@ pub struct FindReturn {
     obs_tile_empty: u8,
     obs_tile_destructible_wall: u8,
     obs_tile_wall: u8,
+    obs_tile_decor: [u8; 4],
     obs_agent_generic: u8,
     action_move_up: usize,
     action_move_right: usize,
@@ -101,6 +103,7 @@ impl FindReturn {
         let obs_tile_destructible_wall = obs_vocab.add(TILE_DESTRUCTIBLE_WALL) as u8;
         let obs_tile_wall = obs_vocab.add(TILE_WALL) as u8;
         obs_vocab.add(TILE_FLAG);
+        let obs_tile_decor = TILE_DECOR.map(|symbol| obs_vocab.add(symbol) as u8);
         let obs_agent_generic = obs_vocab.add(AGENT_GENERIC) as u8;
 
         let action_move_up = action_vocab.add(MOVE_UP);
@@ -141,6 +144,7 @@ impl FindReturn {
             obs_tile_empty,
             obs_tile_destructible_wall,
             obs_tile_wall,
+            obs_tile_decor,
             obs_agent_generic,
         }
     }
@@ -211,23 +215,42 @@ impl Environment for FindReturn {
         if self.state.map.dim() != dim {
             self.state.map = Array2::zeros(dim);
         }
-        // wall border, empty interior
+        // wall border; the interior is carved out of fractal noise like the
+        // jax `_generate_map` — destructible wall above the threshold, decor
+        // sprinkled over what stays empty
         self.state.map.fill(self.obs_tile_wall);
-        self.state
-            .map
-            .slice_mut(s![
-                self.pad_width as usize..(self.width - self.pad_width) as usize,
-                self.pad_height as usize..(self.height - self.pad_height) as usize,
-            ])
-            .fill(self.obs_tile_empty);
+        let mut interior = self.state.map.slice_mut(s![
+            self.pad_width as usize..(self.width - self.pad_width) as usize,
+            self.pad_height as usize..(self.height - self.pad_height) as usize,
+        ]);
+        let noise = fractal_noise(
+            self.config.width as usize,
+            self.config.height as usize,
+            &mut rng,
+        );
+        for (tile, &value) in interior.iter_mut().zip(&noise) {
+            *tile = if value as f64 > self.config.mapgen_threshold {
+                self.obs_tile_destructible_wall
+            } else {
+                self.obs_tile_empty
+            };
+        }
+        sprinkle_decor(
+            interior,
+            self.obs_tile_empty,
+            &self.obs_tile_decor,
+            &mut rng,
+        );
 
         self.state.agents.clear();
-        for _ in 0..self.config.num_agents {
+        for position in choose_positions(
+            &self.state.map,
+            self.obs_tile_empty,
+            self.config.num_agents,
+            &mut rng,
+        ) {
             self.state.agents.push(FindReturnAgent {
-                position: Position {
-                    x: rng.random_range(self.pad_width..self.width - self.pad_width),
-                    y: rng.random_range(self.pad_height..self.height - self.pad_height),
-                },
+                position,
                 found_reward: false,
             });
         }

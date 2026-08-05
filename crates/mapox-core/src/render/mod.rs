@@ -24,6 +24,10 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::TILE_WALL, 20, 3),
     (symbols::TILE_DESTRUCTIBLE_WALL, 20, 3),
     (symbols::TILE_FLAG, 29, 23),
+    (symbols::TILE_DECOR_1, 15, 5),
+    (symbols::TILE_DECOR_2, 16, 5),
+    (symbols::TILE_DECOR_3, 17, 5),
+    (symbols::TILE_DECOR_4, 14, 5),
     (symbols::AGENT_GENERIC, 104, 0),
 ];
 

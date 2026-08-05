@@ -1,6 +1,7 @@
 pub mod env;
 pub mod envs;
 pub mod make;
+pub mod map_gen;
 pub mod policy;
 pub mod render;
 pub mod spec;

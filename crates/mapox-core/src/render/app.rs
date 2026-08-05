@@ -110,6 +110,11 @@ pub struct RenderApp {
     policy_failed: bool,
     buffers: TimeStepBuffers,
     actions: Vec<i32>,
+    /// Whether `actions` already holds the policy's picks for the next step.
+    /// The policy runs ahead of input, on the frame after a step, so a slow
+    /// policy stalls a visually idle frame instead of adding its inference
+    /// time to the keypress-to-screen latency.
+    actions_ready: bool,
 
     settings: GridRenderSettings,
     /// Derived as `view / 2`, the invariant the obs-encoding scheme already
@@ -162,6 +167,7 @@ impl RenderApp {
         Self {
             tileset: None,
             actions: vec![0; num_agents],
+            actions_ready: false,
             env,
             policy,
             policy_failed: false,
@@ -227,11 +233,16 @@ impl RenderApp {
         self.env.reset(self.seed, &mut self.buffers.as_mut());
         self.next_step_time = None;
         self.pending_override = None;
+        // any precomputed actions were for the old episode's observations
+        self.actions_ready = false;
     }
 
-    /// One env step: policy actions for everyone, then the keyboard override
-    /// for the focused agent.
-    fn step_env(&mut self, override_dir: Option<usize>) {
+    /// Runs the policy over the current observations into `actions`. Split
+    /// from [`Self::step_env`] so `ui()` can run it on the frame *after* a
+    /// step: immediate mode presents a frame only when `ui()` returns, so a
+    /// slow policy called on the keypress frame would hold back the very
+    /// frame that shows the step's result.
+    fn compute_actions(&mut self) {
         // field accesses stay inline so the borrows of `buffers`, `policy`
         // and `actions` split; a `&self` helper for the inputs would not
         let inputs = PolicyInputs {
@@ -248,12 +259,23 @@ impl RenderApp {
                 .act(&inputs, &mut self.actions)
                 .expect("random policy is infallible");
         }
+        self.actions_ready = true;
+    }
+
+    /// One env step: the precomputed policy actions, with the keyboard
+    /// override replacing the focused agent's. The inline fallback only runs
+    /// when free-run catch-up takes several steps in a single frame.
+    fn step_env(&mut self, override_dir: Option<usize>) {
+        if !self.actions_ready {
+            self.compute_actions();
+        }
 
         if let Some(action) = override_dir.and_then(|dir| self.move_actions[dir]) {
             self.actions[self.focused_agent] = action;
         }
 
         self.env.step(&self.actions, &mut self.buffers.as_mut());
+        self.actions_ready = false;
 
         // keep the window alive across episode ends without user action
         // (FindReturn never terminates; this is for envs that do)
@@ -395,6 +417,12 @@ impl eframe::App for RenderApp {
             self.tileset = Some(Tileset::embedded(ui.ctx()));
         }
 
+        // run the policy ahead of input, so a keypress finds its step's
+        // actions already in hand instead of waiting on inference
+        if !self.actions_ready {
+            self.compute_actions();
+        }
+
         #[cfg(not(target_arch = "wasm32"))]
         if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
@@ -446,6 +474,12 @@ impl eframe::App for RenderApp {
                 ViewMode::BirdsEye => self.birds_eye_ui(ui),
                 ViewMode::AgentPov => self.pov_ui(ui),
             });
+
+        // a step consumed the precomputed actions; come straight back on an
+        // idle frame to run the policy for the next one
+        if !self.actions_ready {
+            ui.ctx().request_repaint();
+        }
     }
 }
 
