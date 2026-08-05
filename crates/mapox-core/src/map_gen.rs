@@ -10,7 +10,7 @@ use fastnoise_lite::{FastNoiseLite, FractalType, NoiseType};
 use ndarray::{Array2, ArrayViewMut2};
 use rand::RngExt;
 
-use crate::envs::common::Position;
+use crate::{envs::common::Position, vocab::VocabId};
 
 /// Per-cell probability of each decor tile, matching
 /// `map_generator.generate_decor_tiles` (the remaining 0.90 stays empty).
@@ -37,9 +37,9 @@ pub fn fractal_noise(width: usize, height: usize, rng: &mut impl RngExt) -> Arra
 /// [`DECOR_PROBS`]. Decor is cosmetic: envs treat it as walkable but don't
 /// spawn anything on it.
 pub fn sprinkle_decor(
-    mut map: ArrayViewMut2<u8>,
-    empty: u8,
-    decor: &[u8; 4],
+    mut map: ArrayViewMut2<VocabId>,
+    empty: VocabId,
+    decor: &[VocabId; 4],
     rng: &mut impl RngExt,
 ) {
     for tile in map.iter_mut() {
@@ -62,8 +62,8 @@ pub fn sprinkle_decor(
 /// — reachable only with an extreme wall threshold, and better loud than as
 /// agents silently stacked inside walls.
 pub fn choose_positions(
-    map: &Array2<u8>,
-    empty: u8,
+    map: &Array2<VocabId>,
+    empty: VocabId,
     n: usize,
     rng: &mut impl RngExt,
 ) -> Vec<Position> {
@@ -140,4 +140,3 @@ mod tests {
         assert!(positions.iter().all(|p| p.x != 0), "spawned on a wall");
     }
 }
-

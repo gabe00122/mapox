@@ -6,12 +6,14 @@
 use ndarray::{ArrayView1, ArrayView2, ArrayView4};
 use rand::{RngExt, SeedableRng, rngs::StdRng};
 
+use crate::vocab::VocabId;
+
 /// Read-only views of the current timestep, borrowed from whoever owns the
 /// buffers. `time`/`last_action`/`task_ids` are omitted until a policy needs
 /// them.
 pub struct PolicyInputs<'a> {
     /// `(num_agents, view_width, view_height, OBS_CHANNELS)`
-    pub obs: ArrayView4<'a, u8>,
+    pub obs: ArrayView4<'a, VocabId>,
     pub reward: ArrayView1<'a, f32>,
     pub terminated: ArrayView1<'a, bool>,
     /// `(num_agents, num_actions)`, true marks a legal action.

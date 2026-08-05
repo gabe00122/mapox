@@ -13,7 +13,7 @@ use crate::{
         TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_FLAG, TILE_WALL,
     },
     timestep::TimeStepMut,
-    vocab::Vocabulary,
+    vocab::{VocabId, Vocabulary},
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -58,7 +58,7 @@ pub struct FindReturnAgent {
 pub struct FindReturnState {
     pub agents: Vec<FindReturnAgent>,
     pub time: i32,
-    pub map: Array2<u8>,
+    pub map: Array2<VocabId>,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -68,7 +68,7 @@ pub struct FindReturn {
 
     /// Map with agents stamped on top; observation windows slice this so
     /// encoding stays O(agents × view area) instead of O(agents²).
-    stamped_map: Array2<u8>,
+    stamped_map: Array2<VocabId>,
 
     pad_width: i32,
     pad_height: i32,
@@ -83,15 +83,15 @@ pub struct FindReturn {
     obs_vocab: Vocabulary,
     action_vocab: Vocabulary,
 
-    obs_tile_empty: u8,
-    obs_tile_destructible_wall: u8,
-    obs_tile_wall: u8,
-    obs_tile_decor: [u8; 4],
-    obs_agent_generic: u8,
-    action_move_up: usize,
-    action_move_right: usize,
-    action_move_down: usize,
-    action_move_left: usize,
+    obs_tile_empty: VocabId,
+    obs_tile_destructible_wall: VocabId,
+    obs_tile_wall: VocabId,
+    obs_tile_decor: [VocabId; 4],
+    obs_agent_generic: VocabId,
+    action_move_up: VocabId,
+    action_move_right: VocabId,
+    action_move_down: VocabId,
+    action_move_left: VocabId,
 }
 
 impl FindReturn {
@@ -99,12 +99,12 @@ impl FindReturn {
         let mut action_vocab = Vocabulary::new();
         let mut obs_vocab = Vocabulary::new();
 
-        let obs_tile_empty = obs_vocab.add(TILE_EMPTY) as u8;
-        let obs_tile_destructible_wall = obs_vocab.add(TILE_DESTRUCTIBLE_WALL) as u8;
-        let obs_tile_wall = obs_vocab.add(TILE_WALL) as u8;
+        let obs_tile_empty = obs_vocab.add(TILE_EMPTY);
+        let obs_tile_destructible_wall = obs_vocab.add(TILE_DESTRUCTIBLE_WALL);
+        let obs_tile_wall = obs_vocab.add(TILE_WALL);
         obs_vocab.add(TILE_FLAG);
-        let obs_tile_decor = TILE_DECOR.map(|symbol| obs_vocab.add(symbol) as u8);
-        let obs_agent_generic = obs_vocab.add(AGENT_GENERIC) as u8;
+        let obs_tile_decor = TILE_DECOR.map(|symbol| obs_vocab.add(symbol));
+        let obs_agent_generic = obs_vocab.add(AGENT_GENERIC);
 
         let action_move_up = action_vocab.add(MOVE_UP);
         let action_move_right = action_vocab.add(MOVE_RIGHT);
@@ -150,21 +150,20 @@ impl FindReturn {
     }
 
     fn direction(&self, action: i32) -> (i32, i32) {
-        let action = action as usize;
-        if action == self.action_move_up {
+        if action == i32::from(self.action_move_up) {
             (0, 1)
-        } else if action == self.action_move_right {
+        } else if action == i32::from(self.action_move_right) {
             (1, 0)
-        } else if action == self.action_move_down {
+        } else if action == i32::from(self.action_move_down) {
             (0, -1)
-        } else if action == self.action_move_left {
+        } else if action == i32::from(self.action_move_left) {
             (-1, 0)
         } else {
             (0, 0)
         }
     }
 
-    fn blocked(&self, tile: u8) -> bool {
+    fn blocked(&self, tile: VocabId) -> bool {
         tile == self.obs_tile_wall || tile == self.obs_tile_destructible_wall
     }
 

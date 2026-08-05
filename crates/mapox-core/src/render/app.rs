@@ -19,11 +19,12 @@ use crate::{
     },
     symbols,
     timestep::{OBS_CHANNELS, TimeStepMut},
+    vocab::VocabId,
 };
 
 /// Owns the arrays a [`TimeStepMut`] borrows, sized once from the env's specs.
 struct TimeStepBuffers {
-    obs: Array4<u8>,
+    obs: Array4<VocabId>,
     time: Array1<i32>,
     terminated: Array1<bool>,
     last_action: Array1<i32>,
@@ -152,7 +153,7 @@ impl RenderApp {
         let art = resolve_art(&settings.obs_vocab);
 
         let action_vocab = env.action_vocab();
-        let action_id = |symbol| action_vocab.get(symbol).map(|id| id as i32);
+        let action_id = |symbol| action_vocab.get(symbol).map(i32::from);
         let move_actions = [
             action_id(symbols::MOVE_UP),
             action_id(symbols::MOVE_RIGHT),

@@ -1,9 +1,12 @@
 use std::collections::HashMap;
 
+/// Integer representation used for vocabulary entries in maps and observations.
+pub type VocabId = u8;
+
 #[derive(Debug, Clone, Default)]
 pub struct Vocabulary {
     symbols: Vec<&'static str>,
-    ids: HashMap<&'static str, usize>,
+    ids: HashMap<&'static str, VocabId>,
 }
 
 impl Vocabulary {
@@ -19,12 +22,13 @@ impl Vocabulary {
         self.symbols.is_empty()
     }
 
-    pub fn add(&mut self, symbol: &'static str) -> usize {
+    pub fn add(&mut self, symbol: &'static str) -> VocabId {
         if let Some(&id) = self.ids.get(symbol) {
             return id;
         }
 
-        let new_id = self.symbols.len();
+        let new_id =
+            VocabId::try_from(self.symbols.len()).expect("vocabulary exhausted VocabId capacity");
         self.symbols.push(symbol);
         self.ids.insert(symbol, new_id);
         new_id
@@ -34,11 +38,11 @@ impl Vocabulary {
         &self.symbols
     }
 
-    pub fn get(&self, symbol: &str) -> Option<usize> {
+    pub fn get(&self, symbol: &str) -> Option<VocabId> {
         self.ids.get(symbol).copied()
     }
 
-    pub fn lut_to(&self, target: &Vocabulary, default: usize) -> Vec<usize> {
+    pub fn lut_to(&self, target: &Vocabulary, default: VocabId) -> Vec<VocabId> {
         self.symbols
             .iter()
             .map(|s| target.get(s).unwrap_or(default))

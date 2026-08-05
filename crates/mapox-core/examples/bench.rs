@@ -5,6 +5,7 @@ use std::time::Instant;
 use mapox_core::env::Environment;
 use mapox_core::envs::find_return::{FindReturn, FindReturnConfig};
 use mapox_core::timestep::{OBS_CHANNELS, TimeStepMut};
+use mapox_core::vocab::VocabId;
 use mapox_core::wrappers::vector::VectorWrapper;
 use ndarray::{Array1, Array2, Array4};
 use rand::{RngExt, SeedableRng, rngs::SmallRng};
@@ -15,7 +16,7 @@ const WARMUP_STEPS: usize = 200;
 const BENCH_STEPS: usize = 20000;
 
 struct Buffers {
-    obs: Array4<u8>,
+    obs: Array4<VocabId>,
     time: Array1<i32>,
     terminated: Array1<bool>,
     last_action: Array1<i32>,

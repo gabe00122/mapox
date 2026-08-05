@@ -1,11 +1,13 @@
 use ndarray::Array2;
 
-use crate::{envs::common::Position, vocab::Vocabulary};
+use crate::{
+    envs::common::Position,
+    vocab::{VocabId, Vocabulary},
+};
 
 #[derive(Debug, Default, Clone)]
 pub struct GridRenderState {
-    /// Unified tile ids over the padded map, indexed `[x, y]`.
-    pub tilemap: Array2<u8>,
+    pub tilemap: Array2<VocabId>,
     pub agent_positions: Vec<Position>,
 }
 

@@ -7,6 +7,7 @@ mod _core {
         policy::{Policy, PolicyError, PolicyInputs, RandomPolicy},
         render::{RenderApp, open_window},
         timestep::{OBS_CHANNELS, TimeStepMut},
+        vocab::VocabId,
     };
     use numpy::{
         AllowTypeChange, PyArray1, PyArray2, PyArray4, PyArrayLike1, PyReadonlyArray1,
@@ -145,7 +146,7 @@ mod _core {
         fn reset(
             &mut self,
             seed: u64,
-            mut obs: PyReadwriteArray4<'_, u8>,
+            mut obs: PyReadwriteArray4<'_, VocabId>,
             mut time: PyReadwriteArray1<'_, i32>,
             mut terminated: PyReadwriteArray1<'_, bool>,
             mut last_action: PyReadwriteArray1<'_, i32>,
@@ -169,7 +170,7 @@ mod _core {
         fn step(
             &mut self,
             actions: PyReadonlyArray1<'_, i32>,
-            mut obs: PyReadwriteArray4<'_, u8>,
+            mut obs: PyReadwriteArray4<'_, VocabId>,
             mut time: PyReadwriteArray1<'_, i32>,
             mut terminated: PyReadwriteArray1<'_, bool>,
             mut last_action: PyReadwriteArray1<'_, i32>,

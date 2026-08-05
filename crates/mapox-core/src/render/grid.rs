@@ -4,7 +4,7 @@
 
 use egui::{Color32, Pos2, Rect, pos2, vec2};
 
-use crate::render::tileset::Tileset;
+use crate::{render::tileset::Tileset, vocab::VocabId};
 
 /// Maps a `cols x rows` grid (env coords: x right, y up) onto a screen
 /// rect, scaled to fit and centred.
@@ -62,11 +62,11 @@ pub(crate) fn draw_tile_grid(
     tileset: &Tileset,
     art: &[(u32, u32)],
     layout: &GridLayout,
-    mut id_at: impl FnMut(usize, usize) -> u8,
+    mut id_at: impl FnMut(usize, usize) -> VocabId,
 ) {
     for x in 0..layout.cols {
         for y in 0..layout.rows {
-            let (col, row) = art[id_at(x, y) as usize];
+            let (col, row) = art[usize::from(id_at(x, y))];
             tileset.draw(
                 painter,
                 col,

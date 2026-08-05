@@ -1,3 +1,5 @@
+use crate::vocab::VocabId;
+
 #[derive(Debug, Default, Clone, Copy)]
 pub struct ActionSpec {
     pub num_actions: usize,
@@ -26,12 +28,12 @@ impl ObservationSpec {
     }
 }
 
-pub fn action_mask_into(action_ids: impl IntoIterator<Item = usize>, mask: &mut [u8]) {
+pub fn action_mask_into(action_ids: impl IntoIterator<Item = VocabId>, mask: &mut [u8]) {
     for m in mask.iter_mut() {
         *m = 0;
     }
 
     for action_id in action_ids {
-        mask[action_id] = 1
+        mask[usize::from(action_id)] = 1
     }
 }
