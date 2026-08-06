@@ -19,7 +19,7 @@ struct Buffers {
     obs: Array4<VocabId>,
     time: Array1<i32>,
     terminated: Array1<bool>,
-    last_action: Array1<i32>,
+    last_action: Array1<VocabId>,
     reward: Array1<f32>,
     action_mask: Array2<bool>,
     task_ids: Array1<i32>,
@@ -65,8 +65,11 @@ fn bench(label: &str, env: &mut impl Environment) {
 
     let num_agents = env.num_agents();
     let num_actions = env.action_spec().num_actions;
-    let actions: Vec<i32> = (0..num_agents)
-        .map(|_| rng.random_range(0..num_actions as i32))
+    let actions: Vec<VocabId> = (0..num_agents)
+        .map(|_| {
+            VocabId::try_from(rng.random_range(0..num_actions))
+                .expect("action vocab exceeds VocabId capacity")
+        })
         .collect();
 
     env.reset(0, &mut buffers.timestep());

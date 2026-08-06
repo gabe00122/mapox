@@ -25,14 +25,18 @@ pub type PolicyError = Box<dyn std::error::Error + Send + Sync>;
 /// Called once per env step to fill in one action id per agent. `Send`
 /// because the boxed policy crosses `py.detach` in the python bindings.
 pub trait Policy: Send {
-    fn act(&mut self, inputs: &PolicyInputs<'_>, actions: &mut [i32]) -> Result<(), PolicyError>;
+    fn act(
+        &mut self,
+        inputs: &PolicyInputs<'_>,
+        actions: &mut [VocabId],
+    ) -> Result<(), PolicyError>;
 }
 
 /// Uniform over each agent's legal actions.
 pub struct RandomPolicy {
     rng: StdRng,
     /// Scratch for the legal-action ids of one agent, reused across calls.
-    legal: Vec<i32>,
+    legal: Vec<VocabId>,
 }
 
 impl RandomPolicy {
@@ -45,19 +49,25 @@ impl RandomPolicy {
 }
 
 impl Policy for RandomPolicy {
-    fn act(&mut self, inputs: &PolicyInputs<'_>, actions: &mut [i32]) -> Result<(), PolicyError> {
+    fn act(
+        &mut self,
+        inputs: &PolicyInputs<'_>,
+        actions: &mut [VocabId],
+    ) -> Result<(), PolicyError> {
         let num_actions = inputs.action_mask.ncols();
         for (agent, action) in actions.iter_mut().enumerate() {
             self.legal.clear();
             for (id, &legal) in inputs.action_mask.row(agent).iter().enumerate() {
                 if legal {
-                    self.legal.push(id as i32);
+                    self.legal
+                        .push(VocabId::try_from(id).expect("action mask exceeds VocabId capacity"));
                 }
             }
             // an env that emits an all-false row gets uniform over everything
             // rather than a panic; no such env exists today
             *action = if self.legal.is_empty() {
-                self.rng.random_range(0..num_actions as i32)
+                VocabId::try_from(self.rng.random_range(0..num_actions))
+                    .expect("action mask exceeds VocabId capacity")
             } else {
                 self.legal[self.rng.random_range(0..self.legal.len())]
             };
@@ -71,7 +81,7 @@ mod tests {
     use super::*;
     use ndarray::{Array1, Array2, Array4};
 
-    fn act_with_mask(mask: Array2<bool>) -> Vec<i32> {
+    fn act_with_mask(mask: Array2<bool>) -> Vec<VocabId> {
         let num_agents = mask.nrows();
         let obs = Array4::zeros((num_agents, 1, 1, 1));
         let reward = Array1::zeros(num_agents);
@@ -83,7 +93,7 @@ mod tests {
             action_mask: mask.view(),
         };
 
-        let mut actions = vec![-1; num_agents];
+        let mut actions = vec![VocabId::MAX; num_agents];
         RandomPolicy::new(0)
             .act(&inputs, &mut actions)
             .expect("random policy is infallible");

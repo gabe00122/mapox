@@ -1,11 +1,11 @@
 use crate::render::env::{GridRenderSettings, GridRenderState};
 use crate::spec::{ActionSpec, ObservationSpec};
 use crate::timestep::TimeStepMut;
-use crate::vocab::Vocabulary;
+use crate::vocab::{VocabId, Vocabulary};
 
 pub trait Environment: Send {
     fn reset(&mut self, seed: u64, timestep: &mut TimeStepMut);
-    fn step(&mut self, actions: &[i32], timestep: &mut TimeStepMut);
+    fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut);
 
     fn observation_spec(&self) -> ObservationSpec;
     fn action_spec(&self) -> ActionSpec;

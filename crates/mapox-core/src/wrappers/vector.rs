@@ -6,7 +6,7 @@ use crate::env::Environment;
 use crate::render::env::{GridRenderSettings, GridRenderState};
 use crate::spec::{ActionSpec, ObservationSpec};
 use crate::timestep::TimeStepMut;
-use crate::vocab::Vocabulary;
+use crate::vocab::{VocabId, Vocabulary};
 
 pub struct VectorWrapper<T>
 where
@@ -87,7 +87,7 @@ where
             .for_each(|((env, seed), mut timestep)| env.reset(seed, &mut timestep));
     }
 
-    fn step(&mut self, actions: &[i32], timestep: &mut TimeStepMut) {
+    fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
         let agents_per_env = self.envs[0].num_agents();
         let chunks = split_timestep(timestep, agents_per_env);
 

@@ -27,7 +27,7 @@ struct TimeStepBuffers {
     obs: Array4<VocabId>,
     time: Array1<i32>,
     terminated: Array1<bool>,
-    last_action: Array1<i32>,
+    last_action: Array1<VocabId>,
     reward: Array1<f32>,
     action_mask: Array2<bool>,
     task_ids: Array1<i32>,
@@ -110,7 +110,7 @@ pub struct RenderApp {
     /// Set once the policy errors; the hint bar reports the random fallback.
     policy_failed: bool,
     buffers: TimeStepBuffers,
-    actions: Vec<i32>,
+    actions: Vec<VocabId>,
     /// Whether `actions` already holds the policy's picks for the next step.
     /// The policy runs ahead of input, on the frame after a step, so a slow
     /// policy stalls a visually idle frame instead of adding its inference
@@ -126,7 +126,7 @@ pub struct RenderApp {
     /// Sheet coordinates indexed by obs vocab id.
     art: Vec<(u32, u32)>,
     /// Action ids for up/right/down/left; `None` when the env lacks the move.
-    move_actions: [Option<i32>; 4],
+    move_actions: [Option<VocabId>; 4],
 
     view_mode: ViewMode,
     pacing: PacingMode,
@@ -153,7 +153,7 @@ impl RenderApp {
         let art = resolve_art(&settings.obs_vocab);
 
         let action_vocab = env.action_vocab();
-        let action_id = |symbol| action_vocab.get(symbol).map(i32::from);
+        let action_id = |symbol| action_vocab.get(symbol);
         let move_actions = [
             action_id(symbols::MOVE_UP),
             action_id(symbols::MOVE_RIGHT),

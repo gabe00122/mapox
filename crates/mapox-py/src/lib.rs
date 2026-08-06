@@ -32,7 +32,7 @@ mod _core {
         fn act(
             &mut self,
             inputs: &PolicyInputs<'_>,
-            actions: &mut [i32],
+            actions: &mut [VocabId],
         ) -> Result<(), PolicyError> {
             Python::attach(|py| {
                 let result = (|| -> PyResult<()> {
@@ -56,7 +56,11 @@ mod _core {
                     // zip, not copy_from_slice: dtype coercion can hand back
                     // a non-contiguous array
                     for (action, &returned) in actions.iter_mut().zip(returned.iter()) {
-                        *action = returned;
+                        *action = VocabId::try_from(returned).map_err(|_| {
+                            PyValueError::new_err(format!(
+                                "policy returned action id outside VocabId range: {returned}"
+                            ))
+                        })?;
                     }
                     Ok(())
                 })();
@@ -149,7 +153,7 @@ mod _core {
             mut obs: PyReadwriteArray4<'_, VocabId>,
             mut time: PyReadwriteArray1<'_, i32>,
             mut terminated: PyReadwriteArray1<'_, bool>,
-            mut last_action: PyReadwriteArray1<'_, i32>,
+            mut last_action: PyReadwriteArray1<'_, VocabId>,
             mut reward: PyReadwriteArray1<'_, f32>,
             mut action_mask: PyReadwriteArray2<'_, bool>,
             mut task_ids: PyReadwriteArray1<'_, i32>,
@@ -169,11 +173,11 @@ mod _core {
         #[allow(clippy::too_many_arguments)]
         fn step(
             &mut self,
-            actions: PyReadonlyArray1<'_, i32>,
+            actions: PyReadonlyArray1<'_, VocabId>,
             mut obs: PyReadwriteArray4<'_, VocabId>,
             mut time: PyReadwriteArray1<'_, i32>,
             mut terminated: PyReadwriteArray1<'_, bool>,
-            mut last_action: PyReadwriteArray1<'_, i32>,
+            mut last_action: PyReadwriteArray1<'_, VocabId>,
             mut reward: PyReadwriteArray1<'_, f32>,
             mut action_mask: PyReadwriteArray2<'_, bool>,
             mut task_ids: PyReadwriteArray1<'_, i32>,

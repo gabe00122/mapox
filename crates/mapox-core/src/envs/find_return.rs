@@ -49,26 +49,24 @@ impl Default for FindReturnConfig {
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct FindReturnAgent {
-    pub position: Position,
-    pub found_reward: bool,
+struct FindReturnAgent {
+    position: Position,
+    found_reward: bool,
 }
 
 #[derive(Debug, Default, Clone)]
-pub struct FindReturnState {
-    pub agents: Vec<FindReturnAgent>,
-    pub time: i32,
-    pub map: Array2<VocabId>,
+struct FindReturnState {
+    agents: Vec<FindReturnAgent>,
+    time: i32,
+
+    base_map: Array2<VocabId>, // the bottom layer of the map
+    map: Array2<VocabId>,
 }
 
 #[derive(Debug, Default, Clone)]
 pub struct FindReturn {
     pub config: FindReturnConfig,
     pub state: FindReturnState,
-
-    /// Map with agents stamped on top; observation windows slice this so
-    /// encoding stays O(agents × view area) instead of O(agents²).
-    stamped_map: Array2<VocabId>,
 
     pad_width: i32,
     pad_height: i32,
@@ -124,8 +122,6 @@ impl FindReturn {
             config: config.clone(),
             state: FindReturnState::default(),
 
-            stamped_map: Array2::default((0, 0)),
-
             pad_width,
             pad_height,
             width,
@@ -149,14 +145,14 @@ impl FindReturn {
         }
     }
 
-    fn direction(&self, action: i32) -> (i32, i32) {
-        if action == i32::from(self.action_move_up) {
+    fn direction(&self, action: VocabId) -> (i32, i32) {
+        if action == self.action_move_up {
             (0, 1)
-        } else if action == i32::from(self.action_move_right) {
+        } else if action == self.action_move_right {
             (1, 0)
-        } else if action == i32::from(self.action_move_down) {
+        } else if action == self.action_move_down {
             (0, -1)
-        } else if action == i32::from(self.action_move_left) {
+        } else if action == self.action_move_left {
             (-1, 0)
         } else {
             (0, 0)
@@ -259,7 +255,7 @@ impl Environment for FindReturn {
         self.encode_observations(timestep);
     }
 
-    fn step(&mut self, actions: &[i32], timestep: &mut TimeStepMut) {
+    fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
         for agent_id in 0..self.state.agents.len() {
             let (dx, dy) = self.direction(actions[agent_id]);
             let agent = &self.state.agents[agent_id];
