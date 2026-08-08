@@ -29,7 +29,7 @@ pub struct FindReturnConfig {
 
     pub mapgen_threshold: f32,
     pub digging_timeout: i32,
-    pub treasure_reward: f64,
+    pub treasure_reward: f32,
 }
 
 impl Default for FindReturnConfig {
@@ -178,10 +178,10 @@ impl FindReturn {
 
     fn calculate_free_positions(&mut self) {
         self.state.free_positions.clear();
-        for y in self.pad_width..self.width - self.pad_width {
-            for x in self.pad_height..self.height - self.pad_height {
+        for x in self.pad_width..self.width - self.pad_width {
+            for y in self.pad_height..self.height - self.pad_height {
                 let position = Position::new(x, y);
-                let tile = self.state.base_map[position.idx()];
+                let tile = self.state.map[position.idx()];
 
                 if !self.blocked(tile) {
                     self.state.free_positions.push(position);
@@ -196,15 +196,7 @@ impl FindReturn {
             .rngs
             .sample(Uniform::new(0, self.state.free_positions.len()).unwrap());
 
-        if index == self.state.free_positions.len() - 1 {
-            self.state.free_positions.pop().unwrap()
-        } else {
-            let position = self.state.free_positions[index];
-            let tail = self.state.free_positions.pop().unwrap();
-            self.state.free_positions[index] = tail;
-
-            position
-        }
+        self.state.free_positions.swap_remove(index)
     }
 
     fn encode_observations(&mut self, timestep: &mut TimeStepMut) {
@@ -273,15 +265,18 @@ impl Environment for FindReturn {
             &mut self.state.rngs,
         );
 
+        // Base map finished
+        self.state.map.assign(&self.state.base_map);
+
         self.state.agents.clear();
         self.calculate_free_positions();
 
         // Place the flag
-        let flag_position = self.use_free_position();
-        self.state.base_map[flag_position.idx()] = self.obs_tile_flag;
-
-        // Base map finished
-        self.state.map.assign(&self.state.base_map);
+        for _ in 0..self.config.num_flags {
+            let flag_position = self.use_free_position();
+            self.state.base_map[flag_position.idx()] = self.obs_tile_flag;
+            self.state.map[flag_position.idx()] = self.obs_tile_flag;
+        }
 
         // Place the agents
         for _ in 0..self.num_agents() {
@@ -299,6 +294,8 @@ impl Environment for FindReturn {
     }
 
     fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
+        let mut any_respawn = false;
+
         for agent_id in 0..self.state.agents.len() {
             let dir = self.direction(actions[agent_id]);
             let mut agent_position = self.state.agents[agent_id].position;
@@ -310,23 +307,27 @@ impl Environment for FindReturn {
                 self.state.agents[agent_id].position = target;
             }
 
-            let found_flag = self.state.base_map[target.idx()] == self.obs_tile_flag;
+            let found_flag = self.state.base_map[agent_position.idx()] == self.obs_tile_flag;
             self.state.agents[agent_id].found_flag = found_flag;
 
             if !found_flag {
+                timestep.reward[agent_id] = 0.0;
                 self.state.map[agent_position.idx()] = self.obs_agent_generic;
+            } else {
+                timestep.reward[agent_id] = self.config.treasure_reward;
+                any_respawn = true;
             }
 
-            timestep.reward[agent_id] = if found_flag { 1.0 } else { 0.0 };
             timestep.last_action[agent_id] = actions[agent_id];
         }
 
-        self.calculate_free_positions();
-
-        for i in 0..self.state.agents.len() {
-            if self.state.agents[i].found_flag {
-                self.state.agents[i].position = self.use_free_position();
-                self.state.map[self.state.agents[i].position.idx()] = self.obs_agent_generic;
+        if any_respawn {
+            self.calculate_free_positions();
+            for i in 0..self.state.agents.len() {
+                if self.state.agents[i].found_flag {
+                    self.state.agents[i].position = self.use_free_position();
+                    self.state.map[self.state.agents[i].position.idx()] = self.obs_agent_generic;
+                }
             }
         }
 

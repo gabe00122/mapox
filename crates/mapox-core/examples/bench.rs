@@ -11,7 +11,7 @@ use mapox_core::vocab::VocabId;
 use ndarray::{Array1, Array2, Array4};
 use rand::{RngExt, SeedableRng, rngs::SmallRng};
 
-const AGENTS_PER_ENV: usize = 32;
+const AGENTS_PER_ENV: usize = 8;
 const TOTAL_AGENTS: usize = 4096;
 const WARMUP_STEPS: usize = 200;
 const BENCH_STEPS: usize = 20000;
@@ -60,6 +60,18 @@ impl Buffers {
     }
 }
 
+fn format_rate(rate: f64) -> String {
+    const UNITS: &[(f64, &str)] = &[(1_000_000_000.0, "B"), (1_000_000.0, "M"), (1_000.0, "K")];
+
+    for &(threshold, suffix) in UNITS {
+        if rate >= threshold {
+            return format!("{:.2}{suffix}", rate / threshold);
+        }
+    }
+
+    format!("{rate:.0}")
+}
+
 fn bench(label: &str, env: &mut Box<dyn Environment>) {
     let mut buffers = Buffers::new(env);
     let mut rng = SmallRng::seed_from_u64(0);
@@ -87,8 +99,10 @@ fn bench(label: &str, env: &mut Box<dyn Environment>) {
 
     let steps_per_sec = BENCH_STEPS as f64 / elapsed.as_secs_f64();
     let agent_steps_per_sec = steps_per_sec * num_agents as f64;
+    let steps_per_sec = format_rate(steps_per_sec);
+    let agent_steps_per_sec = format_rate(agent_steps_per_sec);
     println!(
-        "{label}: {steps_per_sec:.0} steps/s, {agent_steps_per_sec:.3e} agent-steps/s \
+        "{label}: {steps_per_sec} steps/s, {agent_steps_per_sec} agent-steps/s \
          ({num_agents} agents, {BENCH_STEPS} steps in {elapsed:.2?})"
     );
 }
