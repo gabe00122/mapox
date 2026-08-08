@@ -1,5 +1,5 @@
 use ndarray::{Array2, s};
-use rand::{Rng, RngExt, SeedableRng, distr::Uniform, rngs::SmallRng, seq::SliceRandom};
+use rand::{SeedableRng, rngs::SmallRng, seq::SliceRandom};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -51,7 +51,6 @@ impl Default for FindReturnConfig {
 #[derive(Debug, Default, Clone)]
 struct FindReturnAgent {
     position: Position,
-    found_flag: bool,
     timeout: u32,
 }
 
@@ -123,28 +122,23 @@ impl FindReturnSymbols {
     }
 }
 
-fn use_free_position(rngs: &mut SmallRng, free_positions: &mut Vec<Position>) -> Position {
-    let index = rngs.sample(Uniform::new(0, free_positions.len()).unwrap());
-
-    free_positions.swap_remove(index)
-}
-
 impl FindReturn {
     pub fn new(config: &FindReturnConfig) -> Self {
         let mut action_vocab = Vocabulary::new();
         let mut obs_vocab = Vocabulary::new();
 
-        let obs_tile_empty = obs_vocab.add(TILE_EMPTY);
-        let obs_tile_destructible_wall = obs_vocab.add(TILE_DESTRUCTIBLE_WALL);
-        let obs_tile_wall = obs_vocab.add(TILE_WALL);
-        let obs_tile_flag = obs_vocab.add(TILE_FLAG);
-        let obs_tile_decor = TILE_DECOR.map(|symbol| obs_vocab.add(symbol));
-        let obs_agent_generic = obs_vocab.add(AGENT_GENERIC);
-
-        let action_move_up = action_vocab.add(MOVE_UP);
-        let action_move_right = action_vocab.add(MOVE_RIGHT);
-        let action_move_down = action_vocab.add(MOVE_DOWN);
-        let action_move_left = action_vocab.add(MOVE_LEFT);
+        let symbols = FindReturnSymbols {
+            obs_tile_empty: obs_vocab.add(TILE_EMPTY),
+            obs_tile_destructible_wall: obs_vocab.add(TILE_DESTRUCTIBLE_WALL),
+            obs_tile_wall: obs_vocab.add(TILE_WALL),
+            obs_tile_flag: obs_vocab.add(TILE_FLAG),
+            obs_tile_decor: TILE_DECOR.map(|symbol| obs_vocab.add(symbol)),
+            obs_agent_generic: obs_vocab.add(AGENT_GENERIC),
+            action_move_up: action_vocab.add(MOVE_UP),
+            action_move_right: action_vocab.add(MOVE_RIGHT),
+            action_move_down: action_vocab.add(MOVE_DOWN),
+            action_move_left: action_vocab.add(MOVE_LEFT),
+        };
 
         let pad_width = config.view_width / 2;
         let pad_height = config.view_height / 2;
@@ -178,18 +172,7 @@ impl FindReturn {
             action_vocab,
             obs_vocab,
 
-            symbols: FindReturnSymbols {
-                action_move_up,
-                action_move_right,
-                action_move_down,
-                action_move_left,
-                obs_tile_empty,
-                obs_tile_destructible_wall,
-                obs_tile_flag,
-                obs_tile_wall,
-                obs_tile_decor,
-                obs_agent_generic,
-            },
+            symbols,
         }
     }
 
@@ -205,9 +188,11 @@ impl FindReturn {
                 }
             }
         }
+
+        self.state.free_positions.shuffle(&mut self.state.rngs);
     }
 
-    fn encode_observations(&mut self, timestep: &mut TimeStepMut) {
+    fn encode_observations(&self, timestep: &mut TimeStepMut) {
         let view_width = self.config.view_width;
         let view_height = self.config.view_height;
 
@@ -281,19 +266,17 @@ impl Environment for FindReturn {
 
         // Place the flag
         for _ in 0..self.config.num_flags {
-            let flag_position =
-                use_free_position(&mut self.state.rngs, &mut self.state.free_positions);
+            let flag_position = self.state.free_positions.pop().unwrap();
             self.state.base_map[flag_position.idx()] = self.symbols.obs_tile_flag;
             self.state.map[flag_position.idx()] = self.symbols.obs_tile_flag;
         }
 
         // Place the agents
         for _ in 0..self.num_agents() {
-            let position = use_free_position(&mut self.state.rngs, &mut self.state.free_positions);
+            let position = self.state.free_positions.pop().unwrap();
             self.state.agents.push(FindReturnAgent {
                 position,
-                timeout: 0,
-                found_flag: false,
+                ..Default::default()
             });
             self.state.map[position.idx()] = self.symbols.obs_agent_generic;
         }
@@ -304,11 +287,10 @@ impl Environment for FindReturn {
     }
 
     fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
-        let mut any_respawn = false;
-
+        let mut agent_respawn_ids: Vec<usize> = Vec::new();
         self.state.agent_order.shuffle(&mut self.state.rngs);
 
-        for &agent_id in self.state.agent_order.iter() {
+        for &agent_id in &self.state.agent_order {
             let (agent, map, base_map, symbols) = (
                 &mut self.state.agents[agent_id],
                 &mut self.state.map,
@@ -340,25 +322,24 @@ impl Environment for FindReturn {
                 continue;
             }
 
-            agent.found_flag = base_map[agent.position.idx()] == symbols.obs_tile_flag;
-            if !agent.found_flag {
+            let found_flag = base_map[agent.position.idx()] == symbols.obs_tile_flag;
+            if found_flag {
+                agent_respawn_ids.push(agent_id);
+                timestep.reward[agent_id] = self.config.treasure_reward;
+            } else {
                 // paint the agent back only if it's not found the flag
                 map[agent.position.idx()] = symbols.obs_agent_generic;
-            } else {
-                timestep.reward[agent_id] = self.config.treasure_reward;
-                any_respawn = true;
             }
         }
 
-        if any_respawn {
+        if !agent_respawn_ids.is_empty() {
             self.calculate_free_positions();
 
-            let (rngs, free_positions) = (&mut self.state.rngs, &mut self.state.free_positions);
-            for agent in self.state.agents.iter_mut() {
-                if agent.found_flag {
-                    agent.position = use_free_position(rngs, free_positions);
-                    self.state.map[agent.position.idx()] = self.symbols.obs_agent_generic;
-                }
+            let free_positions = &mut self.state.free_positions;
+            for &agent_id in &agent_respawn_ids {
+                let agent = &mut self.state.agents[agent_id];
+                agent.position = free_positions.pop().unwrap();
+                self.state.map[agent.position.idx()] = self.symbols.obs_agent_generic;
             }
         }
 

@@ -13,8 +13,11 @@ mod _core {
         AllowTypeChange, PyArray1, PyArray2, PyArray4, PyArrayLike1, PyReadonlyArray1,
         PyReadwriteArray1, PyReadwriteArray2, PyReadwriteArray4,
     };
-    use pyo3::exceptions::{PyRuntimeError, PyValueError};
     use pyo3::prelude::*;
+    use pyo3::{
+        Python,
+        exceptions::{PyRuntimeError, PyValueError},
+    };
 
     #[pyfunction]
     fn version() -> &'static str {
@@ -149,6 +152,7 @@ mod _core {
         #[allow(clippy::too_many_arguments)]
         fn reset(
             &mut self,
+            py: Python<'_>,
             seed: u64,
             mut obs: PyReadwriteArray4<'_, VocabId>,
             mut time: PyReadwriteArray1<'_, i32>,
@@ -167,12 +171,15 @@ mod _core {
                 action_mask: action_mask.as_array_mut(),
                 task_ids: task_ids.as_array_mut(),
             };
-            self.inner.reset(seed, &mut timestep);
+            py.detach(|| {
+                self.inner.reset(seed, &mut timestep);
+            });
         }
 
         #[allow(clippy::too_many_arguments)]
         fn step(
             &mut self,
+            py: Python<'_>,
             actions: PyReadonlyArray1<'_, VocabId>,
             mut obs: PyReadwriteArray4<'_, VocabId>,
             mut time: PyReadwriteArray1<'_, i32>,
@@ -192,7 +199,10 @@ mod _core {
                 action_mask: action_mask.as_array_mut(),
                 task_ids: task_ids.as_array_mut(),
             };
-            self.inner.step(actions, &mut timestep);
+
+            py.detach(|| {
+                self.inner.step(actions, &mut timestep);
+            });
             Ok(())
         }
     }
