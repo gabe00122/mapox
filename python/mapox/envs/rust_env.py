@@ -31,13 +31,13 @@ class RustEnv(Environment[None]):
     timesteps into; io_callback copies them into device arrays on return.
     """
 
-    def __init__(self, config: str | BaseModel):
+    def __init__(self, config: str | BaseModel, num_envs: int = 1):
         # accepts either a serialized rust EnvConfig or a pydantic config
         # (e.g. mapox.envs.find_return.FindReturnConfig) that mirrors one
         config_json = (
             config.model_dump_json() if isinstance(config, BaseModel) else config
         )
-        self._env = _CoreEnv(config_json)
+        self._env = _CoreEnv(config_json, num_envs)
 
         num_agents, view_width, view_height, channels = self._env.observation_shape
         num_actions = self._env.num_actions
@@ -120,7 +120,10 @@ class RustEnv(Environment[None]):
         timestep = io_callback(
             self._reset_callback, self._result_shapes, seed, ordered=True
         )
-        return None, timestep._replace(last_action=timestep.last_action.astype(jnp.int32))
+        return None, timestep._replace(
+            obs=timestep.obs.astype(jnp.int8),
+            last_action=timestep.last_action.astype(jnp.int32),
+        )
 
     def step(
         self, state: None, action: Array, rng_key: Array
@@ -130,7 +133,10 @@ class RustEnv(Environment[None]):
         timestep = io_callback(
             self._step_callback, self._result_shapes, action, ordered=True
         )
-        return None, timestep._replace(last_action=timestep.last_action.astype(jnp.int32))
+        return None, timestep._replace(
+            obs=timestep.obs.astype(jnp.int8),
+            last_action=timestep.last_action.astype(jnp.int32),
+        )
 
     def create_placeholder_logs(self) -> dict[str, Any]:
         # TODO: logging isn't wired through the rust env yet

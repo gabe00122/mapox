@@ -3,7 +3,7 @@ mod _core {
     use mapox_core::{
         env::Environment,
         envs::find_return::FindReturnConfig,
-        make::{EnvConfig, make},
+        make::{EnvConfig, make, make_vec},
         policy::{Policy, PolicyError, PolicyInputs, RandomPolicy},
         render::{RenderApp, open_window},
         timestep::{OBS_CHANNELS, TimeStepMut},
@@ -106,11 +106,11 @@ mod _core {
     #[pymethods]
     impl Env {
         #[new]
-        fn new(config_json: &str) -> PyResult<Self> {
+        fn new(config_json: &str, num_envs: usize) -> PyResult<Self> {
             let config: EnvConfig = serde_json::from_str(config_json)
                 .map_err(|err| PyValueError::new_err(err.to_string()))?;
             Ok(Self {
-                inner: make(&config),
+                inner: make_vec(&config, num_envs),
             })
         }
 
