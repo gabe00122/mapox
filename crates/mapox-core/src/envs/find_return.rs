@@ -51,11 +51,12 @@ impl Default for FindReturnConfig {
 #[derive(Debug, Default, Clone)]
 struct FindReturnAgent {
     position: Position,
-    found_reward: bool,
+    found_flag: bool,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 struct FindReturnState {
+    rngs: SmallRng,
     agents: Vec<FindReturnAgent>,
     time: i32,
 
@@ -64,7 +65,7 @@ struct FindReturnState {
     free_positions: Vec<Position>,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct FindReturn {
     pub config: FindReturnConfig,
     state: FindReturnState,
@@ -122,7 +123,14 @@ impl FindReturn {
 
         Self {
             config: config.clone(),
-            state: FindReturnState::default(),
+            state: FindReturnState {
+                agents: Vec::with_capacity(config.num_agents),
+                base_map: Array2::zeros((width as usize, height as usize)),
+                free_positions: Vec::new(),
+                map: Array2::zeros((width as usize, height as usize)),
+                rngs: SmallRng::seed_from_u64(0),
+                time: 0,
+            },
 
             pad_width,
             pad_height,
@@ -163,7 +171,9 @@ impl FindReturn {
     }
 
     fn blocked(&self, tile: VocabId) -> bool {
-        tile == self.obs_tile_wall || tile == self.obs_tile_destructible_wall
+        tile == self.obs_tile_wall
+            || tile == self.obs_tile_destructible_wall
+            || tile == self.obs_agent_generic
     }
 
     fn calculate_free_positions(&mut self) {
@@ -180,8 +190,11 @@ impl FindReturn {
         }
     }
 
-    fn use_free_position(&mut self, rng: &mut impl Rng) -> Position {
-        let index = rng.sample(Uniform::new(0, self.state.free_positions.len()).unwrap());
+    fn use_free_position(&mut self) -> Position {
+        let index = self
+            .state
+            .rngs
+            .sample(Uniform::new(0, self.state.free_positions.len()).unwrap());
 
         if index == self.state.free_positions.len() - 1 {
             self.state.free_positions.pop().unwrap()
@@ -224,7 +237,7 @@ impl FindReturn {
 
 impl Environment for FindReturn {
     fn reset(&mut self, seed: u64, timestep: &mut TimeStepMut) {
-        let mut rng = SmallRng::seed_from_u64(seed);
+        self.state.rngs = SmallRng::seed_from_u64(seed);
 
         self.state.time = 0;
 
@@ -243,7 +256,7 @@ impl Environment for FindReturn {
         fractal_noise(
             self.config.width as usize,
             self.config.height as usize,
-            &mut rng,
+            &mut self.state.rngs,
             |x, y, sample| {
                 interior[[x, y]] = if sample > self.config.mapgen_threshold {
                     self.obs_tile_destructible_wall
@@ -257,14 +270,14 @@ impl Environment for FindReturn {
             interior,
             self.obs_tile_empty,
             &self.obs_tile_decor,
-            &mut rng,
+            &mut self.state.rngs,
         );
 
         self.state.agents.clear();
         self.calculate_free_positions();
 
         // Place the flag
-        let flag_position = self.use_free_position(&mut rng);
+        let flag_position = self.use_free_position();
         self.state.base_map[flag_position.idx()] = self.obs_tile_flag;
 
         // Base map finished
@@ -272,10 +285,10 @@ impl Environment for FindReturn {
 
         // Place the agents
         for _ in 0..self.num_agents() {
-            let position = self.use_free_position(&mut rng);
+            let position = self.use_free_position();
             self.state.agents.push(FindReturnAgent {
                 position,
-                found_reward: false,
+                found_flag: false,
             });
             self.state.map[position.idx()] = self.obs_agent_generic;
         }
@@ -288,19 +301,33 @@ impl Environment for FindReturn {
     fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
         for agent_id in 0..self.state.agents.len() {
             let dir = self.direction(actions[agent_id]);
-            let agent_position = self.state.agents[agent_id].position;
+            let mut agent_position = self.state.agents[agent_id].position;
             let target = agent_position + dir;
-
             self.state.map[agent_position.idx()] = self.state.base_map[agent_position.idx()];
 
             if !self.blocked(self.state.map[target.idx()]) {
+                agent_position = target;
                 self.state.agents[agent_id].position = target;
             }
 
-            self.state.map[self.state.agents[agent_id].position.idx()] = self.obs_agent_generic;
+            let found_flag = self.state.base_map[target.idx()] == self.obs_tile_flag;
+            self.state.agents[agent_id].found_flag = found_flag;
 
-            timestep.reward[agent_id] = 0.0;
+            if !found_flag {
+                self.state.map[agent_position.idx()] = self.obs_agent_generic;
+            }
+
+            timestep.reward[agent_id] = if found_flag { 1.0 } else { 0.0 };
             timestep.last_action[agent_id] = actions[agent_id];
+        }
+
+        self.calculate_free_positions();
+
+        for i in 0..self.state.agents.len() {
+            if self.state.agents[i].found_flag {
+                self.state.agents[i].position = self.use_free_position();
+                self.state.map[self.state.agents[i].position.idx()] = self.obs_agent_generic;
+            }
         }
 
         self.state.time += 1;

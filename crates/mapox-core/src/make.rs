@@ -12,12 +12,17 @@ pub enum EnvConfig {
     FindReturn(FindReturnConfig),
 }
 
-pub fn make(config: &EnvConfig) -> Box<dyn Environment + Send + Sync> {
+pub fn make(config: &EnvConfig) -> Box<dyn Environment> {
     match config {
-        EnvConfig::FindReturn(config) => {
-            let fr = FindReturn::new(config);
-            let vec = VectorWrapper::new(fr, 128);
-            Box::new(vec)
-        }
+        EnvConfig::FindReturn(config) => Box::new(FindReturn::new(config)),
     }
+}
+
+pub fn make_vec(config: &EnvConfig, num_envs: usize) -> Box<dyn Environment> {
+    if num_envs == 1 {
+        return make(config);
+    }
+
+    let envs: Vec<Box<dyn Environment>> = (0..num_envs).map(|_| make(config)).collect();
+    Box::new(VectorWrapper::new(envs))
 }

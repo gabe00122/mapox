@@ -3,10 +3,11 @@
 use std::time::Instant;
 
 use mapox_core::env::Environment;
-use mapox_core::envs::find_return::{FindReturn, FindReturnConfig};
+use mapox_core::envs::find_return::FindReturnConfig;
+use mapox_core::make::EnvConfig;
+use mapox_core::make::{make, make_vec};
 use mapox_core::timestep::{OBS_CHANNELS, TimeStepMut};
 use mapox_core::vocab::VocabId;
-use mapox_core::wrappers::vector::VectorWrapper;
 use ndarray::{Array1, Array2, Array4};
 use rand::{RngExt, SeedableRng, rngs::SmallRng};
 
@@ -26,7 +27,7 @@ struct Buffers {
 }
 
 impl Buffers {
-    fn new(env: &impl Environment) -> Self {
+    fn new(env: &Box<dyn Environment>) -> Self {
         let num_agents = env.num_agents();
         let obs_spec = env.observation_spec();
 
@@ -59,7 +60,7 @@ impl Buffers {
     }
 }
 
-fn bench(label: &str, env: &mut impl Environment) {
+fn bench(label: &str, env: &mut Box<dyn Environment>) {
     let mut buffers = Buffers::new(env);
     let mut rng = SmallRng::seed_from_u64(0);
 
@@ -99,9 +100,12 @@ fn main() {
     };
     let vec_count = TOTAL_AGENTS / AGENTS_PER_ENV;
 
-    bench("single env", &mut FindReturn::new(&config));
+    bench(
+        "single env",
+        &mut make(&EnvConfig::FindReturn(config.clone())),
+    );
     bench(
         &format!("vector ({vec_count} envs)"),
-        &mut VectorWrapper::new(FindReturn::new(&config), vec_count),
+        &mut make_vec(&EnvConfig::FindReturn(config.clone()), vec_count),
     );
 }

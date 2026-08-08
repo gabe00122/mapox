@@ -8,24 +8,12 @@ use crate::spec::{ActionSpec, ObservationSpec};
 use crate::timestep::TimeStepMut;
 use crate::vocab::{VocabId, Vocabulary};
 
-pub struct VectorWrapper<T>
-where
-    T: Environment,
-{
-    envs: Vec<T>,
+pub struct VectorWrapper {
+    envs: Vec<Box<dyn Environment>>,
 }
 
-impl<T> VectorWrapper<T>
-where
-    T: Environment + Clone,
-{
-    pub fn new(env: T, copies: usize) -> Self {
-        let mut envs = Vec::new();
-
-        for _ in 0..copies {
-            envs.push(env.clone());
-        }
-
+impl VectorWrapper {
+    pub fn new(envs: Vec<Box<dyn Environment>>) -> Self {
         Self { envs }
     }
 }
@@ -70,10 +58,7 @@ fn split_timestep<'a>(
         )
 }
 
-impl<T> Environment for VectorWrapper<T>
-where
-    T: Environment,
-{
+impl Environment for VectorWrapper {
     fn reset(&mut self, seed: u64, timestep: &mut TimeStepMut) {
         let mut rng = SmallRng::seed_from_u64(seed);
         let seeds: Vec<u64> = (0..self.envs.len()).map(|_| rng.random()).collect();
