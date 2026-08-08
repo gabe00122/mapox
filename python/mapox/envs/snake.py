@@ -190,7 +190,7 @@ class SnakeEnv(Environment[SnakeState]):
             deaths=jnp.float32(0.0),
         )
 
-        actions = jnp.zeros((n,), dtype=jnp.int32)
+        actions = jnp.zeros((n,), dtype=jnp.uint16)
         rewards = jnp.zeros((n,), dtype=jnp.float32)
         terminated = jnp.zeros((n,), dtype=jnp.bool_)
 
@@ -315,15 +315,15 @@ class SnakeEnv(Environment[SnakeState]):
     def _render_channels(self, state: SnakeState):
         owner = self._owner_grid(state.body, state.head_slot, state.length)
 
-        tiles = jnp.where(state.food, jnp.int8(self._tile_food), state.tiles)
-        tiles = jnp.where(owner > 0, jnp.int8(self._agent_snake_body), tiles)
+        tiles = jnp.where(state.food, jnp.uint16(self._tile_food), state.tiles)
+        tiles = jnp.where(owner > 0, jnp.uint16(self._agent_snake_body), tiles)
         tiles = tiles.at[state.head_pos[:, 0], state.head_pos[:, 1]].set(
-            jnp.int8(self._agent_snake_head)
+            jnp.uint16(self._agent_snake_head)
         )
 
         directions = jnp.zeros_like(state.tiles)
         directions = directions.at[state.head_pos[:, 0], state.head_pos[:, 1]].set(
-            (state.direction + 1).astype(jnp.int8)
+            (state.direction + 1).astype(jnp.uint16)
         )
 
         return tiles, directions, owner
@@ -337,7 +337,9 @@ class SnakeEnv(Environment[SnakeState]):
         # Owner ids ride along in the team channel and are remapped to the
         # egocentric 1 = self / 2 = other after the crop, so the per-agent
         # work is view-sized instead of map-sized.
-        full = jnp.stack((tiles, directions, owner.astype(jnp.int8), health), axis=-1)
+        full = jnp.stack(
+            (tiles, directions, owner.astype(jnp.uint16), health), axis=-1
+        )
 
         def _encode_view(idx, pos):
             crop = jax.lax.dynamic_slice(
@@ -356,8 +358,8 @@ class SnakeEnv(Environment[SnakeState]):
             cell_owner = crop[..., 2]
             team = jnp.where(
                 cell_owner == idx + 1,
-                jnp.int8(1),
-                jnp.where(cell_owner > 0, jnp.int8(2), jnp.int8(0)),
+                jnp.uint16(1),
+                jnp.where(cell_owner > 0, jnp.uint16(2), jnp.uint16(0)),
             )
             return crop.at[..., 2].set(team)
 
@@ -368,7 +370,7 @@ class SnakeEnv(Environment[SnakeState]):
         return TimeStep(
             obs=view,
             time=time,
-            last_action=actions,
+            last_action=jnp.asarray(actions, dtype=jnp.uint16),
             reward=rewards,
             action_mask=self._make_action_mask(state.direction),
             terminated=terminated,

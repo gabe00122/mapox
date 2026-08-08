@@ -23,7 +23,8 @@ Environments implement a small interface:
 
 - `reset(rng_key) -> (state, timestep)`
 - `step(state, actions, rng_key) -> (state, timestep)`
-- `timestep.obs`: `(num_agents, view_w, view_h, 4)` int8
+- `timestep.obs`: `(num_agents, view_w, view_h, 4)` uint16
+- actions and `timestep.last_action`: `(num_agents,)` uint16
 - `timestep.action_mask`: `(num_agents, num_actions)` bool
 
 ```python
@@ -40,7 +41,9 @@ state, ts = env.reset(rng)
 # Sample a random *legal* action per agent using the action mask
 rng, akey, skey = jax.random.split(rng, 3)
 logits = jax.random.uniform(akey, (env.num_agents, env.action_spec.n))
-actions = jnp.argmax(jnp.where(ts.action_mask, logits, -1e9), axis=-1)
+actions = jnp.argmax(
+    jnp.where(ts.action_mask, logits, -1e9), axis=-1
+).astype(jnp.uint16)
 
 state, ts = env.step(state, actions, skey)
 print(ts.reward, ts.terminated)

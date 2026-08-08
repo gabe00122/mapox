@@ -92,7 +92,7 @@ FAR_SNAKE = ([(15, 15)], MOVE_UP)
 
 def test_moves_forward(env, rng_key):
     state = make_state(env, rng_key, [([(8, 8), (9, 8)], MOVE_RIGHT), FAR_SNAKE])
-    actions = jnp.array([MOVE_RIGHT, MOVE_UP], dtype=jnp.int32)
+    actions = jnp.array([MOVE_RIGHT, MOVE_UP], dtype=jnp.uint16)
 
     state, ts = env.step(state, actions, rng_key)
 
@@ -105,7 +105,7 @@ def test_moves_forward(env, rng_key):
 
 def test_reverse_is_coerced_straight(env, rng_key):
     state = make_state(env, rng_key, [([(8, 8), (9, 8)], MOVE_RIGHT), FAR_SNAKE])
-    actions = jnp.array([MOVE_LEFT, MOVE_UP], dtype=jnp.int32)
+    actions = jnp.array([MOVE_LEFT, MOVE_UP], dtype=jnp.uint16)
 
     state, ts = env.step(state, actions, rng_key)
 
@@ -116,7 +116,7 @@ def test_reverse_is_coerced_straight(env, rng_key):
 
 def test_non_move_is_coerced_straight(env, rng_key):
     state = make_state(env, rng_key, [([(8, 8), (9, 8)], MOVE_RIGHT), FAR_SNAKE])
-    actions = jnp.array([NON_MOVE, MOVE_UP], dtype=jnp.int32)
+    actions = jnp.array([NON_MOVE, MOVE_UP], dtype=jnp.uint16)
 
     state, _ = env.step(state, actions, rng_key)
 
@@ -130,7 +130,7 @@ def test_eating_grows(env, rng_key):
         [([(8, 8), (9, 8)], MOVE_RIGHT), FAR_SNAKE],
         food_cells=[(10, 8)],
     )
-    actions = jnp.array([MOVE_RIGHT, MOVE_UP], dtype=jnp.int32)
+    actions = jnp.array([MOVE_RIGHT, MOVE_UP], dtype=jnp.uint16)
 
     state, ts = env.step(state, actions, rng_key)
 
@@ -160,7 +160,7 @@ def test_growth_caps_at_max_length(rng_key):
         [([(7, 8), (8, 8), (9, 8)], MOVE_RIGHT), FAR_SNAKE],
         food_cells=[(10, 8)],
     )
-    actions = jnp.array([MOVE_RIGHT, MOVE_UP], dtype=jnp.int32)
+    actions = jnp.array([MOVE_RIGHT, MOVE_UP], dtype=jnp.uint16)
 
     state, ts = env.step(state, actions, rng_key)
 
@@ -187,7 +187,7 @@ def test_ring_buffer_wraps(rng_key):
     state = make_state(
         env, rng_key, [([(6, 8), (7, 8), (8, 8)], MOVE_RIGHT), FAR_SNAKE]
     )
-    actions = jnp.array([MOVE_RIGHT, MOVE_UP], dtype=jnp.int32)
+    actions = jnp.array([MOVE_RIGHT, MOVE_UP], dtype=jnp.uint16)
 
     # A full-length snake overwrites its own tail slot every step; four steps
     # cycle through the 3-slot buffer more than once.
@@ -202,7 +202,7 @@ def test_ring_buffer_wraps(rng_key):
 def test_wall_death_drops_food(env, rng_key):
     # Playable x spans 5..16, so moving right from 16 hits the wall.
     state = make_state(env, rng_key, [([(15, 8), (16, 8)], MOVE_RIGHT), FAR_SNAKE])
-    actions = jnp.array([MOVE_RIGHT, MOVE_UP], dtype=jnp.int32)
+    actions = jnp.array([MOVE_RIGHT, MOVE_UP], dtype=jnp.uint16)
 
     state, ts = env.step(state, actions, rng_key)
 
@@ -225,7 +225,7 @@ def test_body_collision_kills(env, rng_key):
             ([(10, 10), (10, 9), (10, 8)], MOVE_DOWN),
         ],
     )
-    actions = jnp.array([MOVE_RIGHT, MOVE_DOWN], dtype=jnp.int32)
+    actions = jnp.array([MOVE_RIGHT, MOVE_DOWN], dtype=jnp.uint16)
 
     state, ts = env.step(state, actions, rng_key)
 
@@ -242,7 +242,7 @@ def test_head_on_collision_kills_both(env, rng_key):
             ([(12, 8), (11, 8)], MOVE_LEFT),
         ],
     )
-    actions = jnp.array([MOVE_RIGHT, MOVE_LEFT], dtype=jnp.int32)
+    actions = jnp.array([MOVE_RIGHT, MOVE_LEFT], dtype=jnp.uint16)
 
     state, ts = env.step(state, actions, rng_key)
 
@@ -264,7 +264,7 @@ def test_swap_collision_kills_both(env, rng_key):
             ([(10, 8)], MOVE_LEFT),
         ],
     )
-    actions = jnp.array([MOVE_RIGHT, MOVE_LEFT], dtype=jnp.int32)
+    actions = jnp.array([MOVE_RIGHT, MOVE_LEFT], dtype=jnp.uint16)
 
     _, ts = env.step(state, actions, rng_key)
 
@@ -280,7 +280,7 @@ def test_can_follow_own_tail(env, rng_key):
         rng_key,
         [([(8, 8), (8, 9), (9, 9), (9, 8)], MOVE_DOWN), FAR_SNAKE],
     )
-    actions = jnp.array([MOVE_LEFT, MOVE_UP], dtype=jnp.int32)
+    actions = jnp.array([MOVE_LEFT, MOVE_UP], dtype=jnp.uint16)
 
     state, ts = env.step(state, actions, rng_key)
 
@@ -296,7 +296,7 @@ def test_own_body_collision_kills(env, rng_key):
         rng_key,
         [([(8, 7), (8, 8), (8, 9), (9, 9), (9, 8)], MOVE_DOWN), FAR_SNAKE],
     )
-    actions = jnp.array([MOVE_LEFT, MOVE_UP], dtype=jnp.int32)
+    actions = jnp.array([MOVE_LEFT, MOVE_UP], dtype=jnp.uint16)
 
     _, ts = env.step(state, actions, rng_key)
 
@@ -305,7 +305,7 @@ def test_own_body_collision_kills(env, rng_key):
 
 def test_action_mask_blocks_reverse(env, rng_key):
     state = make_state(env, rng_key, [([(8, 8), (9, 8)], MOVE_RIGHT), FAR_SNAKE])
-    actions = jnp.array([MOVE_RIGHT, MOVE_UP], dtype=jnp.int32)
+    actions = jnp.array([MOVE_RIGHT, MOVE_UP], dtype=jnp.uint16)
 
     _, ts = env.step(state, actions, rng_key)
 
@@ -326,7 +326,7 @@ def test_observation_is_egocentric(env, rng_key):
             ([(12, 8), (11, 8)], MOVE_LEFT),
         ],
     )
-    zeros_i = jnp.zeros(env.num_agents, dtype=jnp.int32)
+    zeros_i = jnp.zeros(env.num_agents, dtype=jnp.uint16)
     zeros_f = jnp.zeros(env.num_agents, dtype=jnp.float32)
     zeros_b = jnp.zeros(env.num_agents, dtype=jnp.bool_)
 
@@ -366,7 +366,7 @@ def test_rollout_invariants(rng_key):
         rng_key, act_key, step_key = jax.random.split(rng_key, 3)
         logits = jax.random.uniform(act_key, ts.action_mask.shape)
         actions = jnp.argmax(jnp.where(ts.action_mask, logits, -1.0), axis=-1)
-        state, ts = env.step(state, actions.astype(jnp.int32), step_key)
+        state, ts = env.step(state, actions.astype(jnp.uint16), step_key)
 
         cells = [occupied_cells(env, state, a) for a in range(env.num_agents)]
         for a in range(env.num_agents):
@@ -406,7 +406,7 @@ def test_food_spawns_over_time(rng_key):
 
     for i in range(3):
         rng_key, step_key = jax.random.split(rng_key)
-        actions = jnp.argmax(ts.action_mask, axis=-1).astype(jnp.int32)
+        actions = jnp.argmax(ts.action_mask, axis=-1).astype(jnp.uint16)
         state, ts = env.step(state, actions, step_key)
 
     assert jnp.sum(state.food) >= 1

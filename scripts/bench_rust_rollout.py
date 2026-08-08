@@ -42,7 +42,11 @@ def main() -> None:
             rng_key, action_key, step_key = jax.random.split(rng_key, 3)
 
             actions = jax.random.randint(
-                action_key, (num_agents,), minval=0, maxval=num_actions
+                action_key,
+                (num_agents,),
+                minval=0,
+                maxval=num_actions,
+                dtype=jnp.uint16,
             )
             _, timestep = env.step(None, actions, step_key)
             rollout = jax.tree.map(lambda buf, x: buf.at[i].set(x), rollout, timestep)

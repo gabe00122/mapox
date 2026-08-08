@@ -69,7 +69,7 @@ def test_step_translates_global_actions():
 
     state, _ = single.reset(k1)
     move_up = single.action_vocab.id(SB.MOVE_UP)
-    actions = jnp.full((single.num_agents,), move_up, dtype=jnp.int32)
+    actions = jnp.full((single.num_agents,), move_up, dtype=jnp.uint16)
     _, ts = single.step(state, actions, k2)
 
     # last_action comes back in global ids.

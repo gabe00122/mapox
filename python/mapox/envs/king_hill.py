@@ -195,7 +195,7 @@ class KingHillEnv(Environment[KingHillState]):
             rewards=jnp.float32(0.0),
         )
 
-        actions = jnp.zeros((self.num_agents,), dtype=jnp.int32)
+        actions = jnp.zeros((self.num_agents,), dtype=jnp.uint16)
         rewards = jnp.zeros((self.num_agents,), dtype=jnp.float32)
 
         return state, self.encode_observations(state, actions, rewards)
@@ -446,7 +446,9 @@ class KingHillEnv(Environment[KingHillState]):
         return state, self.encode_observations(state, action, rewards)
 
     def _get_agent_type_tiles(self, state: KingHillState):
-        agent_types_map = jnp.array([self._agent_knight, self._agent_archer], jnp.int8)
+        agent_types_map = jnp.array(
+            [self._agent_knight, self._agent_archer], jnp.uint16
+        )
         agent_types = agent_types_map[state.agents_types]
 
         return agent_types
@@ -466,31 +468,31 @@ class KingHillEnv(Environment[KingHillState]):
         tiles = tiles.at[state.arrows_pos[:, 0], state.arrows_pos[:, 1]].set(
             jnp.where(
                 state.arrows_mask,
-                jnp.int8(self._tile_arrow),
+                jnp.uint16(self._tile_arrow),
                 tiles[state.arrows_pos[:, 0], state.arrows_pos[:, 1]],
             )
         )
 
-        directions = jnp.zeros_like(tiles, dtype=jnp.int8)
+        directions = jnp.zeros_like(tiles)
         directions = directions.at[state.agents_pos[:, 0], state.agents_pos[:, 1]].set(
-            state.agents_direction + 1
+            (state.agents_direction + 1).astype(jnp.uint16)
         )
         directions = directions.at[state.arrows_pos[:, 0], state.arrows_pos[:, 1]].set(
-            state.arrows_direction + 1
-        )  # todo this is the int32 to int8 scatter
+            (state.arrows_direction + 1).astype(jnp.uint16)
+        )
 
-        teams = jnp.zeros_like(tiles, dtype=jnp.int8)
+        teams = jnp.zeros_like(tiles)
         teams = teams.at[
             state.control_point_pos[:, 0], state.control_point_pos[:, 1]
-        ].set(state.control_point_team)
+        ].set(state.control_point_team.astype(jnp.uint16))
         teams = teams.at[state.agents_pos[:, 0], state.agents_pos[:, 1]].set(
-            self.teams + 1
+            (self.teams + 1).astype(jnp.uint16)
         )  # add one to account for none team
         # todo: add flag team
 
-        health = jnp.zeros_like(tiles, dtype=jnp.int8)
+        health = jnp.zeros_like(tiles)
         health = health.at[state.agents_pos[:, 0], state.agents_pos[:, 1]].set(
-            state.agents_health
+            state.agents_health.astype(jnp.uint16)
         )
 
         return jnp.concatenate(
@@ -524,7 +526,7 @@ class KingHillEnv(Environment[KingHillState]):
         return TimeStep(
             obs=view,
             time=time,
-            last_action=actions,
+            last_action=jnp.asarray(actions, dtype=jnp.uint16),
             reward=rewards,
             action_mask=self._action_mask,
             terminated=jnp.equal(time, self._length - 1),

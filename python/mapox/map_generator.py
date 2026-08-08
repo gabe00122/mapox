@@ -91,7 +91,7 @@ def generate_decor_tiles(width: int, height: int, vocab: Vocabulary, rng_key: ja
             SB.TILE_DECOR_3,
             SB.TILE_DECOR_4,
         ]),
-        dtype=jnp.int8,
+        dtype=jnp.uint16,
     )
     tile_probs = jnp.array([0.90, 0.04, 0.04, 0.015, 0.005])
     tiles = jax.random.choice(rng_key, tile_ids, (width, height), p=tile_probs)

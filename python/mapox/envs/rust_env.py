@@ -47,19 +47,19 @@ class RustEnv(Environment[None]):
         self._obs_vocab = Vocabulary(self._env.obs_symbols).freeze()
         self._action_vocab = Vocabulary(self._env.action_symbols).freeze()
 
-        self._obs = np.zeros((num_agents, view_width, view_height, channels), np.uint8)
+        self._obs = np.zeros((num_agents, view_width, view_height, channels), np.uint16)
         self._time = np.zeros((num_agents,), np.int32)
         self._terminated = np.zeros((num_agents,), np.bool_)
-        self._last_action = np.zeros((num_agents,), np.uint8)
+        self._last_action = np.zeros((num_agents,), np.uint16)
         self._reward = np.zeros((num_agents,), np.float32)
         self._action_mask = np.zeros((num_agents, num_actions), np.bool_)
         self._task_ids = np.zeros((num_agents,), np.int32)
 
         self._result_shapes = TimeStep(
-            obs=jax.ShapeDtypeStruct(self._obs.shape, jnp.uint8),
+            obs=jax.ShapeDtypeStruct(self._obs.shape, jnp.uint16),
             time=jax.ShapeDtypeStruct(self._time.shape, jnp.int32),
             terminated=jax.ShapeDtypeStruct(self._terminated.shape, jnp.bool_),
-            last_action=jax.ShapeDtypeStruct(self._last_action.shape, jnp.uint8),
+            last_action=jax.ShapeDtypeStruct(self._last_action.shape, jnp.uint16),
             reward=jax.ShapeDtypeStruct(self._reward.shape, jnp.float32),
             action_mask=jax.ShapeDtypeStruct(self._action_mask.shape, jnp.bool_),
             task_ids=jax.ShapeDtypeStruct(self._task_ids.shape, jnp.int32),
@@ -75,9 +75,7 @@ class RustEnv(Environment[None]):
 
     def _timestep(self) -> TimeStep:
         return TimeStep(
-            # rust writes u8 tile ids; the python stack indexes vocabs with
-            # int8 (see make_obs_spec), and ids never exceed 127, so a
-            # reinterpreting view is lossless and copy-free
+            # Rust and JAX share uint16 buffers for observations and actions.
             obs=self._obs,
             time=self._time,
             terminated=self._terminated,
@@ -101,10 +99,10 @@ class RustEnv(Environment[None]):
         return self._timestep()
 
     def _step_callback(self, action: np.ndarray) -> TimeStep:
-        if np.any(action < 0) or np.any(action > np.iinfo(np.uint8).max):
+        if np.any(action < 0) or np.any(action > np.iinfo(np.uint16).max):
             raise ValueError("action id outside the Rust VocabId range")
         self._env.step(
-            np.ascontiguousarray(action, dtype=np.uint8),
+            np.ascontiguousarray(action, dtype=np.uint16),
             self._obs,
             self._time,
             self._terminated,
@@ -120,10 +118,7 @@ class RustEnv(Environment[None]):
         timestep = io_callback(
             self._reset_callback, self._result_shapes, seed, ordered=True
         )
-        return None, timestep._replace(
-            obs=timestep.obs.astype(jnp.int8),
-            last_action=timestep.last_action.astype(jnp.int32),
-        )
+        return None, timestep
 
     def step(
         self, state: None, action: Array, rng_key: Array
@@ -133,10 +128,7 @@ class RustEnv(Environment[None]):
         timestep = io_callback(
             self._step_callback, self._result_shapes, action, ordered=True
         )
-        return None, timestep._replace(
-            obs=timestep.obs.astype(jnp.int8),
-            last_action=timestep.last_action.astype(jnp.int32),
-        )
+        return None, timestep
 
     def create_placeholder_logs(self) -> dict[str, Any]:
         # TODO: logging isn't wired through the rust env yet

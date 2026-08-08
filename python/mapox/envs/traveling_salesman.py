@@ -146,7 +146,7 @@ class TravelingSalesmanEnv(Environment[TravelingSalesmanState]):
             rewards=jnp.float32(0.0),
         )
 
-        actions = jnp.zeros((self.num_agents,), dtype=jnp.int32)
+        actions = jnp.zeros((self.num_agents,), dtype=jnp.uint16)
         rewards = jnp.zeros((self.num_agents,), dtype=jnp.float32)
 
         return state, self.encode_observations(state, actions, rewards)
@@ -247,9 +247,9 @@ class TravelingSalesmanEnv(Environment[TravelingSalesmanState]):
             self._agent_generic
         )
 
-        directions = jnp.zeros_like(tiles, dtype=jnp.int8)
-        teams = jnp.zeros_like(tiles, dtype=jnp.int8)
-        health = jnp.zeros_like(tiles, dtype=jnp.int8)
+        directions = jnp.zeros_like(tiles)
+        teams = jnp.zeros_like(tiles)
+        health = jnp.zeros_like(tiles)
 
         return jnp.concatenate(
             (
@@ -284,7 +284,7 @@ class TravelingSalesmanEnv(Environment[TravelingSalesmanState]):
         return TimeStep(
             obs=view,
             time=time,
-            last_action=actions,
+            last_action=jnp.asarray(actions, dtype=jnp.uint16),
             reward=rewards,
             action_mask=self._action_mask,
             terminated=jnp.equal(time, self._length - 1),

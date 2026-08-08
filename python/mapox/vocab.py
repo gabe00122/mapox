@@ -1,6 +1,10 @@
-from jax import numpy as jnp
-import jax
 from typing import Iterable, Self, cast, Iterator
+
+import jax
+from jax import numpy as jnp
+
+from mapox.specs import VOCAB_DTYPE
+
 
 class FrozenVocabularyError(Exception): ...
 
@@ -109,7 +113,13 @@ class Vocabulary:
             )
         return hash(self.symbols)
 
-    def lut_to(self, target: "Vocabulary", *, default: int | None = None, dtype: jnp.dtype = jnp.int32) -> jax.Array:
+    def lut_to(
+        self,
+        target: "Vocabulary",
+        *,
+        default: int | None = None,
+        dtype: jnp.dtype = VOCAB_DTYPE,
+    ) -> jax.Array:
         ids: list[int] = []
         for s in self._symbols:
             if default is None:

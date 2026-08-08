@@ -25,6 +25,8 @@ class RandomAgent(Agent[None]):
 
         action_rng, rng_key = jax.random.split(rng_key)
         logits = jax.random.uniform(action_rng, (num_agents, self._action_spec.n))
-        actions = jnp.argmax(jnp.where(timestep.action_mask, logits, -jnp.inf), axis=-1)
+        actions = jnp.argmax(
+            jnp.where(timestep.action_mask, logits, -jnp.inf), axis=-1
+        ).astype(self._action_spec.dtype)
 
         return None, actions, rng_key

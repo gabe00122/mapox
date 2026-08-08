@@ -102,8 +102,8 @@ class PreyEnv(Environment[PreyState]):
 
         self._agent_tiles = jnp.concatenate(
             [
-                jnp.full(config.num_sneakers, self._agent_sneaker, jnp.int8),
-                jnp.full(config.num_chasers, self._agent_chaser, jnp.int8),
+                jnp.full(config.num_sneakers, self._agent_sneaker, jnp.uint16),
+                jnp.full(config.num_chasers, self._agent_chaser, jnp.uint16),
             ]
         )
 
@@ -123,14 +123,14 @@ class PreyEnv(Environment[PreyState]):
 
         # Perlin noise for walls (res must divide dimensions)
         wall_noise = generate_perlin_noise_2d((w, h), (8, 8), rng_key=wall_key)
-        tiles = jnp.where(wall_noise > 0.1, jnp.int8(self._tile_wall), decor)
+        tiles = jnp.where(wall_noise > 0.1, jnp.uint16(self._tile_wall), decor)
 
         # Perlin noise for grass
         grass_noise = generate_perlin_noise_2d((w, h), (8, 8), rng_key=grass_key)
         is_grass = (grass_noise < self._config.grass_threshold) & (
             tiles != self._tile_wall
         )
-        tiles = jnp.where(is_grass, jnp.int8(self._tile_grass), tiles)
+        tiles = jnp.where(is_grass, jnp.uint16(self._tile_grass), tiles)
 
         # Pad tiles
         tiles = jnp.pad(
@@ -183,7 +183,7 @@ class PreyEnv(Environment[PreyState]):
             fullness=jnp.full(self.num_agents, self._config.initial_fullness, dtype=jnp.int32),
         )
 
-        actions = jnp.zeros((self.num_agents,), dtype=jnp.int32)
+        actions = jnp.zeros((self.num_agents,), dtype=jnp.uint16)
         rewards = jnp.zeros((self.num_agents,), dtype=jnp.float32)
         terminated = jnp.zeros(self.num_agents, dtype=jnp.bool_)
 
@@ -310,9 +310,9 @@ class PreyEnv(Environment[PreyState]):
         """Render agents and food. If conceal=True, agents on grass are hidden."""
         tiles = state.tiles
 
-        directions = jnp.zeros_like(tiles, dtype=jnp.int8)
-        teams = jnp.zeros_like(tiles, dtype=jnp.int8)
-        health = jnp.zeros_like(tiles, dtype=jnp.int8)
+        directions = jnp.zeros_like(tiles)
+        teams = jnp.zeros_like(tiles)
+        health = jnp.zeros_like(tiles)
 
         # Food (present items only)
         food_present = state.food_timer == 0
@@ -329,8 +329,9 @@ class PreyEnv(Environment[PreyState]):
         # Map fullness to health channel: 0=starving, 1=low, 2=high
         half = self._config.max_fullness // 2
         agent_health = jnp.where(
-            state.fullness == 0, jnp.int8(0),
-            jnp.where(state.fullness <= half, jnp.int8(1), jnp.int8(2)),
+            state.fullness == 0,
+            jnp.uint16(0),
+            jnp.where(state.fullness <= half, jnp.uint16(1), jnp.uint16(2)),
         )
 
         if conceal:
@@ -338,7 +339,7 @@ class PreyEnv(Environment[PreyState]):
             agent_tiles = jnp.where(
                 on_grass, tiles[agents_pos[:, 0], agents_pos[:, 1]], agent_tiles
             )
-            agent_health = jnp.where(on_grass, jnp.int8(0), agent_health)
+            agent_health = jnp.where(on_grass, jnp.uint16(0), agent_health)
 
         tiles = tiles.at[agents_pos[:, 0], agents_pos[:, 1]].set(agent_tiles)
         health = health.at[agents_pos[:, 0], agents_pos[:, 1]].set(agent_health)
@@ -379,7 +380,7 @@ class PreyEnv(Environment[PreyState]):
         return TimeStep(
             obs=view,
             time=time,
-            last_action=actions,
+            last_action=jnp.asarray(actions, dtype=jnp.uint16),
             reward=rewards,
             action_mask=self._action_mask,
             terminated=terminated,

@@ -12,7 +12,7 @@ WALL = 1
 
 def _make_mixed_grid():
     """10x10 grid with walls on the border, empty inside."""
-    tiles = jnp.full((10, 10), EMPTY, dtype=jnp.int8)
+    tiles = jnp.full((10, 10), EMPTY, dtype=jnp.uint16)
     tiles = tiles.at[0, :].set(WALL)
     tiles = tiles.at[-1, :].set(WALL)
     tiles = tiles.at[:, 0].set(WALL)
@@ -31,7 +31,7 @@ def test_chooses_only_empty():
 
 def test_non_zero_empty_id():
     # Guards the old bug where "empty" was hardcoded to id 0.
-    tiles = jnp.full((6, 6), 3, dtype=jnp.int8).at[2:4, 2:4].set(7)
+    tiles = jnp.full((6, 6), 3, dtype=jnp.uint16).at[2:4, 2:4].set(7)
     key = jax.random.key(0)
     xs, ys = choose_positions(tiles, 4, 7, key)
 

@@ -14,6 +14,9 @@ def test_reset_obs_shape(env, rng_key):
     _, ts = env.reset(rng_key)
     expected = (env.num_agents, *env.observation_spec.shape)
     assert ts.obs.shape == expected
+    assert ts.obs.dtype == jnp.uint16
+    assert ts.last_action.dtype == jnp.uint16
+    assert env.action_spec.dtype == jnp.uint16
 
 
 def test_reset_action_mask_shape(env, rng_key):
@@ -45,7 +48,9 @@ def test_step_preserves_shapes(env, rng_key):
     k1, k2 = jax.random.split(rng_key)
     state, ts_reset = env.reset(k1)
 
-    actions = jnp.full((env.num_agents,), env.action_vocab.id(SB.MOVE_UP), dtype=jnp.int32)
+    actions = jnp.full(
+        (env.num_agents,), env.action_vocab.id(SB.MOVE_UP), dtype=jnp.uint16
+    )
     _, ts_step = env.step(state, actions, k2)
 
     assert ts_step.obs.shape == ts_reset.obs.shape
@@ -58,6 +63,8 @@ def test_step_time_increments(env, rng_key):
     k1, k2 = jax.random.split(rng_key)
     state, _ = env.reset(k1)
 
-    actions = jnp.full((env.num_agents,), env.action_vocab.id(SB.MOVE_UP), dtype=jnp.int32)
+    actions = jnp.full(
+        (env.num_agents,), env.action_vocab.id(SB.MOVE_UP), dtype=jnp.uint16
+    )
     _, ts = env.step(state, actions, k2)
     assert jnp.all(ts.time == 1)

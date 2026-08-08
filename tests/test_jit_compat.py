@@ -16,7 +16,9 @@ def test_jit_step(env, rng_key):
     k1, k2 = jax.random.split(rng_key)
     state, _ = jax.jit(env.reset)(k1)
 
-    actions = jnp.full((env.num_agents,), env.action_vocab.id(SB.MOVE_UP), dtype=jnp.int32)
+    actions = jnp.full(
+        (env.num_agents,), env.action_vocab.id(SB.MOVE_UP), dtype=jnp.uint16
+    )
     _, ts = jax.jit(env.step)(state, actions, k2)
 
     assert ts.obs.shape == (env.num_agents, *env.observation_spec.shape)

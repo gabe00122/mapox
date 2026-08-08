@@ -15,7 +15,7 @@ def run_demo(
     ``config_json`` is a serialized ``EnvConfig`` (defaults to find_return).
     ``policy`` is called once per env step as
     ``policy(obs, reward, terminated, action_mask)`` and must return an array
-    of shape ``(num_agents,)`` castable to int32; the keyboard overrides the
+    of shape ``(num_agents,)`` castable to uint16; the keyboard overrides the
     focused agent's action. Omitted, agents act uniformly at random; if the
     callable raises, the traceback is printed once and the demo falls back to
     the random policy.

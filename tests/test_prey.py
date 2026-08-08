@@ -62,7 +62,7 @@ def make_state(
     cfg = env._config
 
     tiles = jnp.full(
-        (env.padded_width, env.padded_height), env._tile_wall, dtype=jnp.int8
+        (env.padded_width, env.padded_height), env._tile_wall, dtype=jnp.uint16
     )
     tiles = tiles.at[
         env.pad_width : env.pad_width + cfg.width,
@@ -94,7 +94,7 @@ def make_state(
 
 def test_moves_follow_directions(env, rng_key):
     state = make_state(env, rng_key, sneakers=[(8, 8), FAR_A], chasers=[FAR_B])
-    actions = jnp.array([MOVE_RIGHT, MOVE_UP, STAY], dtype=jnp.int32)
+    actions = jnp.array([MOVE_RIGHT, MOVE_UP, STAY], dtype=jnp.uint16)
 
     state, _ = env.step(state, actions, rng_key)
 
@@ -106,7 +106,7 @@ def test_moves_follow_directions(env, rng_key):
 def test_wall_blocks_movement(env, rng_key):
     # (5, 8) is on the west edge of the playable area; west of it is border.
     state = make_state(env, rng_key, sneakers=[(5, 8), FAR_A], chasers=[FAR_B])
-    actions = jnp.array([MOVE_LEFT, STAY, STAY], dtype=jnp.int32)
+    actions = jnp.array([MOVE_LEFT, STAY, STAY], dtype=jnp.uint16)
 
     state, _ = env.step(state, actions, rng_key)
 
@@ -117,7 +117,7 @@ def test_agent_blocks_movement(env, rng_key):
     # Sneaker 1 stays, so its tile is occupied whenever sneaker 0 resolves,
     # regardless of the random execution order.
     state = make_state(env, rng_key, sneakers=[(8, 8), (9, 8)], chasers=[FAR_B])
-    actions = jnp.array([MOVE_RIGHT, STAY, STAY], dtype=jnp.int32)
+    actions = jnp.array([MOVE_RIGHT, STAY, STAY], dtype=jnp.uint16)
 
     state, _ = env.step(state, actions, rng_key)
 
@@ -136,7 +136,7 @@ def test_eating_food_gains_fullness(env, rng_key):
         chasers=[FAR_B],
         food_cells=[(9, 8)],
     )
-    actions = jnp.array([MOVE_RIGHT, STAY, STAY], dtype=jnp.int32)
+    actions = jnp.array([MOVE_RIGHT, STAY, STAY], dtype=jnp.uint16)
 
     state, _ = env.step(state, actions, rng_key)
 
@@ -158,7 +158,7 @@ def test_full_sneaker_does_not_eat(env, rng_key):
         food_cells=[(9, 8)],
         fullness=[cfg.full_threshold + 10, cfg.initial_fullness, cfg.initial_fullness],
     )
-    actions = jnp.array([MOVE_RIGHT, STAY, STAY], dtype=jnp.int32)
+    actions = jnp.array([MOVE_RIGHT, STAY, STAY], dtype=jnp.uint16)
 
     state, _ = env.step(state, actions, rng_key)
 
@@ -177,7 +177,7 @@ def test_food_regrows_and_respawns(env, rng_key):
         food_cells=[(9, 8)],
         food_timer=[2, 0],
     )
-    actions = jnp.array([STAY, STAY, STAY], dtype=jnp.int32)
+    actions = jnp.array([STAY, STAY, STAY], dtype=jnp.uint16)
     k1, k2 = jax.random.split(rng_key)
 
     state, _ = env.step(state, actions, k1)
@@ -195,7 +195,7 @@ def test_food_regrows_and_respawns(env, rng_key):
 def test_catch_terminates_sneaker_and_feeds_chaser(env, rng_key):
     cfg = env._config
     state = make_state(env, rng_key, sneakers=[(8, 8), FAR_A], chasers=[(10, 8)])
-    actions = jnp.array([STAY, STAY, MOVE_LEFT], dtype=jnp.int32)
+    actions = jnp.array([STAY, STAY, MOVE_LEFT], dtype=jnp.uint16)
 
     state, ts = env.step(state, actions, rng_key)
 
@@ -219,7 +219,7 @@ def test_full_chaser_cannot_catch(env, rng_key):
             cfg.full_threshold + 10,
         ],
     )
-    actions = jnp.array([STAY, STAY, STAY], dtype=jnp.int32)
+    actions = jnp.array([STAY, STAY, STAY], dtype=jnp.uint16)
 
     state, ts = env.step(state, actions, rng_key)
 
@@ -239,7 +239,7 @@ def test_starvation_terminates_and_respawns(env, rng_key):
         chasers=[FAR_B],
         fullness=[1, cfg.initial_fullness, cfg.initial_fullness],
     )
-    actions = jnp.array([STAY, STAY, STAY], dtype=jnp.int32)
+    actions = jnp.array([STAY, STAY, STAY], dtype=jnp.uint16)
 
     state, ts = env.step(state, actions, rng_key)
 
@@ -251,7 +251,7 @@ def test_starvation_terminates_and_respawns(env, rng_key):
 def test_survival_reward_scales_with_fullness(env, rng_key):
     cfg = env._config
     state = make_state(env, rng_key, sneakers=[(8, 8), FAR_A], chasers=[FAR_B])
-    actions = jnp.array([STAY, STAY, STAY], dtype=jnp.int32)
+    actions = jnp.array([STAY, STAY, STAY], dtype=jnp.uint16)
 
     _, ts = env.step(state, actions, rng_key)
 
@@ -266,7 +266,7 @@ def test_time_up_terminates_everyone(rng_key):
         length=1,
     )
     state, _ = env.reset(rng_key)
-    actions = jnp.array([STAY, STAY, STAY], dtype=jnp.int32)
+    actions = jnp.array([STAY, STAY, STAY], dtype=jnp.uint16)
 
     _, ts = env.step(state, actions, rng_key)
 
@@ -277,7 +277,7 @@ def test_time_up_terminates_everyone(rng_key):
 
 
 def _observe(env, state):
-    zeros_i = jnp.zeros(env.num_agents, dtype=jnp.int32)
+    zeros_i = jnp.zeros(env.num_agents, dtype=jnp.uint16)
     zeros_f = jnp.zeros(env.num_agents, dtype=jnp.float32)
     zeros_b = jnp.zeros(env.num_agents, dtype=jnp.bool_)
     return env.encode_observations(state, zeros_i, zeros_f, zeros_b)
@@ -336,7 +336,7 @@ def test_rollout_invariants(env):
     for _ in range(128):
         key, akey, skey = jax.random.split(key, 3)
         actions = jax.random.randint(
-            akey, (env.num_agents,), 0, env.action_spec.n, dtype=jnp.int32
+            akey, (env.num_agents,), 0, env.action_spec.n, dtype=jnp.uint16
         )
         state, ts = step(state, actions, skey)
 

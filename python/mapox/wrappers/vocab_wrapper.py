@@ -36,10 +36,10 @@ class VocabWrapper(Environment):
         self._local_to_global_action = env.action_vocab.lut_to(
             action_vocab, default=0
         )
-        # int8 so tile-channel scatter matches the obs dtype; make_obs_spec
+        # uint16 so tile-channel scatter matches the obs dtype; make_obs_spec
         # guarantees the vocab fits.
         self._local_to_global_obs = env.obs_vocab.lut_to(
-            obs_vocab, default=0, dtype=jnp.int8
+            obs_vocab, default=0, dtype=jnp.uint16
         )
 
     def __getattr__(self, name):

@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 /// Integer representation used for vocabulary entries in maps and observations.
-pub type VocabId = u8;
+/// The same representation is used for actions at every environment boundary.
+pub type VocabId = u16;
 
 #[derive(Debug, Clone, Default)]
 pub struct Vocabulary {
@@ -71,5 +72,16 @@ impl FromIterator<&'static str> for Vocabulary {
         let mut vocab = Self::new();
         vocab.extend(iter);
         vocab
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::VocabId;
+
+    #[test]
+    fn vocab_ids_are_uint16() {
+        assert_eq!(VocabId::MAX, u16::MAX);
+        assert_eq!(size_of::<VocabId>(), size_of::<u16>());
     }
 }

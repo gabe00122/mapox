@@ -135,7 +135,7 @@ def test_step_translates_global_actions():
 
     states, _ = wrapper.reset(k1)
     move_up = wrapper.action_vocab.id(SB.MOVE_UP)
-    actions = jnp.full((wrapper.num_agents,), move_up, dtype=jnp.int32)
+    actions = jnp.full((wrapper.num_agents,), move_up, dtype=jnp.uint16)
     _, ts = wrapper.step(states, actions, k2)
 
     assert ts.obs.shape[0] == wrapper.num_agents
@@ -152,7 +152,7 @@ def test_untranslatable_action_is_safe():
 
     states, _ = wrapper.reset(k1)
     stay = wrapper.action_vocab.id(SB.STAY)
-    actions = jnp.full((wrapper.num_agents,), stay, dtype=jnp.int32)
+    actions = jnp.full((wrapper.num_agents,), stay, dtype=jnp.uint16)
     _, ts = wrapper.step(states, actions, k2)
 
     assert jnp.all(ts.last_action < len(wrapper.action_vocab))

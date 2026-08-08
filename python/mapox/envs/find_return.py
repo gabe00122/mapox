@@ -114,7 +114,9 @@ class FindReturnEnv(Environment[FindReturnState]):
         tiles = generate_decor_tiles(
             self.unpadded_width, self.unpadded_height, self.obs_vocab, decor_key
         )
-        tiles = jnp.where(noise > 0.05, jnp.int8(self._tile_destructible_wall), tiles)
+        tiles = jnp.where(
+            noise > 0.05, jnp.uint16(self._tile_destructible_wall), tiles
+        )
 
         # get the empty tiles for spawning
         x_spawns, y_spawns = jnp.where(
@@ -222,7 +224,7 @@ class FindReturnEnv(Environment[FindReturnState]):
             rewards=jnp.float32(0.0),
         )
 
-        actions = jnp.zeros((self.num_agents,), dtype=jnp.int32)
+        actions = jnp.zeros((self.num_agents,), dtype=jnp.uint16)
         rewards = jnp.zeros((self.num_agents,), dtype=jnp.float32)
 
         return state, self.encode_observations(state, actions, rewards)
@@ -319,9 +321,9 @@ class FindReturnEnv(Environment[FindReturnState]):
             self._agent_generic
         )
 
-        directions = jnp.zeros_like(tiles, dtype=jnp.int8)
-        teams = jnp.zeros_like(tiles, dtype=jnp.int8)
-        health = jnp.zeros_like(tiles, dtype=jnp.int8)
+        directions = jnp.zeros_like(tiles)
+        teams = jnp.zeros_like(tiles)
+        health = jnp.zeros_like(tiles)
 
         return jnp.concatenate(
             (
@@ -354,7 +356,7 @@ class FindReturnEnv(Environment[FindReturnState]):
         return TimeStep(
             obs=view,
             time=time,
-            last_action=actions,
+            last_action=jnp.asarray(actions, dtype=jnp.uint16),
             reward=rewards,
             action_mask=self._action_mask,
             terminated=jnp.equal(time, self._length - 1),

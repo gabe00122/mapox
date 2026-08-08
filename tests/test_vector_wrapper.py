@@ -41,7 +41,7 @@ def test_step_works():
 
     state, _ = jax.jit(venv.reset)(k1)
     actions = jnp.full(
-        (venv.num_agents,), inner.action_vocab.id(SB.MOVE_UP), dtype=jnp.int32
+        (venv.num_agents,), inner.action_vocab.id(SB.MOVE_UP), dtype=jnp.uint16
     )
     _, ts = jax.jit(venv.step)(state, actions, k2)
 

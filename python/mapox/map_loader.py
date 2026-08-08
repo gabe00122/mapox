@@ -41,4 +41,4 @@ def load_map(path: str, vocab: Vocabulary) -> jax.Array:
     except KeyError as e:
         raise ValueError(f"tile id {e.args[0]} is not in the map's legend") from None
 
-    return jnp.array(tiles, dtype=jnp.int8)
+    return jnp.array(tiles, dtype=jnp.uint16)

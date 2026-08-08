@@ -3,7 +3,7 @@ from typing import Sequence
 import jax
 from jax import numpy as jnp
 
-from mapox.specs import ObservationSpec
+from mapox.specs import OBS_DTYPE, ObservationSpec
 
 # Row i is the (dx, dy) delta for move action i, for envs that registered
 # symbols.MOVES via add_block at local ids 0..3: up, right, down, left.
@@ -16,11 +16,14 @@ def make_obs_spec(width: int, height: int, num_types: int) -> ObservationSpec:
     # DIRECTION
     # TEAM ID
     # HEALTH
-    if num_types > 127:
-        raise ValueError(f"obs vocab too large for int8 tiles: {num_types} > 127")
+    max_num_types = 1 << 16
+    if num_types > max_num_types:
+        raise ValueError(
+            f"obs vocab too large for uint16 tiles: {num_types} > {max_num_types}"
+        )
 
     return ObservationSpec(
-        dtype=jnp.int8,
+        dtype=OBS_DTYPE,
         shape=(width, height, 4),
         max_value=(
             num_types,

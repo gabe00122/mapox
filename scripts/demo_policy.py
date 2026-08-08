@@ -13,7 +13,7 @@ rng = np.random.default_rng(0)
 
 
 def random_policy(
-    obs: np.ndarray,  # (num_agents, view_w, view_h, channels) u8
+    obs: np.ndarray,  # (num_agents, view_w, view_h, channels) uint16
     reward: np.ndarray,  # (num_agents,) f32
     terminated: np.ndarray,  # (num_agents,) bool
     action_mask: np.ndarray,  # (num_agents, num_actions) bool, True = legal
@@ -21,7 +21,7 @@ def random_policy(
     # uniform over legal actions, the same masked-argmax trick as
     # mapox.agent.RandomAgent
     logits = rng.random(action_mask.shape)
-    return np.where(action_mask, logits, -np.inf).argmax(axis=-1)
+    return np.where(action_mask, logits, -np.inf).argmax(axis=-1).astype(np.uint16)
 
 
 if __name__ == "__main__":

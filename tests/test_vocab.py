@@ -247,5 +247,5 @@ def test_lut_to_default_fills_missing():
 
 def test_lut_to_dtypes():
     v = Vocabulary(["a"])
-    assert v.lut_to(v).dtype == jnp.int32
-    assert v.lut_to(v, dtype=jnp.int8).dtype == jnp.int8
+    assert v.lut_to(v).dtype == jnp.uint16
+    assert v.lut_to(v, dtype=jnp.int32).dtype == jnp.int32
