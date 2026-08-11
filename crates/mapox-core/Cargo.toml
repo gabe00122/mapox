@@ -12,6 +12,7 @@ name = "mapox_core"
 
 [dependencies]
 fastnoise-lite.workspace = true
+log.workspace = true
 rand.workspace = true
 ndarray.workspace = true
 rayon.workspace = true
@@ -21,5 +22,6 @@ serde_json.workspace = true
 # eframe compiles for native (winit + wgpu) and wasm (web runner + wgpu)
 # alike, so the demo app lives here once and each shell crate just runs it.
 eframe.workspace = true
+wgpu.workspace = true
 egui.workspace = true
 image.workspace = true

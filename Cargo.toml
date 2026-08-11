@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/mapox-core", "crates/mapox-py", "crates/mapox-web"]
+members = ["crates/mapox-core", "crates/mapox-py", "crates/mapox-web", "crates/mapox-burn"]
 resolver = "3"
 
 [workspace.package]
@@ -17,6 +17,12 @@ debug = "line-tables-only"
 opt-level = 3
 [workspace.dependencies]
 mapox-core = { path = "crates/mapox-core" }
+# default-features off at the workspace level so a member can decide: cargo
+# refuses `default-features = false` on an inherited dependency, so this is the
+# only place the choice can be made. mapox-web re-enables autotune through its
+# own default feature.
+mapox-burn = { path = "crates/mapox-burn", default-features = false }
+log = "0.4"
 
 # Core
 fastnoise-lite = "1.1.1"
@@ -31,7 +37,8 @@ pyo3 = "0.29.0"
 numpy = "0.29.0"
 
 # UI
-eframe = "0.35.0"
+eframe = { version="0.35.0", default-features = false, features = ["wayland", "wgpu_no_default_features"] }
+wgpu = { version = "*", features = ["webgpu", "vulkan"] }
 egui = "0.35.0"
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 
@@ -40,4 +47,3 @@ wasm-bindgen = "0.2.126"
 wasm-bindgen-futures = "0.4.76"
 web-sys = { version = "0.3.103", features = ["HtmlCanvasElement"] }
 console_error_panic_hook = "0.1.7"
-log = "0.4"

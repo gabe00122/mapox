@@ -4,6 +4,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>mapox</title>
+    <!-- empty, purely so the page doesn't 404 on /favicon.ico -->
+    <link rel="icon" href="data:," />
     <style>
       html,
       body {
@@ -26,19 +28,90 @@
         height: 100%;
         display: block;
       }
+      /* Sits over the canvas until the app starts: the policy is a multi-MB
+         download and the first frame is a long way off, so an unexplained
+         black page is the default experience without this. */
+      #status {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        color: #888;
+        font:
+          14px/1.5 ui-monospace,
+          monospace;
+        text-align: center;
+        white-space: pre-wrap;
+      }
+      #status.error {
+        color: #e06c75;
+      }
     </style>
   </head>
   <body>
     <canvas id="mapox-canvas"></canvas>
+    <div id="status">loading…</div>
     <!--
       mapox_web.js and mapox_web_bg.wasm are generated in lockstep by the
       wasm-bindgen CLI (scripts/build_web.py) -- don't edit or pin them by hand.
+      policy.safetensors is staged by the same script's --policy flag.
     -->
     <script type="module">
       import init, { start, version } from "./mapox_web.js";
-      await init();
-      console.log("mapox version:", version());
-      await start(document.getElementById("mapox-canvas"));
+
+      const status = document.getElementById("status");
+      const say = (text) => (status.textContent = text);
+
+      // ?seed=N seeds the action sampling, the same knob the native demo
+      // takes as a flag.
+      const params = new URLSearchParams(location.search);
+      const seed = Number(params.get("seed") ?? 0);
+
+      try {
+        // Inference is CPU-side (burn's flex backend), but eframe's renderer
+        // is built against a wgpu with no WebGL fallback, so the page needs an
+        // adapter to draw. Checked here because a missing one surfaces as a
+        // wasm panic ("unreachable") that says nothing about what is actually
+        // wrong.
+        if (!navigator.gpu) {
+          throw new Error(
+            "this browser has no WebGPU (navigator.gpu is undefined)",
+          );
+        }
+        if (!(await navigator.gpu.requestAdapter())) {
+          throw new Error(
+            "WebGPU is present but no adapter was granted.\n" +
+              "Check chrome://gpu; a browser restart usually fixes it.",
+          );
+        }
+
+        say("loading wasm…");
+        await init();
+        console.log("mapox version:", version());
+
+        say("loading policy…");
+        const response = await fetch("./policy.safetensors");
+        if (!response.ok) {
+          throw new Error(
+            `policy.safetensors: ${response.status} ${response.statusText}\n` +
+              `stage one with: uv run scripts/build_web.py --policy <path>`,
+          );
+        }
+        const policy = new Uint8Array(await response.arrayBuffer());
+
+        // start() only resolves when the app shuts down, so the overlay
+        // comes off first; eframe paints over it either way.
+        say("starting…");
+        status.remove();
+        await start(document.getElementById("mapox-canvas"), policy, seed);
+      } catch (err) {
+        document.body.appendChild(status);
+        status.className = "error";
+        say(String(err.message ?? err));
+        throw err;
+      }
     </script>
   </body>
 </html>

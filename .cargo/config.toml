@@ -11,4 +11,22 @@ rustflags = ["-C", "target-cpu=native"]
 # `strip=debuginfo` counteracts the workspace profile's `debug =
 # "line-tables-only"`, which exists for native `perf` runs. Carrying DWARF into
 # the wasm inflates it severalfold and no browser here reads it.
-rustflags = ["-C", "strip=debuginfo"]
+#
+# `getrandom_backend` points getrandom at the browser's crypto API; it is only
+# reachable as a rustflag, and mapox-web's `getrandom` feature is the other
+# half of the same switch.
+# `+simd128` is off by default on this target. burn-flex's `simd` feature (and
+# the gemm it vendors) compiles to scalar code without it, which would make the
+# CPU backend look several times worse than it is. Every browser that has
+# WebGPU has had simd128 for years, so there is nothing to lose by requiring it.
+# This is only one of three switches: mapox-burn must also pass `simd` *and*
+# `std` through to burn-flex, or gemm cannot see this flag at all. See the
+# dependency comment in crates/mapox-burn/Cargo.toml.
+rustflags = [
+    "-C",
+    "strip=debuginfo",
+    "-C",
+    "target-feature=+simd128",
+    "--cfg",
+    'getrandom_backend="wasm_js"',
+]

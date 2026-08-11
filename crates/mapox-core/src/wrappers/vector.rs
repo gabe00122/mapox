@@ -18,9 +18,6 @@ impl VectorWrapper {
     }
 }
 
-/// Splits the flat `(envs * agents, ...)` buffers into one `TimeStepMut` per
-/// env so each env can fill its own slice from a rayon worker. The chunks are
-/// zipped lazily so no per-step collection is allocated.
 fn split_timestep<'a>(
     timestep: &'a mut TimeStepMut<'_>,
     agents_per_env: usize,

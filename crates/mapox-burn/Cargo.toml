@@ -1,0 +1,58 @@
+[package]
+name = "mapox-burn"
+description = "Burn inference for jaxrl-trained mapox policies"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+# Autotune is on by default, as it is in burn. It is a feature rather than a
+# hard-coded passthrough because its cost is paid entirely at warmup and, in
+# the browser, paid again on every page load: cubecl's autotune cache is
+# filesystem-backed, and `std_io` is false for wasm targets, so nothing
+# persists between loads. `--no-default-features` is how you measure that.
+[features]
+default = ["autotune"]
+autotune = ["burn/autotune"]
+
+[dependencies]
+# `flex` is burn's pure-rust CPU backend (the ndarray successor), and the only
+# backend here: it is the one backend that builds for both native and
+# wasm32-unknown-unknown, which keeps inference identical on the two targets
+# and keeps the readback synchronous (see policy.rs). `std` and `simd` have to
+# be listed here, not just assumed: `default-features = false` strips the
+# backend's own defaults, and the facade forwards these two to flex only when
+# asked. Without them flex runs a scalar gemm -- 1.7x on a native decode step
+# (8.9ms -> 5.3ms).
+#
+# `std` is load-bearing on wasm too, despite the name suggesting otherwise. The
+# vendored gemm picks its wasm kernel through `feature_detected!("simd128")`,
+# and that macro only reads the simd128 flag when gemm's own `std` feature is
+# on; otherwise it expands to `cfg!(feature = "simd128")`, which gemm-common
+# does not define, so it folds to false and the simd128 kernel is unreachable
+# (gemm-common-0.19.0/src/gemm.rs:1040 and src/lib.rs:69). Dropping `std` here
+# silently reverts the web build to scalar gemm, whatever `.cargo/config.toml`
+# sets. It costs ~136KB of a 9MB module, and eframe links std regardless.
+#
+# flex's `rayon` default stays off on purpose: wasm32-unknown-unknown has no
+# threads, and it measured slower here anyway at this batch size.
+burn = { version = "0.21.0", default-features = false, features = ["flex", "std", "simd"] }
+mapox-core = { version = "1.0.0", path = "../mapox-core" }
+log.workspace = true
+ndarray.workspace = true
+rand.workspace = true
+safetensors = "0.8.0"
+serde.workspace = true
+serde_json.workspace = true
+
+# AVX-512 gemm kernels, another 1.2x on top of `simd` (5.3ms -> 4.3ms). Gated to
+# x86_64 because it is meaningless elsewhere, and safe to ship despite the name:
+# pulp picks it with a runtime `V4::try_new()` and falls back to AVX2/scalar. The
+# native build is already non-portable via `target-cpu=native` in
+# .cargo/config.toml, so this adds no new constraint. Web builds never see it.
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+burn = { version = "0.21.0", default-features = false, features = ["x86-v4"] }
+
+[dev-dependencies]
+env_logger = "0.11"

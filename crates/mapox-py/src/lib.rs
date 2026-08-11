@@ -4,9 +4,9 @@ mod _core {
         env::Environment,
         envs::find_return::FindReturnConfig,
         make::{EnvConfig, make, make_vec},
-        policy::{Policy, PolicyError, PolicyInputs, RandomPolicy},
+        policy::{Policy, PolicyError, RandomPolicy},
         render::{RenderApp, open_window},
-        timestep::{OBS_CHANNELS, TimeStepMut},
+        timestep::{OBS_CHANNELS, TimeStepMut, TimeStepRef},
         vocab::VocabId,
     };
     use numpy::{
@@ -34,15 +34,15 @@ mod _core {
     impl Policy for PyPolicy {
         fn act(
             &mut self,
-            inputs: &PolicyInputs<'_>,
+            timestep: &TimeStepRef<'_>,
             actions: &mut [VocabId],
         ) -> Result<(), PolicyError> {
             Python::attach(|py| {
                 let result = (|| -> PyResult<()> {
-                    let obs = PyArray4::from_array(py, &inputs.obs);
-                    let reward = PyArray1::from_array(py, &inputs.reward);
-                    let terminated = PyArray1::from_array(py, &inputs.terminated);
-                    let action_mask = PyArray2::from_array(py, &inputs.action_mask);
+                    let obs = PyArray4::from_array(py, &timestep.obs);
+                    let reward = PyArray1::from_array(py, &timestep.reward);
+                    let terminated = PyArray1::from_array(py, &timestep.terminated);
+                    let action_mask = PyArray2::from_array(py, &timestep.action_mask);
 
                     let returned = self
                         .callable
@@ -73,6 +73,20 @@ mod _core {
                 })
             })
         }
+
+        /// Forwarded to a `reset` attribute on the callable when it has one,
+        /// so a stateful python policy can drop its carry; a plain function
+        /// needs nothing.
+        fn reset(&mut self) {
+            Python::attach(|py| {
+                let Ok(reset) = self.callable.getattr(py, "reset") else {
+                    return;
+                };
+                if let Err(err) = reset.call0(py) {
+                    err.print(py);
+                }
+            });
+        }
     }
 
     /// Opens the viewer window and blocks until it closes. `policy` drives
@@ -88,7 +102,7 @@ mod _core {
         let config = match config_json {
             Some(json) => serde_json::from_str::<EnvConfig>(json)
                 .map_err(|err| PyValueError::new_err(err.to_string()))?,
-            None => EnvConfig::FindReturn(FindReturnConfig::default()),
+            None => EnvConfig::RustFindReturn(FindReturnConfig::default()),
         };
         let env = make(&config);
         let policy: Box<dyn Policy> = match policy {

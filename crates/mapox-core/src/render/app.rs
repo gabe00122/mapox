@@ -1,15 +1,13 @@
 //! The interactive render app: eframe owns the loop, a [`Policy`] supplies
-//! actions once per env step, and the keyboard can override the focused
-//! agent. Training keeps the inverse control model and never touches this.
-
-use egui::{Color32, RichText, Stroke, StrokeKind};
-use ndarray::{Array1, Array2, Array4};
+//! actions once per env step, and in step-on-input pacing the keyboard
+//! overrides the focused agent. Training keeps the inverse control model and
+//! never touches this.
 
 use crate::{
     env::Environment,
     envs::find_return::FindReturnConfig,
     make::{EnvConfig, make},
-    policy::{Policy, PolicyInputs, RandomPolicy},
+    policy::{Policy, RandomPolicy},
     render::{
         KEY_HINTS,
         env::{GridRenderSettings, GridRenderState},
@@ -18,54 +16,10 @@ use crate::{
         tileset::Tileset,
     },
     symbols,
-    timestep::{OBS_CHANNELS, TimeStepMut},
+    timestep::TimeStepBuffers,
     vocab::VocabId,
 };
-
-/// Owns the arrays a [`TimeStepMut`] borrows, sized once from the env's specs.
-struct TimeStepBuffers {
-    obs: Array4<VocabId>,
-    time: Array1<i32>,
-    terminated: Array1<bool>,
-    last_action: Array1<VocabId>,
-    reward: Array1<f32>,
-    action_mask: Array2<bool>,
-    task_ids: Array1<i32>,
-}
-
-impl TimeStepBuffers {
-    fn new(env: &dyn Environment) -> Self {
-        let num_agents = env.num_agents();
-        let obs_spec = env.observation_spec();
-
-        Self {
-            obs: Array4::zeros((
-                num_agents,
-                obs_spec.width as usize,
-                obs_spec.height as usize,
-                OBS_CHANNELS,
-            )),
-            time: Array1::zeros(num_agents),
-            terminated: Array1::default(num_agents),
-            last_action: Array1::zeros(num_agents),
-            reward: Array1::zeros(num_agents),
-            action_mask: Array2::default((num_agents, env.action_spec().num_actions)),
-            task_ids: Array1::zeros(num_agents),
-        }
-    }
-
-    fn as_mut(&mut self) -> TimeStepMut<'_> {
-        TimeStepMut {
-            obs: self.obs.view_mut(),
-            time: self.time.view_mut(),
-            terminated: self.terminated.view_mut(),
-            last_action: self.last_action.view_mut(),
-            reward: self.reward.view_mut(),
-            action_mask: self.action_mask.view_mut(),
-            task_ids: self.task_ids.view_mut(),
-        }
-    }
-}
+use egui::{Color32, RichText, Stroke, StrokeKind};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ViewMode {
@@ -77,8 +31,8 @@ pub enum ViewMode {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PacingMode {
-    /// The env steps at [`RenderApp::target_fps`]; a held movement key
-    /// overrides the focused agent's action.
+    /// The env steps at [`RenderApp::target_fps`] under the policy alone;
+    /// movement keys are ignored.
     FreeRun,
     /// The env only steps when a movement key press supplies the focused
     /// agent's action.
@@ -94,8 +48,6 @@ struct FrameInput {
     reset: bool,
     /// Direction index (up/right/down/left) that was newly pressed.
     dir_pressed: Option<usize>,
-    /// Direction index currently held down.
-    dir_down: Option<usize>,
 }
 
 pub struct RenderApp {
@@ -139,8 +91,6 @@ pub struct RenderApp {
     /// it is a constant `predicted_dt`, which ran the env slow when idle and
     /// fast whenever mouse motion raised the frame rate.
     next_step_time: Option<f64>,
-    /// A key pressed between free-run steps, latched until the next step.
-    pending_override: Option<usize>,
 
     seed: u64,
 }
@@ -162,7 +112,7 @@ impl RenderApp {
         ];
 
         let seed = 0;
-        env.reset(seed, &mut buffers.as_mut());
+        env.reset(seed, &mut buffers.view_mut());
 
         let num_agents = env.num_agents();
         Self {
@@ -190,7 +140,6 @@ impl RenderApp {
             focused_agent: 0,
             target_fps: 10.0,
             next_step_time: None,
-            pending_override: None,
             seed,
         }
     }
@@ -200,7 +149,7 @@ impl RenderApp {
     /// build.
     pub fn demo() -> Self {
         Self::new(
-            make(&EnvConfig::FindReturn(FindReturnConfig::default())),
+            make(&EnvConfig::RustFindReturn(FindReturnConfig::default())),
             Box::new(RandomPolicy::new(0)),
         )
     }
@@ -223,17 +172,13 @@ impl RenderApp {
             dir_pressed: DIRECTION_KEYS
                 .into_iter()
                 .position(|(a, b)| i.key_pressed(a) || i.key_pressed(b)),
-            dir_down: DIRECTION_KEYS
-                .into_iter()
-                .position(|(a, b)| i.key_down(a) || i.key_down(b)),
         })
     }
 
     fn reset(&mut self) {
         self.seed += 1;
-        self.env.reset(self.seed, &mut self.buffers.as_mut());
+        self.env.reset(self.seed, &mut self.buffers.view_mut());
         self.next_step_time = None;
-        self.pending_override = None;
         // any precomputed actions were for the old episode's observations
         self.actions_ready = false;
     }
@@ -244,28 +189,24 @@ impl RenderApp {
     /// slow policy called on the keypress frame would hold back the very
     /// frame that shows the step's result.
     fn compute_actions(&mut self) {
-        // field accesses stay inline so the borrows of `buffers`, `policy`
-        // and `actions` split; a `&self` helper for the inputs would not
-        let inputs = PolicyInputs {
-            obs: self.buffers.obs.view(),
-            reward: self.buffers.reward.view(),
-            terminated: self.buffers.terminated.view(),
-            action_mask: self.buffers.action_mask.view(),
-        };
-        if let Err(err) = self.policy.act(&inputs, &mut self.actions) {
-            eprintln!("policy failed, falling back to random: {err}");
+        // borrows `buffers` only, so the borrows of `policy` and `actions`
+        // still split; a `&self` helper on the app would not
+        let timestep = self.buffers.view();
+        if let Err(err) = self.policy.act(&timestep, &mut self.actions) {
+            log::error!("policy failed, falling back to random: {err}");
             self.policy = Box::new(RandomPolicy::new(self.seed));
             self.policy_failed = true;
             self.policy
-                .act(&inputs, &mut self.actions)
+                .act(&timestep, &mut self.actions)
                 .expect("random policy is infallible");
         }
         self.actions_ready = true;
     }
 
-    /// One env step: the precomputed policy actions, with the keyboard
-    /// override replacing the focused agent's. The inline fallback only runs
-    /// when free-run catch-up takes several steps in a single frame.
+    /// One env step: the precomputed policy actions, with `override_dir`
+    /// replacing the focused agent's (step-on-input pacing only; free-run
+    /// passes `None`). The inline `compute_actions` fallback only runs when
+    /// free-run catch-up takes several steps in a single frame.
     fn step_env(&mut self, override_dir: Option<usize>) {
         if !self.actions_ready {
             self.compute_actions();
@@ -275,17 +216,11 @@ impl RenderApp {
             self.actions[self.focused_agent] = action;
         }
 
-        self.env.step(&self.actions, &mut self.buffers.as_mut());
+        self.env.step(&self.actions, &mut self.buffers.view_mut());
         self.actions_ready = false;
-
-        // keep the window alive across episode ends without user action
-        // (FindReturn never terminates; this is for envs that do)
-        if !self.buffers.terminated.is_empty() && self.buffers.terminated.iter().all(|&t| t) {
-            self.reset();
-        }
     }
 
-    fn free_run(&mut self, ui: &egui::Ui, input: &FrameInput) {
+    fn free_run(&mut self, ui: &egui::Ui) {
         let now = ui.input(|i| i.time);
         let interval = f64::from(1.0 / self.target_fps);
         // first free-run frame steps immediately
@@ -294,8 +229,7 @@ impl RenderApp {
         // cap the catch-up after a stall (window drag, slow policy)
         let mut steps = 0;
         while now >= next && steps < 4 {
-            let override_dir = input.dir_down.or(self.pending_override.take());
-            self.step_env(override_dir);
+            self.step_env(None);
             next += interval;
             steps += 1;
         }
@@ -455,15 +389,10 @@ impl eframe::App for RenderApp {
             PacingMode::StepOnInput => {
                 if let Some(dir) = input.dir_pressed {
                     self.step_env(Some(dir));
-                    self.pending_override = None;
                 }
             }
-            PacingMode::FreeRun => {
-                if input.dir_pressed.is_some() {
-                    self.pending_override = input.dir_pressed;
-                }
-                self.free_run(ui, &input);
-            }
+            // free-run ignores movement keys: the policy drives every agent
+            PacingMode::FreeRun => self.free_run(ui),
         }
 
         self.env.render_state_into(&mut self.render_state);

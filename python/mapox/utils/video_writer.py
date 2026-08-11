@@ -4,12 +4,6 @@ import numpy as np
 from ffmpeg import FFmpeg
 
 
-def grayscale_to_rgb(image: np.ndarray) -> np.ndarray:
-    if image.ndim == 3:
-        image = np.repeat(image[..., np.newaxis], 3, axis=-1)
-    return image
-
-
 def save_video(frames: np.ndarray, filename: str, fps=60):
     print("Saving video...")
     Path(filename).parent.mkdir(parents=True, exist_ok=True)

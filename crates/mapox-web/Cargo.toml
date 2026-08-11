@@ -14,13 +14,29 @@ authors.workspace = true
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+# Passthrough so `cargo build -p mapox-web --no-default-features` builds the
+# page without cubecl autotune; see mapox-burn's manifest for why that is
+# worth being able to do.
+[features]
+default = ["autotune"]
+autotune = ["mapox-burn/autotune"]
+
 [dependencies]
 mapox-core.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
+mapox-burn.workspace = true
 eframe.workspace = true
 wasm-bindgen.workspace = true
+# Not used directly: `#[wasm_bindgen]` on an `async fn` expands to code that
+# names this crate, so it has to be in the graph.
 wasm-bindgen-futures.workspace = true
 web-sys.workspace = true
 console_error_panic_hook.workspace = true
 log.workspace = true
+serde_json.workspace = true
+# Not used directly: getrandom refuses to build for wasm32-unknown-unknown
+# unless a backend is chosen, and the choice has to be made by the crate at
+# the root of the build. Paired with the `getrandom_backend` rustflag in
+# .cargo/config.toml -- both are required.
+getrandom = { version = "0.4", features = ["wasm_js"] }

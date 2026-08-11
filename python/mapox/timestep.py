@@ -2,9 +2,6 @@ from typing import NamedTuple
 
 import jax
 
-Metrics = dict[str, jax.Array]
-
-
 class TimeStep(NamedTuple):
     """The observation that the agent sees.
 

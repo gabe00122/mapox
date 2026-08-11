@@ -1,3 +1,4 @@
+from mapox.envs.rust_env import RustFindReturnConfig, RustEnv
 from typing import Literal, Any, Callable
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -16,13 +17,14 @@ from mapox.environment import Environment
 from mapox.wrappers.multitask import MultiTaskWrapper
 from mapox.wrappers.vector import VectorWrapper
 
-EnvironmentConfig = (
+type EnvironmentConfig = (
     FindReturnConfig
     | TravelingSalesmanConfig
     | ScoutsConfig
     | KingHillConfig
     | PreyConfig
     | SnakeConfig
+    | RustFindReturnConfig
 )
 
 
@@ -67,6 +69,9 @@ class EnvironmentFactory:
         env_name: str | None = None,
     ) -> tuple[Environment, int]:
         num_tasks = 1
+
+        if env_config.env_type.startswith("rust"):
+            return RustEnv(env_config, vec_count), 1
 
         if env_config.env_type == "multi":
             num_tasks = len(env_config.envs)

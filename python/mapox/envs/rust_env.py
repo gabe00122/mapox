@@ -1,12 +1,12 @@
 from functools import cached_property
-from typing import Any
+from typing import Any, Literal
 
 import jax
 import numpy as np
 from jax import Array
 from jax import numpy as jnp
 from jax.experimental import io_callback
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from mapox._core import Env as _CoreEnv
 from mapox.environment import Environment
@@ -16,6 +16,24 @@ from mapox.specs import DiscreteActionSpec, ObservationSpec
 from mapox.timestep import TimeStep
 from mapox.vocab import Vocabulary
 
+
+class RustFindReturnConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    env_type: Literal["rust_find_return"] = "rust_find_return"
+
+    num_agents: int = 8
+    num_flags: int = 1
+
+    width: int = 40
+    height: int = 40
+    view_width: int = 11
+    view_height: int = 11
+
+    mapgen_threshold: float = 0.3
+    digging_timeout: int = 5
+    treasure_reward: float = 1.0
+
+type RustEnvConfig = RustFindReturnConfig
 
 class RustEnv(Environment[None]):
     """Exposes the compiled `mapox._core.Env` through the jax `Environment`
@@ -31,12 +49,8 @@ class RustEnv(Environment[None]):
     timesteps into; io_callback copies them into device arrays on return.
     """
 
-    def __init__(self, config: str | BaseModel, num_envs: int = 1):
-        # accepts either a serialized rust EnvConfig or a pydantic config
-        # (e.g. mapox.envs.find_return.FindReturnConfig) that mirrors one
-        config_json = (
-            config.model_dump_json() if isinstance(config, BaseModel) else config
-        )
+    def __init__(self, config: RustEnvConfig, num_envs: int = 1):
+        config_json = config.model_dump_json()
         self._env = _CoreEnv(config_json, num_envs)
 
         num_agents, view_width, view_height, channels = self._env.observation_shape

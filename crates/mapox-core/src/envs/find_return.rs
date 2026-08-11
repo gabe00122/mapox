@@ -17,7 +17,6 @@ use crate::{
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[serde(default)]
 pub struct FindReturnConfig {
     pub num_agents: usize,
     pub num_flags: usize,
@@ -35,7 +34,7 @@ pub struct FindReturnConfig {
 impl Default for FindReturnConfig {
     fn default() -> Self {
         Self {
-            num_agents: 32,
+            num_agents: 8,
             num_flags: 1,
             width: 40,
             height: 40,

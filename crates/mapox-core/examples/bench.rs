@@ -6,59 +6,14 @@ use mapox_core::env::Environment;
 use mapox_core::envs::find_return::FindReturnConfig;
 use mapox_core::make::EnvConfig;
 use mapox_core::make::{make, make_vec};
-use mapox_core::timestep::{OBS_CHANNELS, TimeStepMut};
+use mapox_core::timestep::TimeStepBuffers;
 use mapox_core::vocab::VocabId;
-use ndarray::{Array1, Array2, Array4};
 use rand::{RngExt, SeedableRng, rngs::SmallRng};
 
 const AGENTS_PER_ENV: usize = 8;
 const TOTAL_AGENTS: usize = 4096;
 const WARMUP_STEPS: usize = 200;
 const BENCH_STEPS: usize = 20000;
-
-struct Buffers {
-    obs: Array4<VocabId>,
-    time: Array1<i32>,
-    terminated: Array1<bool>,
-    last_action: Array1<VocabId>,
-    reward: Array1<f32>,
-    action_mask: Array2<bool>,
-    task_ids: Array1<i32>,
-}
-
-impl Buffers {
-    fn new(env: &Box<dyn Environment>) -> Self {
-        let num_agents = env.num_agents();
-        let obs_spec = env.observation_spec();
-
-        Self {
-            obs: Array4::zeros((
-                num_agents,
-                obs_spec.width as usize,
-                obs_spec.height as usize,
-                OBS_CHANNELS,
-            )),
-            time: Array1::zeros(num_agents),
-            terminated: Array1::default(num_agents),
-            last_action: Array1::zeros(num_agents),
-            reward: Array1::zeros(num_agents),
-            action_mask: Array2::default((num_agents, env.action_spec().num_actions)),
-            task_ids: Array1::zeros(num_agents),
-        }
-    }
-
-    fn timestep(&mut self) -> TimeStepMut<'_> {
-        TimeStepMut {
-            obs: self.obs.view_mut(),
-            time: self.time.view_mut(),
-            terminated: self.terminated.view_mut(),
-            last_action: self.last_action.view_mut(),
-            reward: self.reward.view_mut(),
-            action_mask: self.action_mask.view_mut(),
-            task_ids: self.task_ids.view_mut(),
-        }
-    }
-}
 
 fn format_rate(rate: f64) -> String {
     const UNITS: &[(f64, &str)] = &[(1_000_000_000.0, "B"), (1_000_000.0, "M"), (1_000.0, "K")];
@@ -73,7 +28,7 @@ fn format_rate(rate: f64) -> String {
 }
 
 fn bench(label: &str, env: &mut Box<dyn Environment>) {
-    let mut buffers = Buffers::new(env);
+    let mut buffers = TimeStepBuffers::new(env.as_ref());
     let mut rng = SmallRng::seed_from_u64(0);
 
     let num_agents = env.num_agents();
@@ -85,15 +40,15 @@ fn bench(label: &str, env: &mut Box<dyn Environment>) {
         })
         .collect();
 
-    env.reset(0, &mut buffers.timestep());
+    env.reset(0, &mut buffers.view_mut());
 
     for _ in 0..WARMUP_STEPS {
-        env.step(&actions, &mut buffers.timestep());
+        env.step(&actions, &mut buffers.view_mut());
     }
 
     let start = Instant::now();
     for _ in 0..BENCH_STEPS {
-        env.step(&actions, &mut buffers.timestep());
+        env.step(&actions, &mut buffers.view_mut());
     }
     let elapsed = start.elapsed();
 
@@ -116,10 +71,10 @@ fn main() {
 
     bench(
         "single env",
-        &mut make(&EnvConfig::FindReturn(config.clone())),
+        &mut make(&EnvConfig::RustFindReturn(config.clone())),
     );
     bench(
         &format!("vector ({vec_count} envs)"),
-        &mut make_vec(&EnvConfig::FindReturn(config.clone()), vec_count),
+        &mut make_vec(&EnvConfig::RustFindReturn(config.clone()), vec_count),
     );
 }
