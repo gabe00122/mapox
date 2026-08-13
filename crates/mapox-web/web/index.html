@@ -59,7 +59,7 @@
       policy.safetensors is staged by the same script's --policy flag.
     -->
     <script type="module">
-      import init, { start, version } from "./mapox_web.js";
+      import init, { start } from "./mapox_web.js";
 
       const status = document.getElementById("status");
       const say = (text) => (status.textContent = text);
@@ -89,7 +89,6 @@
 
         say("loading wasm…");
         await init();
-        console.log("mapox version:", version());
 
         say("loading policy…");
         const response = await fetch("./policy.safetensors");

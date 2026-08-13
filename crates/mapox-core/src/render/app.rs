@@ -155,18 +155,6 @@ impl RenderApp {
         }
     }
 
-    /// The default [`FindReturn`](crate::envs::find_return::FindReturn)
-    /// episode under a random policy, used by the native example and the web
-    /// build.
-    pub fn demo() -> Self {
-        Self::new(
-            make(&EnvConfig::RustFindReturn(FindReturnConfig::default())),
-            512,
-            0,
-            Box::new(RandomPolicy::new()),
-        )
-    }
-
     fn read_input(ui: &egui::Ui) -> FrameInput {
         use egui::Key;
 

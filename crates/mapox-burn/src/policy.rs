@@ -1,24 +1,3 @@
-//! [`BurnPolicy`] adapts the model to mapox-core's [`Policy`] callback, the
-//! rust twin of `RunPolicy` in jaxrl's `scripts/demo_policy.py`. Everything the
-//! model conditions on comes off the timestep, `last_action` included: the env
-//! writes the action it actually ran, so a keyboard override is reflected
-//! rather than missed. The only state left here is the run's rng and its
-//! reward tally — the decode cursor lives in [`Carry`], next to the cache it
-//! indexes.
-//!
-//! The model is in distribution for `max_seq_length` consecutive steps at most:
-//! the kv cache and the rope tables are both that long, and the model trained
-//! on episodes that long. That is a property of the export, not a setting —
-//! a shorter context is a different model — so a driver reads it off
-//! [`BurnPolicy::context_length`] and resets at least that often.
-//! [`Policy::act`] reports a driver that does not as an error rather than
-//! silently restarting the model's context underneath a running episode.
-//!
-//! The backend is a CPU one on both targets, so the logits are already in host
-//! memory and [`Policy::act`] fills in the actions in one call — natively and
-//! in the browser alike. A device backend would need an async readback, which
-//! neither this trait nor the render loop has a shape for.
-
 use burn::tensor::backend::Backend;
 use mapox_core::policy::{Policy, PolicyError};
 use mapox_core::timestep::TimeStepRef;
@@ -49,13 +28,6 @@ impl<B: Backend> BurnPolicy<B> {
         }
     }
 
-    /// The longest run of steps this policy stays in distribution for, and so
-    /// the episode length a driver should run it at: that makes the env reset
-    /// and the end of the model's context the same event.
-    ///
-    /// Read off the export rather than configurable — the cache and the rope
-    /// tables are built to this length and the model trained at it, so a
-    /// shorter context is a different model, not a setting.
     pub fn context_length(&self) -> usize {
         self.model.max_seq_length
     }
@@ -108,9 +80,6 @@ impl<B: Backend> Policy for BurnPolicy<B> {
     }
 
     fn reset(&mut self, num_agents: usize, seed: u64) -> Result<(), PolicyError> {
-        // before the `num_agents` update below, which the mean divides by.
-        // `log` rather than `println!`: on wasm stdout goes nowhere, and the
-        // browser build routes this to the console through eframe's WebLogger
         if self.carry.time > 0 {
             log::info!(
                 "[{} steps] mean reward per agent: {:.3}",
@@ -121,9 +90,6 @@ impl<B: Backend> Policy for BurnPolicy<B> {
         self.episode_reward = 0.0;
         self.rng = SmallRng::seed_from_u64(seed);
 
-        // the viewer's env is fixed for the life of the app, so the resize only
-        // guards the contract; the cache is shaped [batch, ..] and cannot be
-        // reused across a batch change
         if num_agents == self.num_agents {
             self.carry.rewind();
         } else {

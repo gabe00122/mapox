@@ -2,7 +2,7 @@
 mod _core {
     use mapox_core::{
         env::Environment,
-        make::{EnvConfig, make, make_vec},
+        make::{EnvConfig, make_vec},
         policy::{Policy, PolicyError, RandomPolicy},
         render::{RenderApp, open_window},
         timestep::{OBS_CHANNELS, TimeStepMut, TimeStepRef},
@@ -104,6 +104,16 @@ mod _core {
         inner: Option<Box<dyn Environment + Send + Sync>>,
     }
 
+    impl Env {
+        fn env(&self) -> &Box<dyn Environment + Send + Sync> {
+            self.inner.as_ref().expect("The inner env is missing")
+        }
+
+        fn env_mut(&mut self) -> &mut Box<dyn Environment + Send + Sync> {
+            self.inner.as_mut().expect("The inner env is missing")
+        }
+    }
+
     #[pymethods]
     impl Env {
         #[new]
@@ -117,25 +127,18 @@ mod _core {
 
         #[getter]
         fn num_agents(&self) -> usize {
-            self.inner
-                .as_ref()
-                .expect("The inner env is missing")
-                .num_agents()
+            self.env().num_agents()
         }
 
         #[getter]
         fn num_actions(&self) -> usize {
-            self.inner
-                .as_ref()
-                .expect("The inner env is missing")
-                .action_spec()
-                .num_actions
+            self.env().action_spec().num_actions
         }
 
         /// Expected shape of the `obs` buffer: (num_agents, view_width, view_height, channels).
         #[getter]
         fn observation_shape(&self) -> (usize, usize, usize, usize) {
-            let env = self.inner.as_ref().expect("The inner env is missing");
+            let env = self.env();
 
             let spec = env.observation_spec();
             (
@@ -148,22 +151,12 @@ mod _core {
 
         #[getter]
         fn obs_symbols(&self) -> Vec<&'static str> {
-            self.inner
-                .as_ref()
-                .expect("The inner env is missing")
-                .obs_vocab()
-                .symbols()
-                .to_vec()
+            self.env().obs_vocab().symbols().to_vec()
         }
 
         #[getter]
         fn action_symbols(&self) -> Vec<&'static str> {
-            self.inner
-                .as_ref()
-                .expect("The inner env is missing")
-                .action_vocab()
-                .symbols()
-                .to_vec()
+            self.env().action_vocab().symbols().to_vec()
         }
 
         #[allow(clippy::too_many_arguments)]
@@ -189,10 +182,7 @@ mod _core {
                 task_ids: task_ids.as_array_mut(),
             };
             py.detach(|| {
-                self.inner
-                    .as_mut()
-                    .expect("The inner env is missing")
-                    .reset(seed, &mut timestep);
+                self.env_mut().reset(seed, &mut timestep);
             });
         }
 
@@ -221,10 +211,7 @@ mod _core {
             };
 
             py.detach(|| {
-                self.inner
-                    .as_mut()
-                    .expect("The inner env is missing")
-                    .step(actions, &mut timestep);
+                self.env_mut().step(actions, &mut timestep);
             });
             Ok(())
         }

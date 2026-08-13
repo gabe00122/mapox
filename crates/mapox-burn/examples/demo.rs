@@ -51,6 +51,8 @@ where
         B::name(&B::Device::default()),
     );
 
+    let length = loaded.meta.max_seq_length;
+
     let env_json = loaded
         .meta
         .env_config
@@ -60,7 +62,6 @@ where
     let env = make(&env_config);
 
     let policy = BurnPolicy::new(loaded, env.num_agents(), args.seed);
-    let length = policy.context_length();
 
     open_window(RenderApp::new(env, length, args.seed, Box::new(policy)))?;
     Ok(())

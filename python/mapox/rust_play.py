@@ -1,12 +1,10 @@
 from mapox.envs.rust_env import RustEnv, RustFindReturnConfig
-import jax
 from mapox.agent import Agent, RandomAgent
 from mapox._core import enjoy
 
 import numpy as np
 
 from mapox.timestep import TimeStep
-import mapox
 
 
 class RustAgentWrapper:
