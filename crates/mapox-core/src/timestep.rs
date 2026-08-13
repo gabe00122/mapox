@@ -21,9 +21,6 @@ pub struct TimeStepMut<'a> {
     pub task_ids: ArrayViewMut1<'a, i32>, // (num_agents,)
 }
 
-/// Read-only twin of [`TimeStepMut`], borrowed from whoever owns the buffers.
-/// What a [`Policy`](crate::policy::Policy) sees: the same fields the env
-/// writes, none of them writable.
 #[derive(Debug)]
 pub struct TimeStepRef<'a> {
     pub obs: ArrayView4<'a, VocabId>, // (num_agents, view_w, view_h, 4)
@@ -36,8 +33,6 @@ pub struct TimeStepRef<'a> {
 }
 
 impl TimeStepMut<'_> {
-    /// Reborrows every field immutably. Named `view` after ndarray rather than
-    /// `as_ref` so it does not shadow the `AsRef` convention.
     pub fn view(&self) -> TimeStepRef<'_> {
         TimeStepRef {
             obs: self.obs.view(),
@@ -50,11 +45,6 @@ impl TimeStepMut<'_> {
         }
     }
 }
-
-/// Owns the arrays a [`TimeStepMut`] borrows. Anything that drives an env from
-/// rust — the viewer, the bench, tests — needs this exact set sized off the
-/// env's specs; the python bindings are the one caller that does not, since
-/// numpy owns their buffers and they build a [`TimeStepMut`] directly.
 #[derive(Debug)]
 pub struct TimeStepBuffers {
     pub obs: Array4<VocabId>,

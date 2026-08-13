@@ -36,30 +36,17 @@ class RustFindReturnConfig(BaseModel):
 type RustEnvConfig = RustFindReturnConfig
 
 class RustEnv(Environment[None]):
-    """Exposes the compiled `mapox._core.Env` through the jax `Environment`
-    interface via ordered `io_callback`s.
-
-    The episode state lives inside the rust env, so the python-side EnvState
-    is always ``None`` and the wrapper is stateful: callbacks are ordered so
-    reset/step cannot be reordered or elided by jit, and one wrapper instance
-    must not be shared across traces that interleave (in particular, ordered
-    callbacks do not support vmap — vectorize on the rust side instead).
-
-    Each instance owns persistent numpy buffers that the rust env writes
-    timesteps into; io_callback copies them into device arrays on return.
-    """
-
     def __init__(self, config: RustEnvConfig, num_envs: int = 1):
         config_json = config.model_dump_json()
-        self._env = _CoreEnv(config_json, num_envs)
+        self.inner = _CoreEnv(config_json, num_envs)
 
-        num_agents, view_width, view_height, channels = self._env.observation_shape
-        num_actions = self._env.num_actions
+        num_agents, view_width, view_height, channels = self.inner.observation_shape
+        num_actions = self.inner.num_actions
         self._view_width = view_width
         self._view_height = view_height
 
-        self._obs_vocab = Vocabulary(self._env.obs_symbols).freeze()
-        self._action_vocab = Vocabulary(self._env.action_symbols).freeze()
+        self._obs_vocab = Vocabulary(self.inner.obs_symbols).freeze()
+        self._action_vocab = Vocabulary(self.inner.action_symbols).freeze()
 
         self._obs = np.zeros((num_agents, view_width, view_height, channels), np.uint16)
         self._time = np.zeros((num_agents,), np.int32)
@@ -100,7 +87,7 @@ class RustEnv(Environment[None]):
         )
 
     def _reset_callback(self, seed: np.ndarray) -> TimeStep:
-        self._env.reset(
+        self.inner.reset(
             int(seed),
             self._obs,
             self._time,
@@ -115,7 +102,7 @@ class RustEnv(Environment[None]):
     def _step_callback(self, action: np.ndarray) -> TimeStep:
         if np.any(action < 0) or np.any(action > np.iinfo(np.uint16).max):
             raise ValueError("action id outside the Rust VocabId range")
-        self._env.step(
+        self.inner.step(
             np.ascontiguousarray(action, dtype=np.uint16),
             self._obs,
             self._time,
@@ -171,11 +158,11 @@ class RustEnv(Environment[None]):
 
     @cached_property
     def action_spec(self) -> DiscreteActionSpec:
-        return DiscreteActionSpec(n=self._env.num_actions)
+        return DiscreteActionSpec(n=self.inner.num_actions)
 
     @property
     def num_agents(self) -> int:
-        return self._env.num_agents
+        return self.inner.num_agents
 
     def get_render_settings(self) -> GridRenderSettings:
         raise NotImplementedError(

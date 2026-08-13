@@ -9,14 +9,12 @@ type MainError = Box<dyn std::error::Error + Send + Sync>;
 struct Args {
     policy_path: String,
     seed: u64,
-    memory_steps: Option<usize>,
 }
 
 fn parse_args() -> Result<Args, String> {
     let mut args = Args {
         policy_path: String::new(),
         seed: 0,
-        memory_steps: None,
     };
     let mut it = std::env::args().skip(1);
     let value = |it: &mut dyn Iterator<Item = String>, flag: &str| {
@@ -29,19 +27,12 @@ fn parse_args() -> Result<Args, String> {
                     .parse()
                     .map_err(|e| format!("--seed: {e}"))?
             }
-            "--memory-steps" => {
-                args.memory_steps = Some(
-                    value(&mut it, "--memory-steps")?
-                        .parse()
-                        .map_err(|e| format!("--memory-steps: {e}"))?,
-                )
-            }
             _ if args.policy_path.is_empty() && !arg.starts_with('-') => args.policy_path = arg,
             _ => return Err(format!("unexpected argument {arg:?}")),
         }
     }
     if args.policy_path.is_empty() {
-        return Err("usage: demo <policy.safetensors> [--seed N] [--memory-steps N]".into());
+        return Err("usage: demo <policy.safetensors> [--seed N]".into());
     }
     Ok(args)
 }
@@ -68,9 +59,10 @@ where
     let env_config: EnvConfig = serde_json::from_str(&env_json)?;
     let env = make(&env_config);
 
-    let policy = BurnPolicy::new(loaded, env.num_agents(), args.memory_steps, args.seed);
+    let policy = BurnPolicy::new(loaded, env.num_agents(), args.seed);
+    let length = policy.context_length();
 
-    open_window(RenderApp::new(env, Box::new(policy)))?;
+    open_window(RenderApp::new(env, length, args.seed, Box::new(policy)))?;
     Ok(())
 }
 

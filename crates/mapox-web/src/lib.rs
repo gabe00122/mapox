@@ -20,11 +20,6 @@ use mapox_core::policy::Policy;
 use mapox_core::render::RenderApp;
 use wasm_bindgen::prelude::*;
 
-#[wasm_bindgen]
-pub fn version() -> String {
-    mapox_core::version().to_owned()
-}
-
 /// Starts the viewer on `canvas`, driven by the policy in `policy_bytes` (a
 /// `*.safetensors` bundle, fetched by the page). Resolves once the app is
 /// running; the app then owns the canvas for the life of the page.
@@ -44,19 +39,20 @@ pub async fn start(
     // broken canvas stays a silent black rectangle.
     eframe::WebLogger::init(log::LevelFilter::Debug).ok();
 
-    let (env, policy) = setup(&policy_bytes, seed)?;
+    let (env, length, policy) = setup(&policy_bytes, seed)?;
 
     eframe::WebRunner::new()
         .start(
             canvas,
             eframe::WebOptions::default(),
-            Box::new(|_cc| Ok(Box::new(RenderApp::new(env, policy)))),
+            Box::new(move |_cc| Ok(Box::new(RenderApp::new(env, length, seed.into(), policy)))),
         )
         .await
 }
 
-/// What [`setup`] hands back: an env and the policy that drives it.
-type Running = (Box<dyn Environment + Send + Sync>, Box<dyn Policy>);
+/// What [`setup`] hands back: an env, the episode length to run it for, and
+/// the policy that drives it.
+type Running = (Box<dyn Environment + Send + Sync>, usize, Box<dyn Policy>);
 
 /// Load the policy and rebuild the env the run was trained on.
 fn setup(policy_bytes: &[u8], seed: u32) -> Result<Running, JsValue> {
@@ -78,6 +74,7 @@ fn setup(policy_bytes: &[u8], seed: u32) -> Result<Running, JsValue> {
         .map_err(|err| JsValue::from_str(&format!("parsing the embedded env config: {err}")))?;
     let env = make(&env_config);
 
-    let policy = BurnPolicy::<Flex>::new(loaded, env.num_agents(), None, seed.into());
-    Ok((env, Box::new(policy)))
+    let policy = BurnPolicy::<Flex>::new(loaded, env.num_agents(), seed.into());
+    let length = policy.context_length();
+    Ok((env, length, Box::new(policy)))
 }

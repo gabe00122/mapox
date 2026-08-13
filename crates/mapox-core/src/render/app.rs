@@ -9,7 +9,6 @@ use crate::{
     make::{EnvConfig, make},
     policy::{Policy, RandomPolicy},
     render::{
-        KEY_HINTS,
         env::{GridRenderSettings, GridRenderState},
         grid::{GridLayout, draw_tile_grid},
         resolve_art,
@@ -20,6 +19,7 @@ use crate::{
     vocab::VocabId,
 };
 use egui::{Color32, RichText, Stroke, StrokeKind};
+use rand::{RngExt, SeedableRng, rngs::SmallRng};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ViewMode {
@@ -59,8 +59,10 @@ pub struct RenderApp {
 
     env: Box<dyn Environment + Send + Sync>,
     policy: Box<dyn Policy>,
+    /// Total step count before a reset
+    length: usize,
+    step_count: usize,
     /// Set once the policy errors; the hint bar reports the random fallback.
-    policy_failed: bool,
     buffers: TimeStepBuffers,
     actions: Vec<VocabId>,
     /// Whether `actions` already holds the policy's picks for the next step.
@@ -96,7 +98,12 @@ pub struct RenderApp {
 }
 
 impl RenderApp {
-    pub fn new(mut env: Box<dyn Environment + Send + Sync>, policy: Box<dyn Policy>) -> Self {
+    pub fn new(
+        mut env: Box<dyn Environment + Send + Sync>,
+        length: usize,
+        seed: u64,
+        mut policy: Box<dyn Policy>,
+    ) -> Self {
         let mut buffers = TimeStepBuffers::new(env.as_ref());
 
         let settings = env.get_render_settings();
@@ -111,8 +118,11 @@ impl RenderApp {
             action_id(symbols::MOVE_LEFT),
         ];
 
-        let seed = 0;
-        env.reset(seed, &mut buffers.view_mut());
+        let mut rng = SmallRng::seed_from_u64(seed);
+        policy
+            .reset(env.num_agents(), rng.random())
+            .expect("Policy reset failed");
+        env.reset(rng.random(), &mut buffers.view_mut());
 
         let num_agents = env.num_agents();
         Self {
@@ -121,7 +131,8 @@ impl RenderApp {
             actions_ready: false,
             env,
             policy,
-            policy_failed: false,
+            length,
+            step_count: 0,
             buffers,
             pad_w: settings.view_width / 2,
             pad_h: settings.view_height / 2,
@@ -150,7 +161,9 @@ impl RenderApp {
     pub fn demo() -> Self {
         Self::new(
             make(&EnvConfig::RustFindReturn(FindReturnConfig::default())),
-            Box::new(RandomPolicy::new(0)),
+            512,
+            0,
+            Box::new(RandomPolicy::new()),
         )
     }
 
@@ -177,37 +190,38 @@ impl RenderApp {
 
     fn reset(&mut self) {
         self.seed += 1;
-        self.env.reset(self.seed, &mut self.buffers.view_mut());
+        let mut rng = SmallRng::seed_from_u64(self.seed);
+
+        self.step_count = 0;
+        self.env.reset(rng.random(), &mut self.buffers.view_mut());
+        self.policy
+            .reset(self.env.num_agents(), rng.random())
+            .expect("policy failed");
         self.next_step_time = None;
         // any precomputed actions were for the old episode's observations
         self.actions_ready = false;
     }
 
-    /// Runs the policy over the current observations into `actions`. Split
-    /// from [`Self::step_env`] so `ui()` can run it on the frame *after* a
-    /// step: immediate mode presents a frame only when `ui()` returns, so a
-    /// slow policy called on the keypress frame would hold back the very
-    /// frame that shows the step's result.
     fn compute_actions(&mut self) {
-        // borrows `buffers` only, so the borrows of `policy` and `actions`
-        // still split; a `&self` helper on the app would not
-        let timestep = self.buffers.view();
-        if let Err(err) = self.policy.act(&timestep, &mut self.actions) {
-            log::error!("policy failed, falling back to random: {err}");
-            self.policy = Box::new(RandomPolicy::new(self.seed));
-            self.policy_failed = true;
+        if !self.episode_done() {
+            let timestep = self.buffers.view();
             self.policy
                 .act(&timestep, &mut self.actions)
-                .expect("random policy is infallible");
+                .expect("policy failed");
         }
         self.actions_ready = true;
     }
 
-    /// One env step: the precomputed policy actions, with `override_dir`
-    /// replacing the focused agent's (step-on-input pacing only; free-run
-    /// passes `None`). The inline `compute_actions` fallback only runs when
-    /// free-run catch-up takes several steps in a single frame.
+    fn episode_done(&self) -> bool {
+        self.step_count >= self.length
+    }
+
     fn step_env(&mut self, override_dir: Option<usize>) {
+        if self.episode_done() {
+            self.reset();
+            return;
+        }
+
         if !self.actions_ready {
             self.compute_actions();
         }
@@ -217,6 +231,7 @@ impl RenderApp {
         }
 
         self.env.step(&self.actions, &mut self.buffers.view_mut());
+        self.step_count += 1;
         self.actions_ready = false;
     }
 
@@ -248,22 +263,13 @@ impl RenderApp {
             PacingMode::FreeRun => format!("free-run {}fps", self.target_fps),
             PacingMode::StepOnInput => "step-on-input".to_owned(),
         };
-        let mut hint = format!(
+        let hint = format!(
             "t={}   agent {}/{}   {}",
-            self.buffers.time.first().copied().unwrap_or(0),
+            self.step_count,
             self.focused_agent,
             self.env.num_agents(),
             pacing,
         );
-        for (keys, action) in KEY_HINTS {
-            if *keys == "esc" && cfg!(target_arch = "wasm32") {
-                continue;
-            }
-            hint.push_str(&format!("   {keys}: {action}"));
-        }
-        if self.policy_failed {
-            hint.push_str("   [policy error (see console) - random fallback]");
-        }
         hint
     }
 
@@ -413,14 +419,12 @@ impl eframe::App for RenderApp {
     }
 }
 
-/// Opens the native window and blocks until it closes. The web build starts
-/// [`RenderApp`] through `mapox-web`'s wasm-bindgen entry point instead.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn open_window(app: RenderApp) -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("mapox")
-            .with_inner_size([800.0, 600.0]),
+            .with_inner_size([800.0, 800.0]),
         ..Default::default()
     };
     eframe::run_native("mapox", options, Box::new(move |_cc| Ok(Box::new(app))))

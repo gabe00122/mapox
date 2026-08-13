@@ -47,18 +47,6 @@ pub(crate) fn resolve_art(vocab: &Vocabulary) -> Vec<(u32, u32)> {
         .collect()
 }
 
-/// Keybindings shown in the hint bar; input handling in `app.rs` follows
-/// this table. `esc` is filtered out on the web where it can't close a tab.
-pub(crate) const KEY_HINTS: &[(&str, &str)] = &[
-    ("wasd/arrows", "step + move (step mode)"),
-    ("tab", "map/pov"),
-    ("p", "free-run/step"),
-    ("n", "next agent"),
-    ("click", "focus agent"),
-    ("r", "reset"),
-    ("esc", "quit"),
-];
-
 #[cfg(test)]
 mod tests {
     use super::*;

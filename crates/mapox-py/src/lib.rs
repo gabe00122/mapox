@@ -2,7 +2,6 @@
 mod _core {
     use mapox_core::{
         env::Environment,
-        envs::find_return::FindReturnConfig,
         make::{EnvConfig, make, make_vec},
         policy::{Policy, PolicyError, RandomPolicy},
         render::{RenderApp, open_window},
@@ -19,14 +18,6 @@ mod _core {
         exceptions::{PyRuntimeError, PyValueError},
     };
 
-    #[pyfunction]
-    fn version() -> &'static str {
-        mapox_core::version()
-    }
-
-    /// A python callable driving the render loop's agents: called once per
-    /// env step with copies of the timestep arrays, under a freshly attached
-    /// interpreter (`run_demo` detaches for the window's whole lifetime).
     struct PyPolicy {
         callable: Py<PyAny>,
     }
@@ -40,13 +31,17 @@ mod _core {
             Python::attach(|py| {
                 let result = (|| -> PyResult<()> {
                     let obs = PyArray4::from_array(py, &timestep.obs);
-                    let reward = PyArray1::from_array(py, &timestep.reward);
+                    let time = PyArray1::from_array(py, &timestep.time);
                     let terminated = PyArray1::from_array(py, &timestep.terminated);
+                    let last_action = PyArray1::from_array(py, &timestep.last_action);
+                    let reward = PyArray1::from_array(py, &timestep.reward);
                     let action_mask = PyArray2::from_array(py, &timestep.action_mask);
 
-                    let returned = self
-                        .callable
-                        .call1(py, (obs, reward, terminated, action_mask))?;
+                    let returned = self.callable.call_method1(
+                        py,
+                        "act",
+                        (obs, time, terminated, last_action, reward, action_mask),
+                    )?;
                     let returned: PyArrayLike1<'_, i32, AllowTypeChange> = returned.extract(py)?;
                     let returned = returned.as_array();
                     if returned.len() != actions.len() {
@@ -56,8 +51,7 @@ mod _core {
                             actions.len()
                         )));
                     }
-                    // zip, not copy_from_slice: dtype coercion can hand back
-                    // a non-contiguous array
+
                     for (action, &returned) in actions.iter_mut().zip(returned.iter()) {
                         *action = VocabId::try_from(returned).map_err(|_| {
                             PyValueError::new_err(format!(
@@ -74,50 +68,40 @@ mod _core {
             })
         }
 
-        /// Forwarded to a `reset` attribute on the callable when it has one,
-        /// so a stateful python policy can drop its carry; a plain function
-        /// needs nothing.
-        fn reset(&mut self) {
+        fn reset(&mut self, num_agents: usize, seed: u64) -> Result<(), PolicyError> {
             Python::attach(|py| {
-                let Ok(reset) = self.callable.getattr(py, "reset") else {
-                    return;
-                };
-                if let Err(err) = reset.call0(py) {
+                if let Err(err) = self.callable.call_method1(py, "reset", (num_agents, seed)) {
                     err.print(py);
                 }
             });
+
+            Ok(())
         }
     }
 
-    /// Opens the viewer window and blocks until it closes. `policy` drives
-    /// every agent (falling back to a random policy when omitted, or after
-    /// the callable raises); the keyboard overrides the focused agent.
     #[pyfunction]
-    #[pyo3(signature = (config_json=None, policy=None))]
-    fn run_demo(
+    #[pyo3(signature=(env, length, seed, policy=None))]
+    fn enjoy(
         py: Python<'_>,
-        config_json: Option<&str>,
+        env: &Bound<'_, Env>,
+        length: usize,
+        seed: u64,
         policy: Option<Py<PyAny>>,
     ) -> PyResult<()> {
-        let config = match config_json {
-            Some(json) => serde_json::from_str::<EnvConfig>(json)
-                .map_err(|err| PyValueError::new_err(err.to_string()))?,
-            None => EnvConfig::RustFindReturn(FindReturnConfig::default()),
-        };
-        let env = make(&config);
+        let env = env.borrow_mut().inner.take().unwrap(); // inner needs to be Optional to take it
         let policy: Box<dyn Policy> = match policy {
             Some(callable) => Box::new(PyPolicy { callable }),
-            None => Box::new(RandomPolicy::new(0)),
+            None => Box::new(RandomPolicy::new()),
         };
 
-        let app = RenderApp::new(env, policy);
+        let app = RenderApp::new(env, length, seed, policy);
         py.detach(move || open_window(app))
             .map_err(|err| PyRuntimeError::new_err(err.to_string()))
     }
 
     #[pyclass]
     struct Env {
-        inner: Box<dyn Environment + Send + Sync>,
+        inner: Option<Box<dyn Environment + Send + Sync>>,
     }
 
     #[pymethods]
@@ -127,26 +111,35 @@ mod _core {
             let config: EnvConfig = serde_json::from_str(config_json)
                 .map_err(|err| PyValueError::new_err(err.to_string()))?;
             Ok(Self {
-                inner: make_vec(&config, num_envs),
+                inner: Some(make_vec(&config, num_envs)),
             })
         }
 
         #[getter]
         fn num_agents(&self) -> usize {
-            self.inner.num_agents()
+            self.inner
+                .as_ref()
+                .expect("The inner env is missing")
+                .num_agents()
         }
 
         #[getter]
         fn num_actions(&self) -> usize {
-            self.inner.action_spec().num_actions
+            self.inner
+                .as_ref()
+                .expect("The inner env is missing")
+                .action_spec()
+                .num_actions
         }
 
         /// Expected shape of the `obs` buffer: (num_agents, view_width, view_height, channels).
         #[getter]
         fn observation_shape(&self) -> (usize, usize, usize, usize) {
-            let spec = self.inner.observation_spec();
+            let env = self.inner.as_ref().expect("The inner env is missing");
+
+            let spec = env.observation_spec();
             (
-                self.inner.num_agents(),
+                env.num_agents(),
                 spec.width as usize,
                 spec.height as usize,
                 OBS_CHANNELS,
@@ -155,12 +148,22 @@ mod _core {
 
         #[getter]
         fn obs_symbols(&self) -> Vec<&'static str> {
-            self.inner.obs_vocab().symbols().to_vec()
+            self.inner
+                .as_ref()
+                .expect("The inner env is missing")
+                .obs_vocab()
+                .symbols()
+                .to_vec()
         }
 
         #[getter]
         fn action_symbols(&self) -> Vec<&'static str> {
-            self.inner.action_vocab().symbols().to_vec()
+            self.inner
+                .as_ref()
+                .expect("The inner env is missing")
+                .action_vocab()
+                .symbols()
+                .to_vec()
         }
 
         #[allow(clippy::too_many_arguments)]
@@ -186,7 +189,10 @@ mod _core {
                 task_ids: task_ids.as_array_mut(),
             };
             py.detach(|| {
-                self.inner.reset(seed, &mut timestep);
+                self.inner
+                    .as_mut()
+                    .expect("The inner env is missing")
+                    .reset(seed, &mut timestep);
             });
         }
 
@@ -215,7 +221,10 @@ mod _core {
             };
 
             py.detach(|| {
-                self.inner.step(actions, &mut timestep);
+                self.inner
+                    .as_mut()
+                    .expect("The inner env is missing")
+                    .step(actions, &mut timestep);
             });
             Ok(())
         }

@@ -1,5 +1,5 @@
 use rand::rngs::SmallRng;
-use rand::{RngExt, SeedableRng, rngs::StdRng};
+use rand::{RngExt, SeedableRng};
 
 use crate::timestep::TimeStepRef;
 use crate::vocab::VocabId;
@@ -13,7 +13,7 @@ pub trait Policy: Send {
         actions: &mut [VocabId],
     ) -> Result<(), PolicyError>;
 
-    fn reset(&mut self);
+    fn reset(&mut self, num_agents: usize, seed: u64) -> Result<(), PolicyError>;
 }
 
 pub struct RandomPolicy {
@@ -22,9 +22,9 @@ pub struct RandomPolicy {
 }
 
 impl RandomPolicy {
-    pub fn new(seed: u64) -> Self {
+    pub fn new() -> Self {
         Self {
-            rng: SmallRng::seed_from_u64(seed),
+            rng: SmallRng::seed_from_u64(0),
             legal: Vec::new(),
         }
     }
@@ -36,7 +36,8 @@ impl Policy for RandomPolicy {
         timestep: &TimeStepRef<'_>,
         actions: &mut [VocabId],
     ) -> Result<(), PolicyError> {
-        let num_actions = timestep.action_mask.ncols();
+        // TODO: Surely this could be simpler
+
         for (agent, action) in actions.iter_mut().enumerate() {
             self.legal.clear();
             for (id, &legal) in timestep.action_mask.row(agent).iter().enumerate() {
@@ -47,17 +48,15 @@ impl Policy for RandomPolicy {
             }
             // an env that emits an all-false row gets uniform over everything
             // rather than a panic; no such env exists today
-            *action = if self.legal.is_empty() {
-                VocabId::try_from(self.rng.random_range(0..num_actions))
-                    .expect("action mask exceeds VocabId capacity")
-            } else {
-                self.legal[self.rng.random_range(0..self.legal.len())]
-            };
+            *action = self.legal[self.rng.random_range(0..self.legal.len())];
         }
         Ok(())
     }
 
-    fn reset(&mut self) {}
+    fn reset(&mut self, num_agents: usize, seed: u64) -> Result<(), PolicyError> {
+        self.rng = SmallRng::seed_from_u64(seed);
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -72,7 +71,7 @@ mod tests {
         buffers.action_mask.assign(&mask);
 
         let mut actions = vec![VocabId::MAX; num_agents];
-        RandomPolicy::new(0)
+        RandomPolicy::new()
             .act(&buffers.view(), &mut actions)
             .expect("random policy is infallible");
         actions

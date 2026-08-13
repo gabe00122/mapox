@@ -14,7 +14,6 @@ pub mod config;
 pub mod loader;
 pub mod model;
 pub mod policy;
-pub mod reference;
 
 /// Re-exported so downstream crates name the backend (`mapox_burn::burn::
 /// backend::NdArray`) without having to keep a burn version in sync with the

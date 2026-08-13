@@ -359,9 +359,22 @@ pub struct TransformerLayer<B: Backend> {
     pub ffn: FeedForward<B>,
 }
 
-/// Per-layer kv caches; `None` for layers without history.
+/// Per-layer kv caches (`None` for layers without history) and the cursor into
+/// them. `time` is both the slot the next step writes and the rope position it
+/// writes at, so the two can never be advanced or rewound independently — that
+/// is the whole reason it lives here rather than in the caller.
 pub struct Carry<B: Backend> {
     pub caches: Vec<Option<KvCache<B>>>,
+    pub time: usize,
+}
+
+impl<B: Backend> Carry<B> {
+    /// Drops the history without touching the cache tensors: row `time` of the
+    /// causal mask hides every slot above it, so a stale entry is unreachable
+    /// until the step that overwrites it.
+    pub fn rewind(&mut self) {
+        self.time = 0;
+    }
 }
 
 /// The actor half of the jax `TransformerActorCritic`; the critic is trainer-
@@ -390,23 +403,33 @@ impl<B: Backend> TransformerActor<B> {
                         .map(|(_, attention)| attention.init_cache(batch, &self.device))
                 })
                 .collect(),
+            time: 0,
         }
     }
 
-    /// One decode step for all agents at a shared `time`, returning normalized
-    /// log-probs over actions with illegal actions masked out — exactly
-    /// `distrax.Categorical(logits=masked_logits).logits`.
+    /// One decode step for all agents at `carry`'s current position, advancing
+    /// it. Returns normalized log-probs over actions with illegal actions
+    /// masked out — exactly `distrax.Categorical(logits=masked_logits).logits`.
+    ///
+    /// Panics past `max_seq_length`: the rope tables and the causal mask are
+    /// only that long. Callers bound this by rewinding the carry — see
+    /// [`BurnPolicy::context_length`](crate::BurnPolicy::context_length).
     pub fn step(
         &self,
         obs: ArrayView4<'_, u16>,
         reward: &[f32],
         last_action: &[u16],
         action_mask: ArrayView2<'_, bool>,
-        time: usize,
         carry: &mut Carry<B>,
     ) -> Tensor<B, 2> {
         let batch = reward.len();
         let device = &self.device;
+        let time = carry.time;
+        assert!(
+            time < self.max_seq_length,
+            "decode step {time} past max_seq_length {}; the carry was not rewound",
+            self.max_seq_length,
+        );
 
         let reward =
             Tensor::<B, 2>::from_data(TensorData::new(reward.to_vec(), [batch, 1]), device);
@@ -431,6 +454,8 @@ impl<B: Backend> TransformerActor<B> {
             TensorData::new(illegal, [batch, self.action_dim]),
             device,
         );
+
+        carry.time += 1;
         log_softmax(logits.mask_fill(illegal, f32::MIN), 1)
     }
 }
