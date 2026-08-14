@@ -60,7 +60,7 @@ struct FindReturnState {
     rngs: SmallRng,
     agents: Vec<FindReturnAgent>,
     agent_order: Vec<usize>, // agent turn order
-    time: i32,
+    time: usize,
 
     base_map: Array2<VocabId>, // the bottom layer of the map without agents
     map: Array2<VocabId>,      // the base map plus the agents
@@ -86,6 +86,9 @@ struct FindReturnSymbols {
 pub struct FindReturn {
     pub config: FindReturnConfig,
     state: FindReturnState,
+
+    // max steps for a single episode
+    length: usize,
 
     pad_width: i32,
     pad_height: i32,
@@ -129,7 +132,7 @@ impl FindReturnSymbols {
 }
 
 impl FindReturn {
-    pub fn new(config: &FindReturnConfig) -> Self {
+    pub fn new(config: &FindReturnConfig, length: usize) -> Self {
         let mut action_vocab = Vocabulary::new();
         let mut obs_vocab = Vocabulary::new();
 
@@ -167,6 +170,7 @@ impl FindReturn {
                 rngs: SmallRng::seed_from_u64(0),
                 time: 0,
             },
+            length,
 
             pad_width,
             pad_height,
@@ -212,11 +216,9 @@ impl FindReturn {
             );
         }
 
-        timestep.time.fill(self.state.time);
-        timestep.terminated.fill(false);
+        timestep.time.fill(self.state.time as i32);
+        timestep.terminated.fill(self.state.time == self.length - 1);
         timestep.task_ids.fill(0);
-        // all move actions are always valid; true marks a legal action, same
-        // convention as the python side (mapox.timestep.TimeStep.action_mask)
         timestep.action_mask.fill(true);
     }
 }

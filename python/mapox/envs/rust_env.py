@@ -36,9 +36,9 @@ class RustFindReturnConfig(BaseModel):
 type RustEnvConfig = RustFindReturnConfig
 
 class RustEnv(Environment[None]):
-    def __init__(self, config: RustEnvConfig, num_envs: int = 1):
+    def __init__(self, config: RustEnvConfig, length: int, num_envs: int = 1):
         config_json = config.model_dump_json()
-        self.inner = _CoreEnv(config_json, num_envs)
+        self.inner = _CoreEnv(config_json, length, num_envs)
 
         num_agents, view_width, view_height, channels = self.inner.observation_shape
         num_actions = self.inner.num_actions

@@ -117,11 +117,11 @@ mod _core {
     #[pymethods]
     impl Env {
         #[new]
-        fn new(config_json: &str, num_envs: usize) -> PyResult<Self> {
+        fn new(config_json: &str, length: usize, num_envs: usize) -> PyResult<Self> {
             let config: EnvConfig = serde_json::from_str(config_json)
                 .map_err(|err| PyValueError::new_err(err.to_string()))?;
             Ok(Self {
-                inner: Some(make_vec(&config, num_envs)),
+                inner: Some(make_vec(&config, length, num_envs)),
             })
         }
 

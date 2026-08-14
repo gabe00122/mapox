@@ -23,12 +23,11 @@ class RustAgentWrapper:
 
 def rust_enjoy(env: RustEnv, length: int, seed: int, agent: Agent):
     rust_agent = RustAgentWrapper(agent)
-
     enjoy(env.inner, length, seed, rust_agent)
 
 
 if __name__ == "__main__":
-    env = RustEnv(RustFindReturnConfig())
+    env = RustEnv(RustFindReturnConfig(view_width=15, view_height=17, width=80, height=80, mapgen_threshold=0.07), 512)
     rng_agent = RandomAgent(env.action_spec)
 
     rust_enjoy(env, 512, 0, rng_agent)

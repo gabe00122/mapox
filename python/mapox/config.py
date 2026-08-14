@@ -71,7 +71,7 @@ class EnvironmentFactory:
         num_tasks = 1
 
         if env_config.env_type.startswith("rust"):
-            return RustEnv(env_config, vec_count), 1
+            return RustEnv(env_config, length, vec_count), 1
 
         if env_config.env_type == "multi":
             num_tasks = len(env_config.envs)
