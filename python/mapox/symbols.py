@@ -15,6 +15,7 @@ silently split one concept into two ids.
 
 # --- observation symbols: tiles ---
 
+TILE_MASK = "mask"  # a tile the agent cannot see, e.g. hidden behind a wall
 TILE_EMPTY = "tile/empty"
 TILE_WALL = "tile/wall"
 TILE_DESTRUCTIBLE_WALL = "tile/destructible_wall"

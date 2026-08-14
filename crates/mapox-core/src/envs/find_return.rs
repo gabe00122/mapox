@@ -4,13 +4,15 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     env::Environment,
-    envs::common::Position,
-    map_gen::{fractal_noise, sprinkle_decor},
+    envs::common::{
+        Position, fov,
+        map_gen::{fractal_noise, sprinkle_decor},
+    },
     render::env::{GridRenderSettings, GridRenderState},
     spec::{ActionSpec, ObservationSpec},
     symbols::{
         AGENT_GENERIC, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, TILE_DECOR,
-        TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_FLAG, TILE_WALL,
+        TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_FLAG, TILE_MASK, TILE_WALL,
     },
     timestep::TimeStepMut,
     vocab::{VocabId, Vocabulary},
@@ -67,6 +69,7 @@ struct FindReturnState {
 
 #[derive(Debug, Clone)]
 struct FindReturnSymbols {
+    obs_mask: VocabId,
     obs_tile_empty: VocabId,
     obs_tile_destructible_wall: VocabId,
     obs_tile_wall: VocabId,
@@ -119,6 +122,10 @@ impl FindReturnSymbols {
             || tile == self.obs_tile_destructible_wall
             || tile == self.obs_agent_generic
     }
+
+    fn opaque(&self, tile: VocabId) -> bool {
+        tile == self.obs_tile_wall || tile == self.obs_tile_destructible_wall
+    }
 }
 
 impl FindReturn {
@@ -127,6 +134,7 @@ impl FindReturn {
         let mut obs_vocab = Vocabulary::new();
 
         let symbols = FindReturnSymbols {
+            obs_mask: obs_vocab.add(TILE_MASK),
             obs_tile_empty: obs_vocab.add(TILE_EMPTY),
             obs_tile_destructible_wall: obs_vocab.add(TILE_DESTRUCTIBLE_WALL),
             obs_tile_wall: obs_vocab.add(TILE_WALL),
@@ -192,22 +200,16 @@ impl FindReturn {
     }
 
     fn encode_observations(&self, timestep: &mut TimeStepMut) {
-        let view_width = self.config.view_width;
-        let view_height = self.config.view_height;
-
         for (agent_id, agent) in self.state.agents.iter().enumerate() {
             // wall padding keeps the view window inside the map
-            let x0 = agent.position.x - view_width / 2;
-            let y0 = agent.position.y - view_height / 2;
-
-            let window = self.state.map.slice(s![
-                x0 as usize..(x0 + view_width) as usize,
-                y0 as usize..(y0 + view_height) as usize,
-            ]);
-            timestep
-                .obs
-                .slice_mut(s![agent_id, .., .., 0])
-                .assign(&window);
+            let mut view = timestep.obs.slice_mut(s![agent_id, .., .., 0]);
+            fov::encode_visible(
+                &self.state.map,
+                agent.position,
+                &mut view,
+                self.symbols.obs_mask,
+                |tile| self.symbols.opaque(tile),
+            );
         }
 
         timestep.time.fill(self.state.time);
@@ -388,5 +390,113 @@ impl Environment for FindReturn {
             tilemap[agent.position.idx()] = self.symbols.obs_agent_generic;
             grid_render_state.agent_positions.push(agent.position);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::timestep::TimeStepBuffers;
+
+    /// An env whose interior is bare floor, for poking walls into by hand.
+    fn empty_env() -> FindReturn {
+        let mut env = FindReturn::new(&FindReturnConfig {
+            num_agents: 1,
+            width: 21,
+            height: 21,
+            ..Default::default()
+        });
+
+        env.state.base_map.fill(env.symbols.obs_tile_wall);
+        env.state
+            .base_map
+            .slice_mut(s![
+                env.pad_width as usize..(env.width - env.pad_width) as usize,
+                env.pad_height as usize..(env.height - env.pad_height) as usize,
+            ])
+            .fill(env.symbols.obs_tile_empty);
+        env.state.map.assign(&env.state.base_map);
+
+        env
+    }
+
+    fn center(env: &FindReturn) -> Position {
+        Position::new(env.width / 2, env.height / 2)
+    }
+
+    /// Drops the one agent at the centre of the map, then encodes the
+    /// observation it would be handed. The geometry of the sweep itself is
+    /// [`fov`]'s to test; what matters here is that the env feeds it the right
+    /// map, mask and opacity rule.
+    fn observe(env: &mut FindReturn) -> Array2<VocabId> {
+        let position = center(env);
+        env.state.agents.push(FindReturnAgent {
+            position,
+            ..Default::default()
+        });
+        env.state.map[position.idx()] = env.symbols.obs_agent_generic;
+
+        let mut buffers = TimeStepBuffers::new(env);
+        env.encode_observations(&mut buffers.view_mut());
+        buffers
+            .obs
+            .slice(s![0, .., .., 0])
+            .into_owned()
+            .into_dimensionality()
+            .expect("the observation window is 2d")
+    }
+
+    /// View-window coordinates of a map offset from the agent.
+    fn cell(env: &FindReturn, dx: i32, dy: i32) -> [usize; 2] {
+        [
+            (env.config.view_width / 2 + dx) as usize,
+            (env.config.view_height / 2 + dy) as usize,
+        ]
+    }
+
+    #[test]
+    fn tiles_behind_a_wall_arrive_masked() {
+        let mut env = empty_env();
+        let wall = center(&env) + Position::new(0, 1);
+        env.state.map[wall.idx()] = env.symbols.obs_tile_wall;
+
+        let view = observe(&mut env);
+
+        assert_eq!(view[cell(&env, 0, 0)], env.symbols.obs_agent_generic);
+        assert_eq!(view[cell(&env, 0, 1)], env.symbols.obs_tile_wall);
+        assert_eq!(view[cell(&env, 0, 2)], env.symbols.obs_mask);
+        // ... while an open room reaches the agent whole
+        assert_eq!(view[cell(&env, 0, -2)], env.symbols.obs_tile_empty);
+    }
+
+    /// Diggable walls block sight the same as solid ones, so a corridor the
+    /// agent dug out is the only thing it can see down.
+    #[test]
+    fn destructible_walls_are_opaque() {
+        let mut env = empty_env();
+        let wall = center(&env) + Position::new(2, 0);
+        env.state.map[wall.idx()] = env.symbols.obs_tile_destructible_wall;
+
+        let view = observe(&mut env);
+
+        assert_eq!(
+            view[cell(&env, 2, 0)],
+            env.symbols.obs_tile_destructible_wall
+        );
+        assert_eq!(view[cell(&env, 3, 0)], env.symbols.obs_mask);
+    }
+
+    /// Agents stop each other moving but not seeing: standing in a queue, every
+    /// agent still watches the same corridor.
+    #[test]
+    fn agents_do_not_block_sight() {
+        let mut env = empty_env();
+        let other = center(&env) + Position::new(2, 0);
+        env.state.map[other.idx()] = env.symbols.obs_agent_generic;
+
+        let view = observe(&mut env);
+
+        assert_eq!(view[cell(&env, 2, 0)], env.symbols.obs_agent_generic);
+        assert_eq!(view[cell(&env, 3, 0)], env.symbols.obs_tile_empty);
     }
 }

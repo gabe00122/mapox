@@ -1,3 +1,4 @@
+pub const TILE_MASK: &str = "mask";
 pub const TILE_EMPTY: &str = "tile/empty";
 pub const TILE_WALL: &str = "tile/wall";
 pub const TILE_DESTRUCTIBLE_WALL: &str = "tile/destructible_wall";

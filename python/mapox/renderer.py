@@ -52,6 +52,7 @@ class GridRenderSettings(NamedTuple):
 
 
 tilemap = {
+    SB.TILE_MASK: (5, 2),
     SB.TILE_EMPTY: (17, 0),
     SB.TILE_WALL: (20, 3),
     SB.TILE_DESTRUCTIBLE_WALL: (20, 3),

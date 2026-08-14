@@ -20,6 +20,8 @@ use crate::{symbols, vocab::Vocabulary};
 /// uses (`python/mapox/renderer.py::tilemap`). If the atlas math here drifts
 /// from that table, the demo is where it shows up first.
 const TILE_ART: &[(&str, u32, u32)] = &[
+    // a grey dither square, the closest the sheet has to fog of war
+    (symbols::TILE_MASK, 5, 2),
     (symbols::TILE_EMPTY, 17, 0),
     (symbols::TILE_WALL, 20, 3),
     (symbols::TILE_DESTRUCTIBLE_WALL, 20, 3),
