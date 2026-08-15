@@ -2,8 +2,6 @@ use fastnoise_lite::{FastNoiseLite, FractalType, NoiseType};
 use ndarray::ArrayViewMut2;
 use rand::RngExt;
 
-use crate::vocab::VocabId;
-
 /// Per-cell probability of each decor tile, matching
 /// `map_generator.generate_decor_tiles` (the remaining 0.90 stays empty).
 const DECOR_PROBS: [f64; 4] = [0.04, 0.04, 0.015, 0.005];
@@ -28,12 +26,10 @@ where
     }
 }
 
-pub fn sprinkle_decor(
-    mut map: ArrayViewMut2<VocabId>,
-    empty: VocabId,
-    decor: &[VocabId; 4],
-    rng: &mut impl RngExt,
-) {
+pub fn sprinkle_decor<T>(mut map: ArrayViewMut2<T>, empty: T, decor: &[T], rng: &mut impl RngExt)
+where
+    T: Copy + PartialEq,
+{
     for tile in map.iter_mut() {
         if *tile != empty {
             continue;

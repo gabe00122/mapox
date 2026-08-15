@@ -157,14 +157,16 @@ fn cast_light(
 ///
 /// `map` must have at least half a window of padding around `center`, which is
 /// the wall border the envs already keep.
-pub fn encode_visible(
-    map: &Array2<VocabId>,
+pub fn encode_visible<T>(
+    map: &Array2<T>,
     center: Position,
     view: &mut ArrayViewMut2<VocabId>,
-    mask: VocabId,
-    opaque: impl Fn(VocabId) -> bool,
-) {
-    view.fill(mask);
+    mask: T,
+    opaque: impl Fn(T) -> bool,
+) where
+    T: Copy + Into<VocabId>,
+{
+    view.fill(mask.into());
 
     let (width, height) = view.dim();
     let half_width = width as i32 / 2;
@@ -178,7 +180,7 @@ pub fn encode_visible(
         let x = (half_width + offset.x) as usize;
         let y = (half_height + offset.y) as usize;
         if let Some(cell) = view.get_mut([x, y]) {
-            *cell = tile;
+            *cell = tile.into();
         }
 
         opaque(tile)

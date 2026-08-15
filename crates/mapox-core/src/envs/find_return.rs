@@ -7,15 +7,18 @@ use crate::{
     envs::common::{
         Position, fov,
         map_gen::{fractal_noise, sprinkle_decor},
+        vocab_enum::VocabEnum,
     },
     render::env::{GridRenderSettings, GridRenderState},
     spec::{ActionSpec, ObservationSpec},
     symbols::{
-        AGENT_GENERIC, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, TILE_DECOR,
-        TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_FLAG, TILE_MASK, TILE_UI, TILE_WALL,
+        AGENT_GENERIC, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, TILE_DECOR_1, TILE_DECOR_2,
+        TILE_DECOR_3, TILE_DECOR_4, TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_FLAG, TILE_MASK,
+        TILE_UI, TILE_WALL,
     },
     timestep::TimeStepMut,
     vocab::{VocabId, Vocabulary},
+    vocab_enum,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -62,25 +65,56 @@ struct FindReturnState {
     agent_order: Vec<usize>, // agent turn order
     time: usize,
 
-    base_map: Array2<VocabId>, // the bottom layer of the map without agents
-    map: Array2<VocabId>,      // the base map plus the agents
-    free_positions: Vec<Position>, // these are used to calculate spawn positions
+    base_map: Array2<FindReturnObs>, // the bottom layer of the map without agents
+    map: Array2<FindReturnObs>,      // the base map plus the agents
+    free_positions: Vec<Position>,   // these are used to calculate spawn positions
 }
 
-#[derive(Debug, Clone)]
-struct FindReturnSymbols {
-    obs_ui: VocabId,
-    obs_mask: VocabId,
-    obs_tile_empty: VocabId,
-    obs_tile_destructible_wall: VocabId,
-    obs_tile_wall: VocabId,
-    obs_tile_flag: VocabId,
-    obs_tile_decor: [VocabId; 4],
-    obs_agent_generic: VocabId,
-    action_move_up: VocabId,
-    action_move_right: VocabId,
-    action_move_down: VocabId,
-    action_move_left: VocabId,
+vocab_enum!(FindReturnObs {
+    UI => TILE_UI,
+    Mask => TILE_MASK,
+    TileEmpty => TILE_EMPTY,
+    TileDestructibleWall => TILE_DESTRUCTIBLE_WALL,
+    TileWall => TILE_WALL,
+    TileFlag => TILE_FLAG,
+    TileDecor1 => TILE_DECOR_1,
+    TileDecor2 => TILE_DECOR_2,
+    TileDecor3 => TILE_DECOR_3,
+    TileDecor4 => TILE_DECOR_4,
+    AgentGeneric => AGENT_GENERIC,
+});
+
+impl FindReturnObs {
+    // const TABLE: &[FindReturnObs] = &[FindReturnObs::TileDecor1, FindReturnObs::TileDecor1];
+
+    fn blocked(self) -> bool {
+        use FindReturnObs::*;
+        matches!(self, TileWall | TileDestructibleWall | AgentGeneric)
+    }
+
+    fn opaque(self) -> bool {
+        use FindReturnObs::*;
+        matches!(self, TileWall | TileDestructibleWall)
+    }
+}
+
+vocab_enum!(FindReturnAction {
+    MoveUp => MOVE_UP,
+    MoveRight => MOVE_RIGHT,
+    MoveDown => MOVE_DOWN,
+    MoveLeft => MOVE_LEFT,
+});
+
+impl FindReturnAction {
+    fn direction(self) -> Position {
+        use FindReturnAction::*;
+        match self {
+            MoveUp => Position::new(0, 1),
+            MoveRight => Position::new(1, 0),
+            MoveDown => Position::new(0, -1),
+            MoveLeft => Position::new(-1, 0),
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -103,54 +137,12 @@ pub struct FindReturn {
 
     obs_vocab: Vocabulary,
     action_vocab: Vocabulary,
-    symbols: FindReturnSymbols,
-}
-
-impl FindReturnSymbols {
-    fn direction(&self, action: VocabId) -> Position {
-        if action == self.action_move_up {
-            Position::new(0, 1)
-        } else if action == self.action_move_right {
-            Position::new(1, 0)
-        } else if action == self.action_move_down {
-            Position::new(0, -1)
-        } else if action == self.action_move_left {
-            Position::new(-1, 0)
-        } else {
-            Position::new(0, 0)
-        }
-    }
-
-    fn blocked(&self, tile: VocabId) -> bool {
-        tile == self.obs_tile_wall
-            || tile == self.obs_tile_destructible_wall
-            || tile == self.obs_agent_generic
-    }
-
-    fn opaque(&self, tile: VocabId) -> bool {
-        tile == self.obs_tile_wall || tile == self.obs_tile_destructible_wall
-    }
 }
 
 impl FindReturn {
     pub fn new(config: &FindReturnConfig, length: usize) -> Self {
-        let mut action_vocab = Vocabulary::new();
-        let mut obs_vocab = Vocabulary::new();
-
-        let symbols = FindReturnSymbols {
-            obs_ui: obs_vocab.add(TILE_UI),
-            obs_mask: obs_vocab.add(TILE_MASK),
-            obs_tile_empty: obs_vocab.add(TILE_EMPTY),
-            obs_tile_destructible_wall: obs_vocab.add(TILE_DESTRUCTIBLE_WALL),
-            obs_tile_wall: obs_vocab.add(TILE_WALL),
-            obs_tile_flag: obs_vocab.add(TILE_FLAG),
-            obs_tile_decor: TILE_DECOR.map(|symbol| obs_vocab.add(symbol)),
-            obs_agent_generic: obs_vocab.add(AGENT_GENERIC),
-            action_move_up: action_vocab.add(MOVE_UP),
-            action_move_right: action_vocab.add(MOVE_RIGHT),
-            action_move_down: action_vocab.add(MOVE_DOWN),
-            action_move_left: action_vocab.add(MOVE_LEFT),
-        };
+        let action_vocab = FindReturnAction::vocab();
+        let obs_vocab = FindReturnObs::vocab();
 
         let pad_width = config.view_width / 2;
         let pad_height = config.view_height / 2;
@@ -166,9 +158,12 @@ impl FindReturn {
             state: FindReturnState {
                 agents: Vec::with_capacity(config.num_agents),
                 agent_order: (0..config.num_agents).collect(),
-                base_map: Array2::zeros((width as usize, height as usize)),
+                base_map: Array2::from_elem(
+                    (width as usize, height as usize),
+                    FindReturnObs::TileEmpty,
+                ),
                 free_positions: Vec::new(),
-                map: Array2::zeros((width as usize, height as usize)),
+                map: Array2::from_elem((width as usize, height as usize), FindReturnObs::TileEmpty),
                 rngs: SmallRng::seed_from_u64(0),
                 time: 0,
             },
@@ -184,8 +179,6 @@ impl FindReturn {
 
             action_vocab,
             obs_vocab,
-
-            symbols,
         }
     }
 
@@ -196,7 +189,7 @@ impl FindReturn {
                 let position = Position::new(x, y);
                 let tile = self.state.map[position.idx()];
 
-                if !self.symbols.blocked(tile) {
+                if !tile.blocked() {
                     self.state.free_positions.push(position);
                 }
             }
@@ -213,12 +206,12 @@ impl FindReturn {
                 &self.state.map,
                 agent.position,
                 &mut view,
-                self.symbols.obs_mask,
-                |tile| self.symbols.opaque(tile),
+                FindReturnObs::Mask,
+                |tile| tile.opaque(),
             );
 
             let mut ui = timestep.obs.slice_mut(s![agent_id, .., 15.., 0]);
-            ui.fill(self.symbols.obs_ui);
+            ui.fill(FindReturnObs::Mask as VocabId);
         }
 
         timestep.time.fill(self.state.time as i32);
@@ -236,11 +229,11 @@ impl Environment for FindReturn {
 
         let dim = (self.width as usize, self.height as usize);
         if self.state.base_map.dim() != dim {
-            self.state.map = Array2::zeros(dim);
-            self.state.base_map = Array2::zeros(dim);
+            self.state.map = Array2::from_elem(dim, FindReturnObs::TileEmpty);
+            self.state.base_map = Array2::from_elem(dim, FindReturnObs::TileEmpty);
         }
 
-        self.state.base_map.fill(self.symbols.obs_tile_wall);
+        self.state.base_map.fill(FindReturnObs::TileWall);
         let mut interior = self.state.base_map.slice_mut(s![
             self.pad_width as usize..(self.width - self.pad_width) as usize,
             self.pad_height as usize..(self.height - self.pad_height) as usize,
@@ -252,17 +245,22 @@ impl Environment for FindReturn {
             &mut self.state.rngs,
             |x, y, sample| {
                 interior[[x, y]] = if sample > self.config.mapgen_threshold {
-                    self.symbols.obs_tile_destructible_wall
+                    FindReturnObs::TileDestructibleWall
                 } else {
-                    self.symbols.obs_tile_empty
+                    FindReturnObs::TileEmpty
                 }
             },
         );
 
         sprinkle_decor(
             interior,
-            self.symbols.obs_tile_empty,
-            &self.symbols.obs_tile_decor,
+            FindReturnObs::TileEmpty,
+            &[
+                FindReturnObs::TileDecor1,
+                FindReturnObs::TileDecor2,
+                FindReturnObs::TileDecor3,
+                FindReturnObs::TileDecor4,
+            ],
             &mut self.state.rngs,
         );
 
@@ -275,8 +273,8 @@ impl Environment for FindReturn {
         // Place the flag
         for _ in 0..self.config.num_flags {
             let flag_position = self.state.free_positions.pop().unwrap();
-            self.state.base_map[flag_position.idx()] = self.symbols.obs_tile_flag;
-            self.state.map[flag_position.idx()] = self.symbols.obs_tile_flag;
+            self.state.base_map[flag_position.idx()] = FindReturnObs::TileFlag;
+            self.state.map[flag_position.idx()] = FindReturnObs::TileFlag;
         }
 
         // Place the agents
@@ -286,7 +284,7 @@ impl Environment for FindReturn {
                 position,
                 ..Default::default()
             });
-            self.state.map[position.idx()] = self.symbols.obs_agent_generic;
+            self.state.map[position.idx()] = FindReturnObs::AgentGeneric;
         }
 
         timestep.reward.fill(0.0);
@@ -299,11 +297,10 @@ impl Environment for FindReturn {
         self.state.agent_order.shuffle(&mut self.state.rngs);
 
         for &agent_id in &self.state.agent_order {
-            let (agent, map, base_map, symbols) = (
+            let (agent, map, base_map) = (
                 &mut self.state.agents[agent_id],
                 &mut self.state.map,
                 &mut self.state.base_map,
-                &self.symbols,
             );
 
             timestep.last_action[agent_id] = actions[agent_id];
@@ -314,29 +311,29 @@ impl Environment for FindReturn {
                 continue;
             }
 
-            let dir = symbols.direction(actions[agent_id]);
+            let dir = FindReturnAction::from_id(actions[agent_id]).direction();
             let target = agent.position + dir;
             let target_tile = map[target.idx()];
 
-            if !symbols.blocked(target_tile) {
+            if !target_tile.blocked() {
                 // unpaint the agent because it's moving
                 map[agent.position.idx()] = base_map[agent.position.idx()];
                 agent.position = target;
-            } else if target_tile == symbols.obs_tile_destructible_wall {
+            } else if target_tile == FindReturnObs::TileDestructibleWall {
                 // dig action
-                map[target.idx()] = symbols.obs_tile_empty;
-                base_map[target.idx()] = symbols.obs_tile_empty;
+                map[target.idx()] = FindReturnObs::TileEmpty;
+                base_map[target.idx()] = FindReturnObs::TileEmpty;
                 agent.timeout = self.config.digging_timeout;
                 continue;
             }
 
-            let found_flag = base_map[agent.position.idx()] == symbols.obs_tile_flag;
+            let found_flag = base_map[agent.position.idx()] == FindReturnObs::TileFlag;
             if found_flag {
                 agent_respawn_ids.push(agent_id);
                 timestep.reward[agent_id] = self.config.treasure_reward;
             } else {
                 // paint the agent back only if it's not found the flag
-                map[agent.position.idx()] = symbols.obs_agent_generic;
+                map[agent.position.idx()] = FindReturnObs::AgentGeneric;
             }
         }
 
@@ -347,7 +344,7 @@ impl Environment for FindReturn {
             for &agent_id in &agent_respawn_ids {
                 let agent = &mut self.state.agents[agent_id];
                 agent.position = free_positions.pop().unwrap();
-                self.state.map[agent.position.idx()] = self.symbols.obs_agent_generic;
+                self.state.map[agent.position.idx()] = FindReturnObs::AgentGeneric;
             }
         }
 
@@ -390,11 +387,11 @@ impl Environment for FindReturn {
         if tilemap.dim() != self.state.map.dim() {
             *tilemap = Array2::zeros(self.state.map.dim());
         }
-        tilemap.assign(&self.state.map);
+        tilemap.zip_mut_with(&self.state.map, |dst, &tile| *dst = tile.into());
 
         grid_render_state.agent_positions.clear();
         for agent in &self.state.agents {
-            tilemap[agent.position.idx()] = self.symbols.obs_agent_generic;
+            tilemap[agent.position.idx()] = FindReturnObs::AgentGeneric.into();
             grid_render_state.agent_positions.push(agent.position);
         }
     }
@@ -404,6 +401,7 @@ impl Environment for FindReturn {
 mod tests {
     use super::*;
     use crate::timestep::TimeStepBuffers;
+    use FindReturnObs::*;
 
     /// An env whose interior is bare floor, for poking walls into by hand.
     fn empty_env() -> FindReturn {
@@ -417,14 +415,14 @@ mod tests {
             512,
         );
 
-        env.state.base_map.fill(env.symbols.obs_tile_wall);
+        env.state.base_map.fill(FindReturnObs::TileWall);
         env.state
             .base_map
             .slice_mut(s![
                 env.pad_width as usize..(env.width - env.pad_width) as usize,
                 env.pad_height as usize..(env.height - env.pad_height) as usize,
             ])
-            .fill(env.symbols.obs_tile_empty);
+            .fill(FindReturnObs::TileEmpty);
         env.state.map.assign(&env.state.base_map);
 
         env
@@ -444,7 +442,7 @@ mod tests {
             position,
             ..Default::default()
         });
-        env.state.map[position.idx()] = env.symbols.obs_agent_generic;
+        env.state.map[position.idx()] = FindReturnObs::AgentGeneric;
 
         let mut buffers = TimeStepBuffers::new(env);
         env.encode_observations(&mut buffers.view_mut());
@@ -464,19 +462,24 @@ mod tests {
         ]
     }
 
+    /// The vocab id a tile turns into once it has been encoded into a view.
+    fn id(tile: FindReturnObs) -> VocabId {
+        tile.into()
+    }
+
     #[test]
     fn tiles_behind_a_wall_arrive_masked() {
         let mut env = empty_env();
         let wall = center(&env) + Position::new(0, 1);
-        env.state.map[wall.idx()] = env.symbols.obs_tile_wall;
+        env.state.map[wall.idx()] = TileWall;
 
         let view = observe(&mut env);
 
-        assert_eq!(view[cell(&env, 0, 0)], env.symbols.obs_agent_generic);
-        assert_eq!(view[cell(&env, 0, 1)], env.symbols.obs_tile_wall);
-        assert_eq!(view[cell(&env, 0, 2)], env.symbols.obs_mask);
+        assert_eq!(view[cell(&env, 0, 0)], id(AgentGeneric));
+        assert_eq!(view[cell(&env, 0, 1)], id(TileWall));
+        assert_eq!(view[cell(&env, 0, 2)], id(Mask));
         // ... while an open room reaches the agent whole
-        assert_eq!(view[cell(&env, 0, -2)], env.symbols.obs_tile_empty);
+        assert_eq!(view[cell(&env, 0, -2)], id(TileEmpty));
     }
 
     /// Diggable walls block sight the same as solid ones, so a corridor the
@@ -485,15 +488,12 @@ mod tests {
     fn destructible_walls_are_opaque() {
         let mut env = empty_env();
         let wall = center(&env) + Position::new(2, 0);
-        env.state.map[wall.idx()] = env.symbols.obs_tile_destructible_wall;
+        env.state.map[wall.idx()] = TileDestructibleWall;
 
         let view = observe(&mut env);
 
-        assert_eq!(
-            view[cell(&env, 2, 0)],
-            env.symbols.obs_tile_destructible_wall
-        );
-        assert_eq!(view[cell(&env, 3, 0)], env.symbols.obs_mask);
+        assert_eq!(view[cell(&env, 2, 0)], id(TileDestructibleWall));
+        assert_eq!(view[cell(&env, 3, 0)], id(Mask));
     }
 
     /// Agents stop each other moving but not seeing: standing in a queue, every
@@ -502,11 +502,11 @@ mod tests {
     fn agents_do_not_block_sight() {
         let mut env = empty_env();
         let other = center(&env) + Position::new(2, 0);
-        env.state.map[other.idx()] = env.symbols.obs_agent_generic;
+        env.state.map[other.idx()] = AgentGeneric;
 
         let view = observe(&mut env);
 
-        assert_eq!(view[cell(&env, 2, 0)], env.symbols.obs_agent_generic);
-        assert_eq!(view[cell(&env, 3, 0)], env.symbols.obs_tile_empty);
+        assert_eq!(view[cell(&env, 2, 0)], id(AgentGeneric));
+        assert_eq!(view[cell(&env, 3, 0)], id(TileEmpty));
     }
 }

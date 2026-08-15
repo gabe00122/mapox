@@ -11,7 +11,7 @@ use crate::{symbols, vocab::Vocabulary};
 
 const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::TILE_UI, 20, 0),
-    (symbols::TILE_MASK, 56, 1),
+    (symbols::TILE_MASK, 1, 5),
     (symbols::TILE_EMPTY, 17, 0),
     (symbols::TILE_WALL, 52, 0),
     (symbols::TILE_DESTRUCTIBLE_WALL, 20, 3),

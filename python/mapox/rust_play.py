@@ -27,7 +27,7 @@ def rust_enjoy(env: RustEnv, length: int, seed: int, agent: Agent):
 
 
 if __name__ == "__main__":
-    env = RustEnv(RustFindReturnConfig(view_width=15, view_height=17, width=80, height=80, mapgen_threshold=0.07), 512)
+    env = RustEnv(RustFindReturnConfig(view_width=15, view_height=17, width=80, height=70, mapgen_threshold=0.07), 512)
     rng_agent = RandomAgent(env.action_spec)
 
     rust_enjoy(env, 512, 0, rng_agent)
