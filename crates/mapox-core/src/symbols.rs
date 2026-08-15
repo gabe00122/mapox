@@ -11,12 +11,13 @@ pub const TILE_ARROW: &str = "tile/arrow";
 pub const TILE_GRASS: &str = "tile/grass";
 pub const TILE_FOOD: &str = "tile/food";
 
+pub const TILE_PIPE_HORIZONTAL: &str = "tile/pipe_horizontal";
+pub const TILE_PIPE_VIRTICAL: &str = "tile/pipe_virtical";
+
 pub const TILE_DECOR_1: &str = "tile/decor_1";
 pub const TILE_DECOR_2: &str = "tile/decor_2";
 pub const TILE_DECOR_3: &str = "tile/decor_3";
 pub const TILE_DECOR_4: &str = "tile/decor_4";
-
-pub const TILE_DECOR: [&str; 4] = [TILE_DECOR_1, TILE_DECOR_2, TILE_DECOR_3, TILE_DECOR_4];
 
 pub const AGENT_GENERIC: &str = "agent/generic";
 pub const AGENT_SCOUT: &str = "agent/scout";
@@ -40,3 +41,5 @@ pub const MOVES: [&str; 4] = [MOVE_UP, MOVE_RIGHT, MOVE_DOWN, MOVE_LEFT];
 pub const STAY: &str = "stay";
 pub const PRIMARY_ACTION: &str = "primary";
 pub const DIG_ACTION: &str = "dig";
+
+pub const PLACE_PIPE: &str = "place_pipe";

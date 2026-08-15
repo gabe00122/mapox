@@ -20,6 +20,8 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::TILE_DECOR_2, 16, 5),
     (symbols::TILE_DECOR_3, 17, 5),
     (symbols::TILE_DECOR_4, 14, 5),
+    (symbols::TILE_PIPE_HORIZONTAL, 53, 3),
+    (symbols::TILE_PIPE_VIRTICAL, 52, 3),
     (symbols::AGENT_GENERIC, 104, 0),
 ];
 

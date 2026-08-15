@@ -80,7 +80,7 @@ pub struct RenderApp {
     /// Sheet coordinates indexed by obs vocab id.
     art: Vec<(u32, u32)>,
     /// Action ids for up/right/down/left; `None` when the env lacks the move.
-    move_actions: [Option<VocabId>; 4],
+    move_actions: [Option<VocabId>; 5],
 
     view_mode: ViewMode,
     pacing: PacingMode,
@@ -116,6 +116,7 @@ impl RenderApp {
             action_id(symbols::MOVE_RIGHT),
             action_id(symbols::MOVE_DOWN),
             action_id(symbols::MOVE_LEFT),
+            action_id(symbols::PLACE_PIPE),
         ];
 
         let mut rng = SmallRng::seed_from_u64(seed);
@@ -158,11 +159,12 @@ impl RenderApp {
     fn read_input(ui: &egui::Ui) -> FrameInput {
         use egui::Key;
 
-        const DIRECTION_KEYS: [(Key, Key); 4] = [
+        const DIRECTION_KEYS: [(Key, Key); 5] = [
             (Key::ArrowUp, Key::W),
             (Key::ArrowRight, Key::D),
             (Key::ArrowDown, Key::S),
             (Key::ArrowLeft, Key::A),
+            (Key::Num0, Key::Num0),
         ];
 
         ui.input(|i| FrameInput {
