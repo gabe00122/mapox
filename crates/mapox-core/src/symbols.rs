@@ -1,3 +1,6 @@
+// the empty area of a ux tile grid
+pub const TILE_UI: &str = "ui";
+
 pub const TILE_MASK: &str = "mask";
 pub const TILE_EMPTY: &str = "tile/empty";
 pub const TILE_WALL: &str = "tile/wall";

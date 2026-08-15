@@ -1,10 +1,3 @@
-//! Interactive rendering: [`RenderApp`] owns the egui loop, steps any
-//! [`Environment`](crate::env::Environment) under a
-//! [`Policy`](crate::policy::Policy), and draws either the whole map or the
-//! focused agent's observations. Natively [`open_window`] blocks until the
-//! window closes; on the web `mapox-web`'s wasm-bindgen entry point hosts the
-//! same app.
-
 pub mod app;
 pub mod env;
 mod grid;
@@ -16,14 +9,11 @@ pub use app::{PacingMode, RenderApp, ViewMode};
 
 use crate::{symbols, vocab::Vocabulary};
 
-/// Sheet coordinates per symbol, lifted from the table the pygame renderer
-/// uses (`python/mapox/renderer.py::tilemap`). If the atlas math here drifts
-/// from that table, the demo is where it shows up first.
 const TILE_ART: &[(&str, u32, u32)] = &[
-    // a grey dither square, the closest the sheet has to fog of war
-    (symbols::TILE_MASK, 5, 2),
+    (symbols::TILE_UI, 20, 0),
+    (symbols::TILE_MASK, 56, 1),
     (symbols::TILE_EMPTY, 17, 0),
-    (symbols::TILE_WALL, 20, 3),
+    (symbols::TILE_WALL, 52, 0),
     (symbols::TILE_DESTRUCTIBLE_WALL, 20, 3),
     (symbols::TILE_FLAG, 29, 23),
     (symbols::TILE_DECOR_1, 15, 5),
@@ -33,8 +23,6 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::AGENT_GENERIC, 104, 0),
 ];
 
-/// Sheet coordinates indexed by obs vocab id; panics on a symbol without
-/// art, which the `every_env_symbol_has_art` test catches before launch.
 pub(crate) fn resolve_art(vocab: &Vocabulary) -> Vec<(u32, u32)> {
     vocab
         .symbols()
@@ -73,7 +61,7 @@ mod tests {
     /// the failure names the symbol, instead of at first launch.
     #[test]
     fn every_env_symbol_has_art() {
-        let env = FindReturn::new(&FindReturnConfig::default());
+        let env = FindReturn::new(&FindReturnConfig::default(), 512);
         for symbol in env.obs_vocab().symbols() {
             assert!(
                 TILE_ART.iter().any(|(name, _, _)| name == symbol),

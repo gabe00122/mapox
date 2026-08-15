@@ -12,7 +12,7 @@ use crate::{
     spec::{ActionSpec, ObservationSpec},
     symbols::{
         AGENT_GENERIC, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, TILE_DECOR,
-        TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_FLAG, TILE_MASK, TILE_WALL,
+        TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_FLAG, TILE_MASK, TILE_UI, TILE_WALL,
     },
     timestep::TimeStepMut,
     vocab::{VocabId, Vocabulary},
@@ -69,6 +69,7 @@ struct FindReturnState {
 
 #[derive(Debug, Clone)]
 struct FindReturnSymbols {
+    obs_ui: VocabId,
     obs_mask: VocabId,
     obs_tile_empty: VocabId,
     obs_tile_destructible_wall: VocabId,
@@ -137,6 +138,7 @@ impl FindReturn {
         let mut obs_vocab = Vocabulary::new();
 
         let symbols = FindReturnSymbols {
+            obs_ui: obs_vocab.add(TILE_UI),
             obs_mask: obs_vocab.add(TILE_MASK),
             obs_tile_empty: obs_vocab.add(TILE_EMPTY),
             obs_tile_destructible_wall: obs_vocab.add(TILE_DESTRUCTIBLE_WALL),
@@ -206,7 +208,7 @@ impl FindReturn {
     fn encode_observations(&self, timestep: &mut TimeStepMut) {
         for (agent_id, agent) in self.state.agents.iter().enumerate() {
             // wall padding keeps the view window inside the map
-            let mut view = timestep.obs.slice_mut(s![agent_id, .., .., 0]);
+            let mut view = timestep.obs.slice_mut(s![agent_id, .., ..15, 0]);
             fov::encode_visible(
                 &self.state.map,
                 agent.position,
@@ -214,6 +216,9 @@ impl FindReturn {
                 self.symbols.obs_mask,
                 |tile| self.symbols.opaque(tile),
             );
+
+            let mut ui = timestep.obs.slice_mut(s![agent_id, .., 15.., 0]);
+            ui.fill(self.symbols.obs_ui);
         }
 
         timestep.time.fill(self.state.time as i32);
@@ -402,12 +407,15 @@ mod tests {
 
     /// An env whose interior is bare floor, for poking walls into by hand.
     fn empty_env() -> FindReturn {
-        let mut env = FindReturn::new(&FindReturnConfig {
-            num_agents: 1,
-            width: 21,
-            height: 21,
-            ..Default::default()
-        });
+        let mut env = FindReturn::new(
+            &FindReturnConfig {
+                num_agents: 1,
+                width: 21,
+                height: 21,
+                ..Default::default()
+            },
+            512,
+        );
 
         env.state.base_map.fill(env.symbols.obs_tile_wall);
         env.state
