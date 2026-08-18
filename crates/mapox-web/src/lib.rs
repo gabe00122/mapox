@@ -52,7 +52,7 @@ pub async fn start(
 
 /// What [`setup`] hands back: an env, the episode length to run it for, and
 /// the policy that drives it.
-type Running = (Box<dyn Environment + Send + Sync>, usize, Box<dyn Policy>);
+type Running = (Box<dyn Environment>, usize, Box<dyn Policy>);
 
 /// Load the policy and rebuild the env the run was trained on.
 fn setup(policy_bytes: &[u8], seed: u32) -> Result<Running, JsValue> {
@@ -72,9 +72,10 @@ fn setup(policy_bytes: &[u8], seed: u32) -> Result<Running, JsValue> {
         })?;
     let env_config: EnvConfig = serde_json::from_str(env_json)
         .map_err(|err| JsValue::from_str(&format!("parsing the embedded env config: {err}")))?;
-    let env = make(&env_config);
+    // the episode runs for one policy context, which the export declares
+    let length = loaded.meta.max_seq_length;
+    let env = make(&env_config, length);
 
     let policy = BurnPolicy::<Flex>::new(loaded, env.num_agents(), seed.into());
-    let length = policy.context_length();
     Ok((env, length, Box::new(policy)))
 }

@@ -59,7 +59,7 @@ where
         .clone()
         .ok_or("export has no env config embedded (fixture file?)")?;
     let env_config: EnvConfig = serde_json::from_str(&env_json)?;
-    let env = make(&env_config);
+    let env = make(&env_config, length);
 
     let policy = BurnPolicy::new(loaded, env.num_agents(), args.seed);
 

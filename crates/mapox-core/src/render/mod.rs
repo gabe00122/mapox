@@ -1,11 +1,13 @@
 pub mod app;
 pub mod env;
 mod grid;
+pub mod keys;
 pub mod tileset;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub use app::open_window;
 pub use app::{PacingMode, RenderApp, ViewMode};
+pub use keys::{Command, Input};
 
 use crate::{symbols, vocab::Vocabulary};
 

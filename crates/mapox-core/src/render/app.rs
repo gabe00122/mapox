@@ -9,10 +9,10 @@ use crate::{
     render::{
         env::{GridRenderSettings, GridRenderState},
         grid::{GridLayout, draw_tile_grid},
+        keys::{self, Command, Input},
         resolve_art,
         tileset::Tileset,
     },
-    symbols,
     timestep::TimeStepBuffers,
     vocab::VocabId,
 };
@@ -37,17 +37,6 @@ pub enum PacingMode {
     StepOnInput,
 }
 
-/// What the per-frame input reading found; one struct so `ui()` reads input
-/// exactly once.
-struct FrameInput {
-    tab: bool,
-    pacing: bool,
-    next_agent: bool,
-    reset: bool,
-    /// Direction index (up/right/down/left) that was newly pressed.
-    dir_pressed: Option<usize>,
-}
-
 pub struct RenderApp {
     /// Uploaded on the first frame, not in [`RenderApp::new`]: until the
     /// backend delivers input, the context reports a placeholder 2048 max
@@ -55,7 +44,7 @@ pub struct RenderApp {
     /// it. The real wgpu device allows 8192.
     tileset: Option<Tileset>,
 
-    env: Box<dyn Environment + Send + Sync>,
+    env: Box<dyn Environment>,
     policy: Box<dyn Policy>,
     /// Total step count before a reset
     length: usize,
@@ -77,8 +66,6 @@ pub struct RenderApp {
     render_state: GridRenderState,
     /// Sheet coordinates indexed by obs vocab id.
     art: Vec<(u32, u32)>,
-    /// Action ids for up/right/down/left; `None` when the env lacks the move.
-    move_actions: [Option<VocabId>; 6],
 
     view_mode: ViewMode,
     pacing: PacingMode,
@@ -97,7 +84,7 @@ pub struct RenderApp {
 
 impl RenderApp {
     pub fn new(
-        mut env: Box<dyn Environment + Send + Sync>,
+        mut env: Box<dyn Environment>,
         length: usize,
         seed: u64,
         mut policy: Box<dyn Policy>,
@@ -106,17 +93,6 @@ impl RenderApp {
 
         let settings = env.get_render_settings();
         let art = resolve_art(&settings.obs_vocab);
-
-        let action_vocab = env.action_vocab();
-        let action_id = |symbol| action_vocab.get(symbol);
-        let move_actions = [
-            action_id(symbols::MOVE_UP),
-            action_id(symbols::MOVE_RIGHT),
-            action_id(symbols::MOVE_DOWN),
-            action_id(symbols::MOVE_LEFT),
-            action_id(symbols::PLACE_PIPE),
-            action_id(symbols::DIG_ACTION),
-        ];
 
         let mut rng = SmallRng::seed_from_u64(seed);
         policy
@@ -139,7 +115,6 @@ impl RenderApp {
             settings,
             render_state: GridRenderState::default(),
             art,
-            move_actions,
             view_mode: ViewMode::BirdsEye,
             // the native demo keeps the play-by-keypress feel; the web demo
             // free-runs so the page doesn't look frozen
@@ -153,29 +128,6 @@ impl RenderApp {
             next_step_time: None,
             seed,
         }
-    }
-
-    fn read_input(ui: &egui::Ui) -> FrameInput {
-        use egui::Key;
-
-        const DIRECTION_KEYS: [(Key, Key); 6] = [
-            (Key::ArrowUp, Key::W),
-            (Key::ArrowRight, Key::D),
-            (Key::ArrowDown, Key::S),
-            (Key::ArrowLeft, Key::A),
-            (Key::Num0, Key::Num0),
-            (Key::E, Key::E),
-        ];
-
-        ui.input(|i| FrameInput {
-            tab: i.key_pressed(Key::Tab),
-            pacing: i.key_pressed(Key::P),
-            next_agent: i.key_pressed(Key::N),
-            reset: i.key_pressed(Key::R),
-            dir_pressed: DIRECTION_KEYS
-                .into_iter()
-                .position(|(a, b)| i.key_pressed(a) || i.key_pressed(b)),
-        })
     }
 
     fn reset(&mut self) {
@@ -206,7 +158,9 @@ impl RenderApp {
         self.step_count >= self.length
     }
 
-    fn step_env(&mut self, override_dir: Option<usize>) {
+    /// `override_action` replaces the focused agent's policy action, which is
+    /// how the keyboard plays a single agent while the policy drives the rest.
+    fn step_env(&mut self, override_action: Option<VocabId>) {
         if self.episode_done() {
             self.reset();
             return;
@@ -216,13 +170,38 @@ impl RenderApp {
             self.compute_actions();
         }
 
-        if let Some(action) = override_dir.and_then(|dir| self.move_actions[dir]) {
+        if let Some(action) = override_action {
             self.actions[self.focused_agent] = action;
         }
 
         self.env.step(&self.actions, &mut self.buffers.view_mut());
         self.step_count += 1;
         self.actions_ready = false;
+    }
+
+    fn run_command(&mut self, command: Command, ui: &egui::Ui) {
+        match command {
+            Command::ToggleView => {
+                self.view_mode = match self.view_mode {
+                    ViewMode::BirdsEye => ViewMode::AgentPov,
+                    ViewMode::AgentPov => ViewMode::BirdsEye,
+                }
+            }
+            Command::TogglePacing => {
+                self.pacing = match self.pacing {
+                    PacingMode::FreeRun => PacingMode::StepOnInput,
+                    PacingMode::StepOnInput => PacingMode::FreeRun,
+                };
+                self.next_step_time = None;
+            }
+            Command::NextAgent => {
+                if self.env.num_agents() > 0 {
+                    self.focused_agent = (self.focused_agent + 1) % self.env.num_agents();
+                }
+            }
+            Command::Reset => self.reset(),
+            Command::Quit => ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close),
+        }
     }
 
     fn free_run(&mut self, ui: &egui::Ui) {
@@ -353,41 +332,17 @@ impl eframe::App for RenderApp {
             self.compute_actions();
         }
 
-        #[cfg(not(target_arch = "wasm32"))]
-        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
-        }
-
-        let input = Self::read_input(ui);
-
-        if input.tab {
-            self.view_mode = match self.view_mode {
-                ViewMode::BirdsEye => ViewMode::AgentPov,
-                ViewMode::AgentPov => ViewMode::BirdsEye,
-            };
-        }
-        if input.pacing {
-            self.pacing = match self.pacing {
-                PacingMode::FreeRun => PacingMode::StepOnInput,
-                PacingMode::StepOnInput => PacingMode::FreeRun,
-            };
-            self.next_step_time = None;
-        }
-        if input.next_agent && self.env.num_agents() > 0 {
-            self.focused_agent = (self.focused_agent + 1) % self.env.num_agents();
-        }
-        if input.reset {
-            self.reset();
-        }
-
-        match self.pacing {
-            PacingMode::StepOnInput => {
-                if let Some(dir) = input.dir_pressed {
-                    self.step_env(Some(dir));
-                }
+        match ui.input(|state| keys::read(state, self.env.action_vocab())) {
+            Some(Input::Command(command)) => self.run_command(command, ui),
+            // free-run ignores the action keys: the policy drives every agent
+            Some(Input::Action(action)) if self.pacing == PacingMode::StepOnInput => {
+                self.step_env(Some(action));
             }
-            // free-run ignores movement keys: the policy drives every agent
-            PacingMode::FreeRun => self.free_run(ui),
+            _ => {}
+        }
+
+        if self.pacing == PacingMode::FreeRun {
+            self.free_run(ui);
         }
 
         self.env.render_state_into(&mut self.render_state);
