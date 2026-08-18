@@ -105,12 +105,12 @@ mod _core {
     }
 
     impl Env {
-        fn env(&self) -> &Box<dyn Environment + Send + Sync> {
-            self.inner.as_ref().expect("The inner env is missing")
+        fn env(&self) -> &(dyn Environment + Send + Sync) {
+            self.inner.as_deref().unwrap()
         }
 
-        fn env_mut(&mut self) -> &mut Box<dyn Environment + Send + Sync> {
-            self.inner.as_mut().expect("The inner env is missing")
+        fn env_mut(&mut self) -> &mut (dyn Environment + Send + Sync) {
+            self.inner.as_deref_mut().expect("The inner env is missing")
         }
     }
 

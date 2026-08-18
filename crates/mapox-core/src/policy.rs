@@ -30,6 +30,12 @@ impl RandomPolicy {
     }
 }
 
+impl Default for RandomPolicy {
+    fn default() -> Self {
+        RandomPolicy::new()
+    }
+}
+
 impl Policy for RandomPolicy {
     fn act(
         &mut self,
@@ -53,7 +59,7 @@ impl Policy for RandomPolicy {
         Ok(())
     }
 
-    fn reset(&mut self, num_agents: usize, seed: u64) -> Result<(), PolicyError> {
+    fn reset(&mut self, _num_agents: usize, seed: u64) -> Result<(), PolicyError> {
         self.rng = SmallRng::seed_from_u64(seed);
         Ok(())
     }

@@ -12,9 +12,9 @@ use crate::{
     render::env::{GridRenderSettings, GridRenderState},
     spec::{ActionSpec, ObservationSpec},
     symbols::{
-        AGENT_GENERIC, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, PLACE_PIPE, TILE_DECOR_1,
-        TILE_DECOR_2, TILE_DECOR_3, TILE_DECOR_4, TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_FLAG,
-        TILE_MASK, TILE_PIPE_HORIZONTAL, TILE_PIPE_VIRTICAL, TILE_UI, TILE_WALL,
+        AGENT_GENERIC, DIG_ACTION, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, PLACE_PIPE,
+        TILE_DECOR_1, TILE_DECOR_2, TILE_DECOR_3, TILE_DECOR_4, TILE_DESTRUCTIBLE_WALL, TILE_EMPTY,
+        TILE_FLAG, TILE_MASK, TILE_PIPE_HORIZONTAL, TILE_PIPE_VIRTICAL, TILE_UI, TILE_WALL,
     },
     timestep::TimeStepMut,
     vocab::{VocabId, Vocabulary},
@@ -92,16 +92,18 @@ impl FindReturnObs {
         use FindReturnObs::*;
         matches!(
             self,
-            TileWall | TileDestructibleWall | AgentGeneric | PipeHorizontal | PipeVirtical
+            TileWall | TileDestructibleWall | AgentGeneric // | PipeHorizontal | PipeVirtical
         )
     }
 
     fn opaque(self) -> bool {
         use FindReturnObs::*;
-        matches!(
-            self,
-            TileWall | TileDestructibleWall | PipeHorizontal | PipeVirtical
-        )
+        matches!(self, TileWall | TileDestructibleWall)
+    }
+
+    fn destructible(self) -> bool {
+        use FindReturnObs::*;
+        matches!(self, TileDestructibleWall | PipeHorizontal | PipeVirtical)
     }
 }
 
@@ -111,6 +113,7 @@ vocab_enum!(FindReturnAction {
     MoveDown => MOVE_DOWN,
     MoveLeft => MOVE_LEFT,
     PlacePipe => PLACE_PIPE,
+    Dig => DIG_ACTION
 });
 
 impl FindReturnAction {
@@ -225,7 +228,7 @@ impl FindReturn {
             );
 
             let mut ui = timestep.obs.slice_mut(s![agent_id, .., 15.., 0]);
-            ui.fill(FindReturnObs::Mask as VocabId);
+            ui.fill(FindReturnObs::UI as VocabId);
         }
 
         timestep.time.fill(self.state.time as i32);
@@ -308,6 +311,7 @@ impl Environment for FindReturn {
 
     fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
         let mut agent_respawn_ids: Vec<usize> = Vec::new();
+        let mut agent_moved_ids: Vec<usize> = Vec::new();
         self.state.agent_order.shuffle(&mut self.state.rngs);
 
         for &agent_id in &self.state.agent_order {
@@ -326,48 +330,54 @@ impl Environment for FindReturn {
             }
 
             let action = FindReturnAction::from_id(actions[agent_id]);
-
             if action.is_move() {
                 agent.dir = action.direction();
-                let mut target = agent.position + agent.dir;
+            }
 
-                while (agent.dir.y == 0 && map[target.idx()] == FindReturnObs::PipeHorizontal)
-                    | (agent.dir.x == 0 && map[target.idx()] == FindReturnObs::PipeVirtical)
-                {
-                    target = target + agent.dir;
+            let mut target = agent.position + agent.dir;
+            match action {
+                FindReturnAction::MoveUp
+                | FindReturnAction::MoveRight
+                | FindReturnAction::MoveDown
+                | FindReturnAction::MoveLeft => {
+                    // move along a pip
+                    while (agent.dir.y == 0 && map[target.idx()] == FindReturnObs::PipeHorizontal)
+                        | (agent.dir.x == 0 && map[target.idx()] == FindReturnObs::PipeVirtical)
+                    {
+                        target = target + agent.dir;
+                    }
+
+                    if !map[target.idx()].blocked() {
+                        // unpaint the agent because it's moving
+                        map[agent.position.idx()] = base_map[agent.position.idx()];
+                        agent.position = target;
+                        agent_moved_ids.push(agent_id);
+
+                        let found_flag = base_map[agent.position.idx()] == FindReturnObs::TileFlag;
+                        if found_flag && self.state.time >= 256 {
+                            agent_respawn_ids.push(agent_id);
+                            timestep.reward[agent_id] = self.config.treasure_reward;
+                        }
+                    }
                 }
-
-                if !map[target.idx()].blocked() {
-                    // unpaint the agent because it's moving
-                    map[agent.position.idx()] = base_map[agent.position.idx()];
-                    agent.position = target;
-                } else if map[target.idx()] == FindReturnObs::TileDestructibleWall {
-                    // dig action
-                    map[target.idx()] = FindReturnObs::TileEmpty;
-                    base_map[target.idx()] = FindReturnObs::TileEmpty;
-                    agent.timeout = self.config.digging_timeout;
-                    continue;
+                FindReturnAction::Dig => {
+                    if map[target.idx()].destructible() {
+                        map[target.idx()] = FindReturnObs::TileEmpty;
+                        base_map[target.idx()] = FindReturnObs::TileEmpty;
+                        agent.timeout = self.config.digging_timeout;
+                    }
                 }
+                FindReturnAction::PlacePipe => {
+                    let target_tile = &mut map[target.idx()];
 
-                let found_flag = base_map[agent.position.idx()] == FindReturnObs::TileFlag;
-                if found_flag {
-                    agent_respawn_ids.push(agent_id);
-                    timestep.reward[agent_id] = self.config.treasure_reward;
-                } else {
-                    // paint the agent back only if it's not found the flag
-                    map[agent.position.idx()] = FindReturnObs::AgentGeneric;
-                }
-            } else if action == FindReturnAction::PlacePipe {
-                let target = agent.position + agent.dir;
-                let target_tile = &mut map[target.idx()];
-
-                if !target_tile.blocked() {
-                    *target_tile = if agent.dir.x == 0 {
-                        FindReturnObs::PipeHorizontal
-                    } else {
-                        FindReturnObs::PipeVirtical
-                    };
-                    base_map[target.idx()] = *target_tile;
+                    if !target_tile.blocked() {
+                        *target_tile = if agent.dir.x == 0 {
+                            FindReturnObs::PipeHorizontal
+                        } else {
+                            FindReturnObs::PipeVirtical
+                        };
+                        base_map[target.idx()] = *target_tile;
+                    }
                 }
             }
         }
@@ -381,6 +391,11 @@ impl Environment for FindReturn {
                 agent.position = free_positions.pop().unwrap();
                 self.state.map[agent.position.idx()] = FindReturnObs::AgentGeneric;
             }
+        }
+
+        for &agent_id in &agent_moved_ids {
+            self.state.map[self.state.agents[agent_id].position.idx()] =
+                FindReturnObs::AgentGeneric;
         }
 
         self.state.time += 1;

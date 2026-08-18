@@ -5,9 +5,7 @@
 
 use crate::{
     env::Environment,
-    envs::find_return::FindReturnConfig,
-    make::{EnvConfig, make},
-    policy::{Policy, RandomPolicy},
+    policy::Policy,
     render::{
         env::{GridRenderSettings, GridRenderState},
         grid::{GridLayout, draw_tile_grid},
@@ -80,7 +78,7 @@ pub struct RenderApp {
     /// Sheet coordinates indexed by obs vocab id.
     art: Vec<(u32, u32)>,
     /// Action ids for up/right/down/left; `None` when the env lacks the move.
-    move_actions: [Option<VocabId>; 5],
+    move_actions: [Option<VocabId>; 6],
 
     view_mode: ViewMode,
     pacing: PacingMode,
@@ -117,6 +115,7 @@ impl RenderApp {
             action_id(symbols::MOVE_DOWN),
             action_id(symbols::MOVE_LEFT),
             action_id(symbols::PLACE_PIPE),
+            action_id(symbols::DIG_ACTION),
         ];
 
         let mut rng = SmallRng::seed_from_u64(seed);
@@ -159,12 +158,13 @@ impl RenderApp {
     fn read_input(ui: &egui::Ui) -> FrameInput {
         use egui::Key;
 
-        const DIRECTION_KEYS: [(Key, Key); 5] = [
+        const DIRECTION_KEYS: [(Key, Key); 6] = [
             (Key::ArrowUp, Key::W),
             (Key::ArrowRight, Key::D),
             (Key::ArrowDown, Key::S),
             (Key::ArrowLeft, Key::A),
             (Key::Num0, Key::Num0),
+            (Key::E, Key::E),
         ];
 
         ui.input(|i| FrameInput {
@@ -270,22 +270,21 @@ impl RenderApp {
         let layout = GridLayout::fit(ui.max_rect(), crop_cols, crop_rows);
 
         let response = ui.allocate_rect(layout.grid_rect(), egui::Sense::click());
-        if response.clicked() {
-            if let Some((x, y)) = response
+        if response.clicked()
+            && let Some((x, y)) = response
                 .interact_pointer_pos()
                 .and_then(|pos| layout.pos_to_cell(pos))
+        {
+            // cropped grid coords back to the padded frame positions use
+            let clicked = (x + self.pad_w, y + self.pad_h);
+            // agents can share a tile; the lowest index wins
+            if let Some(agent) = self
+                .render_state
+                .agent_positions
+                .iter()
+                .position(|p| (p.x as usize, p.y as usize) == clicked)
             {
-                // cropped grid coords back to the padded frame positions use
-                let clicked = (x + self.pad_w, y + self.pad_h);
-                // agents can share a tile; the lowest index wins
-                if let Some(agent) = self
-                    .render_state
-                    .agent_positions
-                    .iter()
-                    .position(|p| (p.x as usize, p.y as usize) == clicked)
-                {
-                    self.focused_agent = agent;
-                }
+                self.focused_agent = agent;
             }
         }
 
