@@ -5,10 +5,13 @@ pub const TILE_MASK: &str = "mask";
 pub const TILE_EMPTY: &str = "tile/empty";
 pub const TILE_WALL: &str = "tile/wall";
 pub const TILE_DESTRUCTIBLE_WALL: &str = "tile/destructible_wall";
+/// A flag no one can score off yet. [`TILE_FLAG_UNLOCKED`] is the same flag
+/// once it is claimable.
 pub const TILE_FLAG: &str = "tile/flag";
 pub const TILE_FLAG_UNLOCKED: &str = "tile/flag_unlocked";
 pub const TILE_ARROW: &str = "tile/arrow";
 pub const TILE_GRASS: &str = "tile/grass";
+pub const TILE_WATER: &str = "tile/water";
 pub const TILE_FOOD: &str = "tile/food";
 
 pub const TILE_PIPE_HORIZONTAL: &str = "tile/pipe_horizontal";

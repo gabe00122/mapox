@@ -30,7 +30,9 @@ class RustFindReturnConfig(BaseModel):
     view_height: int = 11
 
     mapgen_threshold: float = 0.3
+    water_threshold: float = -0.45
     digging_timeout: int = 5
+    preparation_steps: int = 256
     treasure_reward: float = 1.0
 
 type RustEnvConfig = RustFindReturnConfig
