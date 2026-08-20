@@ -1,4 +1,6 @@
-from mapox.envs.rust_env import RustEnv, RustFindReturnConfig
+import argparse
+
+from mapox.envs.rust_env import RustEnv, RustFindReturnConfig, RustScoutsConfig
 from mapox.agent import Agent, RandomAgent
 from mapox._core import enjoy
 
@@ -26,8 +28,27 @@ def rust_enjoy(env: RustEnv, length: int, seed: int, agent: Agent):
     enjoy(env.inner, length, seed, rust_agent)
 
 
+CONFIGS = {
+    "find_return": lambda: RustFindReturnConfig(
+        view_width=15, view_height=17, width=80, height=70, mapgen_threshold=0.07
+    ),
+    "scouts": lambda: RustScoutsConfig(
+        view_width=15,
+        view_height=17,
+        ui_height=2,
+        width=80,
+        height=70,
+        mapgen_threshold=0.07,
+    ),
+}
+
+
 if __name__ == "__main__":
-    env = RustEnv(RustFindReturnConfig(view_width=15, view_height=17, width=80, height=70, mapgen_threshold=0.07), 512)
+    parser = argparse.ArgumentParser(description="Play a rust MAPOX environment")
+    parser.add_argument("--env", default="find_return", choices=list(CONFIGS))
+    args = parser.parse_args()
+
+    env = RustEnv(CONFIGS[args.env](), 512)
     rng_agent = RandomAgent(env.action_spec)
 
     rust_enjoy(env, 512, 0, rng_agent)

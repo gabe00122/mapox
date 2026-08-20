@@ -8,9 +8,10 @@ pub trait VocabEnum: Copy + Into<VocabId> {
 
 #[macro_export]
 macro_rules! vocab_enum {
-    ($vis:vis $name:ident { $($variant:ident => $symbol:expr),+ $(,)? }) => {
+    ($(#[$meta:meta])* $vis:vis $name:ident { $($variant:ident => $symbol:expr),+ $(,)? }) => {
         #[repr(u16)]
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        $(#[$meta])*
         $vis enum $name {
             $($variant),+
         }

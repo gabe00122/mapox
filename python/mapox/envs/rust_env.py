@@ -35,7 +35,34 @@ class RustFindReturnConfig(BaseModel):
     preparation_steps: int = 256
     treasure_reward: float = 1.0
 
-type RustEnvConfig = RustFindReturnConfig
+
+class RustScoutsConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    env_type: Literal["rust_scouts"] = "rust_scouts"
+
+    num_scouts: int = 4
+    num_harvesters: int = 4
+    num_treasures: int = 12
+
+    width: int = 40
+    height: int = 40
+    view_width: int = 11
+    # the whole observation window; the top ui_height rows are the UI band and
+    # what is left is the field of view
+    view_height: int = 13
+    ui_height: int = 2
+
+    mapgen_threshold: float = 0.3
+    water_threshold: float = -0.45
+    # a harvester acts on one step in this many; the rest are spent standing
+    harvesters_move_every: int = 6
+
+    scout_reward: float = 1.0
+    harvester_reward: float = 1.0
+
+
+type RustEnvConfig = RustFindReturnConfig | RustScoutsConfig
+
 
 class RustEnv(Environment[None]):
     def __init__(self, config: RustEnvConfig, length: int, num_envs: int = 1):

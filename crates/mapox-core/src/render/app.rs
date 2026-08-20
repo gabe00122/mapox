@@ -67,6 +67,10 @@ pub struct RenderApp {
     /// Sheet coordinates indexed by obs vocab id.
     art: Vec<(u32, u32)>,
 
+    /// Per-agent reward summed since the last reset, so the hint bar can show
+    /// where the focused agent's episode stands and not just the last step.
+    returns: Vec<f32>,
+
     view_mode: ViewMode,
     pacing: PacingMode,
     focused_agent: usize,
@@ -115,6 +119,7 @@ impl RenderApp {
             settings,
             render_state: GridRenderState::default(),
             art,
+            returns: vec![0.0; num_agents],
             view_mode: ViewMode::BirdsEye,
             // the native demo keeps the play-by-keypress feel; the web demo
             // free-runs so the page doesn't look frozen
@@ -140,6 +145,7 @@ impl RenderApp {
             .reset(self.env.num_agents(), rng.random())
             .expect("policy failed");
         self.next_step_time = None;
+        self.returns.fill(0.0);
         // any precomputed actions were for the old episode's observations
         self.actions_ready = false;
     }
@@ -175,6 +181,9 @@ impl RenderApp {
         }
 
         self.env.step(&self.actions, &mut self.buffers.view_mut());
+        for (total, reward) in self.returns.iter_mut().zip(self.buffers.reward.iter()) {
+            *total += reward;
+        }
         self.step_count += 1;
         self.actions_ready = false;
     }
@@ -232,14 +241,34 @@ impl RenderApp {
             PacingMode::FreeRun => format!("free-run {}fps", self.target_fps),
             PacingMode::StepOnInput => "step-on-input".to_owned(),
         };
-        let hint = format!(
-            "t={}   agent {}/{}   {}",
+        format!(
+            "t={}   agent {}/{}   {}   {}",
             self.step_count,
             self.focused_agent,
             self.env.num_agents(),
             pacing,
-        );
-        hint
+            self.focused_agent_text(),
+        )
+    }
+
+    fn focused_agent_text(&self) -> String {
+        let agent = self.focused_agent;
+        if self.step_count == 0 || agent >= self.buffers.num_agents() {
+            return "action -   r -".to_owned();
+        }
+
+        let action = self
+            .env
+            .action_vocab()
+            .symbols()
+            .get(self.buffers.last_action[agent] as usize)
+            .copied()
+            .unwrap_or("?");
+
+        format!(
+            "action {}   r {:+.2}   return {:+.2}",
+            action, self.buffers.reward[agent], self.returns[agent],
+        )
     }
 
     /// The map with the wall padding cropped off; click an agent to focus it.

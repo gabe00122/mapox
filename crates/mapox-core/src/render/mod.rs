@@ -28,6 +28,8 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::TILE_PIPE_HORIZONTAL, 53, 3),
     (symbols::TILE_PIPE_VIRTICAL, 52, 3),
     (symbols::AGENT_GENERIC, 104, 0),
+    (symbols::AGENT_SCOUT, 3, 16),
+    (symbols::AGENT_HARVESTER, 13, 14),
 ];
 
 pub(crate) fn resolve_art(vocab: &Vocabulary) -> Vec<(u32, u32)> {
@@ -49,7 +51,16 @@ mod tests {
     use super::*;
     use crate::env::Environment;
     use crate::envs::find_return::{FindReturn, FindReturnConfig};
+    use crate::envs::scouts::{Scouts, ScoutsConfig};
     use tileset::{TILESET_COLS, TILESET_ROWS};
+
+    /// One of each env, at its defaults, to check the tables against.
+    fn every_env() -> Vec<Box<dyn Environment>> {
+        vec![
+            Box::new(FindReturn::new(&FindReturnConfig::default(), 512)),
+            Box::new(Scouts::new(&ScoutsConfig::default(), 512)),
+        ]
+    }
 
     /// Off-grid coordinates would sample a uv rect from past the edge of the
     /// texture, which the sampler happily clamps into something wrong-looking
@@ -68,12 +79,13 @@ mod tests {
     /// the failure names the symbol, instead of at first launch.
     #[test]
     fn every_env_symbol_has_art() {
-        let env = FindReturn::new(&FindReturnConfig::default(), 512);
-        for symbol in env.obs_vocab().symbols() {
-            assert!(
-                TILE_ART.iter().any(|(name, _, _)| name == symbol),
-                "no art for {symbol}"
-            );
+        for env in every_env() {
+            for symbol in env.obs_vocab().symbols() {
+                assert!(
+                    TILE_ART.iter().any(|(name, _, _)| name == symbol),
+                    "no art for {symbol}"
+                );
+            }
         }
     }
 }

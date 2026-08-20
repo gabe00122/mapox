@@ -1,4 +1,4 @@
-from mapox.envs.rust_env import RustFindReturnConfig, RustEnv
+from mapox.envs.rust_env import RustFindReturnConfig, RustScoutsConfig, RustEnv
 from typing import Literal, Any, Callable
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -25,6 +25,7 @@ type EnvironmentConfig = (
     | PreyConfig
     | SnakeConfig
     | RustFindReturnConfig
+    | RustScoutsConfig
 )
 
 
