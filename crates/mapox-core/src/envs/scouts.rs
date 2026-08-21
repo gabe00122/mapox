@@ -12,9 +12,9 @@ use crate::{
     render::env::{GridRenderSettings, GridRenderState},
     spec::{ActionSpec, ObservationSpec},
     symbols::{
-        AGENT_HARVESTER, AGENT_SCOUT, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, TILE_DECOR_1,
-        TILE_DECOR_2, TILE_DECOR_3, TILE_DECOR_4, TILE_EMPTY, TILE_FLAG, TILE_FLAG_UNLOCKED,
-        TILE_MASK, TILE_UI, TILE_WALL, TILE_WATER,
+        AGENT_HARVESTER, AGENT_SCOUT, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, NOOP,
+        TILE_DECOR_1, TILE_DECOR_2, TILE_DECOR_3, TILE_DECOR_4, TILE_EMPTY, TILE_FLAG,
+        TILE_FLAG_UNLOCKED, TILE_MASK, TILE_UI, TILE_WALL, TILE_WATER,
     },
     timestep::TimeStepMut,
     vocab::{VocabId, Vocabulary},
@@ -128,17 +128,17 @@ impl ScoutsObs {
     }
 }
 
-vocab_enum!(
-    #[allow(clippy::enum_variant_names)]
-    ScoutsAction {
-        MoveUp => MOVE_UP,
-        MoveRight => MOVE_RIGHT,
-        MoveDown => MOVE_DOWN,
-        MoveLeft => MOVE_LEFT,
-    }
-);
+vocab_enum!(ScoutsAction {
+    MoveUp => MOVE_UP,
+    MoveRight => MOVE_RIGHT,
+    MoveDown => MOVE_DOWN,
+    MoveLeft => MOVE_LEFT,
+    Noop => NOOP,
+});
 
 impl ScoutsAction {
+    /// The noop's zero delta walks an agent into its own cell, which the
+    /// step reads as blocked and skips.
     fn direction(self) -> Position {
         use ScoutsAction::*;
         match self {
@@ -146,6 +146,7 @@ impl ScoutsAction {
             MoveRight => Position::new(1, 0),
             MoveDown => Position::new(0, -1),
             MoveLeft => Position::new(-1, 0),
+            Noop => Position::new(0, 0),
         }
     }
 }
@@ -292,7 +293,18 @@ impl Scouts {
         timestep.time.fill(self.state.time as i32);
         timestep.terminated.fill(self.state.time == self.length - 1);
         timestep.task_ids.fill(0);
+    }
+
+    fn encode_action_mask(&self, timestep: &mut TimeStepMut) {
         timestep.action_mask.fill(true);
+
+        for (agent_id, agent) in self.state.agents.iter().enumerate() {
+            if agent.timeout > 0 {
+                let mut mask = timestep.action_mask.row_mut(agent_id);
+                mask.fill(false);
+                mask[ScoutsAction::Noop as usize] = true;
+            }
+        }
     }
 }
 
@@ -362,6 +374,7 @@ impl Environment for Scouts {
         timestep.reward.fill(0.0);
         timestep.last_action.fill(0);
         self.encode_observations(timestep);
+        self.encode_action_mask(timestep);
     }
 
     fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
@@ -399,6 +412,7 @@ impl Environment for Scouts {
 
         self.state.time += 1;
         self.encode_observations(timestep);
+        self.encode_action_mask(timestep);
     }
 
     fn observation_spec(&self) -> ObservationSpec {
@@ -424,24 +438,33 @@ impl Environment for Scouts {
     fn get_render_settings(&self) -> GridRenderSettings {
         GridRenderSettings {
             obs_vocab: self.obs_vocab.clone(),
-            tile_width: self.width as usize,
-            tile_height: self.height as usize,
+            tile_width: self.config.width as usize,
+            tile_height: self.config.height as usize,
             view_width: self.config.view_width as usize,
             view_height: self.config.view_height as usize,
+            ui_height: self.config.ui_height as usize,
         }
     }
 
     fn render_state_into(&self, grid_render_state: &mut GridRenderState) {
+        let dim = (self.config.width as usize, self.config.height as usize);
         let tilemap = &mut grid_render_state.tilemap;
-        if tilemap.dim() != self.state.map.dim() {
-            *tilemap = Array2::zeros(self.state.map.dim());
+        if tilemap.dim() != dim {
+            *tilemap = Array2::zeros(dim);
         }
-        tilemap.zip_mut_with(&self.state.map, |dst, &tile| *dst = tile.into());
+        let interior = self.state.map.slice(s![
+            self.pad_width as usize..(self.width - self.pad_width) as usize,
+            self.pad_height as usize..(self.height - self.pad_height) as usize,
+        ]);
+        tilemap.zip_mut_with(&interior, |dst, &tile| *dst = tile.into());
 
         grid_render_state.agent_positions.clear();
         for agent in &self.state.agents {
-            tilemap[agent.position.idx()] = agent.role.tile().into();
-            grid_render_state.agent_positions.push(agent.position);
+            let local_pos = Position::new(
+                agent.position.x - self.pad_width,
+                agent.position.y - self.pad_height,
+            );
+            grid_render_state.agent_positions.push(local_pos);
         }
     }
 }
@@ -650,6 +673,74 @@ mod tests {
             .filter(|&&tile| matches!(tile, TileFlag | TileFlagUnlocked))
             .count();
         assert_eq!(treasures, 0);
+    }
+
+    /// The noop is exactly that: the agent keeps its square, and the treasure
+    /// it is standing next to keeps its lock.
+    #[test]
+    fn a_noop_changes_nothing() {
+        let mut env = empty_env();
+        let scout = center(&env);
+        let treasure = scout + Position::new(1, 0);
+        place_treasure(&mut env, treasure, TileFlagUnlocked);
+        spawn_agents(&mut env, &[scout, scout + Position::new(0, 5)]);
+
+        let mut buffers = TimeStepBuffers::new(&env);
+        step(
+            &mut env,
+            &mut buffers,
+            &[ScoutsAction::Noop, ScoutsAction::Noop],
+        );
+
+        assert_eq!(env.state.agents[0].position.idx(), scout.idx());
+        assert_eq!(buffers.reward[0], 0.0);
+        assert_eq!(env.state.base_map[treasure.idx()], TileFlagUnlocked);
+    }
+
+    /// A resting harvester is frozen, and the mask says so: through the steps
+    /// between its moves the noop is the only action it may send, while the
+    /// scout beside it keeps the full set.
+    #[test]
+    fn a_resting_harvester_is_masked_to_the_noop() {
+        let mut env = empty_env_with(ScoutsConfig {
+            num_scouts: 1,
+            num_harvesters: 1,
+            num_treasures: 0,
+            width: 21,
+            height: 21,
+            harvesters_move_every: 3,
+            ..Default::default()
+        });
+        let start = center(&env);
+        spawn_agents(&mut env, &[start, start + Position::new(0, 5)]);
+
+        let mut buffers = TimeStepBuffers::new(&env);
+        // the move that spends the harvester's turn
+        step(
+            &mut env,
+            &mut buffers,
+            &[ScoutsAction::MoveRight, ScoutsAction::MoveRight],
+        );
+
+        for _ in 0..env.config.harvesters_move_every - 1 {
+            let mask = buffers.action_mask.row(1);
+            assert_eq!(
+                mask.iter().filter(|&&legal| legal).count(),
+                1,
+                "a resting harvester has one action"
+            );
+            assert!(mask[ScoutsAction::Noop as usize]);
+            assert!(buffers.action_mask.row(0).iter().all(|&legal| legal));
+
+            step(
+                &mut env,
+                &mut buffers,
+                &[ScoutsAction::MoveRight, ScoutsAction::Noop],
+            );
+        }
+
+        // ... and it is free again on the step it may move
+        assert!(buffers.action_mask.row(1).iter().all(|&legal| legal));
     }
 
     /// Water stops feet but not eyes, and unlike find_return's terrain there is

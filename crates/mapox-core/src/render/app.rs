@@ -19,9 +19,13 @@ use crate::{
 use egui::{Color32, RichText, Stroke, StrokeKind};
 use rand::{RngExt, SeedableRng, rngs::SmallRng};
 
+/// How many steps the clock may replay in one frame to catch up after a
+/// stall; the rest of the debt is forgiven.
+const MAX_CATCH_UP_STEPS: usize = 4;
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ViewMode {
-    /// The map from the render state, padding cropped, every agent visible.
+    /// The map from the render state, every agent visible.
     BirdsEye,
     /// The focused agent's actual observations, not the render state.
     AgentPov,
@@ -49,7 +53,9 @@ pub struct RenderApp {
     /// Total step count before a reset
     length: usize,
     step_count: usize,
-    /// Set once the policy errors; the hint bar reports the random fallback.
+    /// Rewritten by every env reset and step; the policy reads it through
+    /// [`RenderApp::compute_actions`], and the hint bar reads reward and
+    /// last action out of it.
     buffers: TimeStepBuffers,
     actions: Vec<VocabId>,
     /// Whether `actions` already holds the policy's picks for the next step.
@@ -59,10 +65,6 @@ pub struct RenderApp {
     actions_ready: bool,
 
     settings: GridRenderSettings,
-    /// Derived as `view / 2`, the invariant the obs-encoding scheme already
-    /// relies on; the birds-eye view crops this border off the padded map.
-    pad_w: usize,
-    pad_h: usize,
     render_state: GridRenderState,
     /// Sheet coordinates indexed by obs vocab id.
     art: Vec<(u32, u32)>,
@@ -114,8 +116,6 @@ impl RenderApp {
             length,
             step_count: 0,
             buffers,
-            pad_w: settings.view_width / 2,
-            pad_h: settings.view_height / 2,
             settings,
             render_state: GridRenderState::default(),
             art,
@@ -166,6 +166,9 @@ impl RenderApp {
 
     /// `override_action` replaces the focused agent's policy action, which is
     /// how the keyboard plays a single agent while the policy drives the rest.
+    /// An exhausted episode spends the call on the reset instead: the
+    /// override is dropped, so a step-on-input keypress at the end restarts
+    /// the episode rather than stepping.
     fn step_env(&mut self, override_action: Option<VocabId>) {
         if self.episode_done() {
             self.reset();
@@ -213,18 +216,66 @@ impl RenderApp {
         }
     }
 
-    fn free_run(&mut self, ui: &egui::Ui) {
+    /// The focused agent's only legal action, when its mask leaves it exactly
+    /// one. There is nothing for manual control to ask about in that case.
+    fn forced_action(&self) -> Option<VocabId> {
+        let mut legal = self
+            .buffers
+            .action_mask
+            .row(self.focused_agent)
+            .into_iter()
+            .enumerate()
+            .filter(|&(_, &legal)| legal)
+            .map(|(id, _)| VocabId::try_from(id).expect("action mask fits VocabId"));
+
+        let only = legal.next()?;
+        legal.next().is_none().then_some(only)
+    }
+
+    /// Whether the clock drives the env this frame instead of waiting on a
+    /// keypress. Free-run always does. Step-on-input self-plays only while
+    /// the focused agent's mask leaves it a single action, so a frozen agent
+    /// (mid-dig, or a resting harvester) runs itself out and the user is
+    /// asked for a key only when there is a choice to make.
+    fn clock_runs(&self) -> bool {
+        match self.pacing {
+            PacingMode::FreeRun => true,
+            PacingMode::StepOnInput => !self.episode_done() && self.forced_action().is_some(),
+        }
+    }
+
+    /// The focused agent's action for a clock step: under step-on-input the
+    /// one action its mask allows, under free-run the policy's own pick.
+    fn clock_action(&self) -> Option<VocabId> {
+        match self.pacing {
+            PacingMode::FreeRun => None,
+            PacingMode::StepOnInput => self.forced_action(),
+        }
+    }
+
+    /// Steps the env on the [`RenderApp::target_fps`] clock for whichever
+    /// pacing is running it, and parks the clock when neither is.
+    fn run_clock(&mut self, ui: &egui::Ui) {
+        if !self.clock_runs() {
+            self.next_step_time = None;
+            return;
+        }
+
         let now = ui.input(|i| i.time);
         let interval = f64::from(1.0 / self.target_fps);
-        // first free-run frame steps immediately
+        // the first step after the clock starts plays immediately
         let mut next = self.next_step_time.unwrap_or(now);
 
         // cap the catch-up after a stall (window drag, slow policy)
         let mut steps = 0;
-        while now >= next && steps < 4 {
-            self.step_env(None);
+        while now >= next && steps < MAX_CATCH_UP_STEPS {
+            self.step_env(self.clock_action());
             next += interval;
             steps += 1;
+            // a step can hand the choice back: stop before overrunning it
+            if !self.clock_runs() {
+                break;
+            }
         }
         // whatever debt remains after the cap is forgiven, not replayed
         if now >= next {
@@ -239,6 +290,7 @@ impl RenderApp {
     fn hint_text(&self) -> String {
         let pacing = match self.pacing {
             PacingMode::FreeRun => format!("free-run {}fps", self.target_fps),
+            PacingMode::StepOnInput if self.clock_runs() => "step-on-input (auto)".to_owned(),
             PacingMode::StepOnInput => "step-on-input".to_owned(),
         };
         format!(
@@ -271,11 +323,13 @@ impl RenderApp {
         )
     }
 
-    /// The map with the wall padding cropped off; click an agent to focus it.
+    /// The entire map; click an agent to focus it.
     fn birds_eye_ui(&mut self, ui: &mut egui::Ui) {
-        let crop_cols = self.settings.tile_width - 2 * self.pad_w;
-        let crop_rows = self.settings.tile_height - 2 * self.pad_h;
-        let layout = GridLayout::fit(ui.max_rect(), crop_cols, crop_rows);
+        let layout = GridLayout::fit(
+            ui.max_rect(),
+            self.settings.tile_width,
+            self.settings.tile_height,
+        );
 
         let response = ui.allocate_rect(layout.grid_rect(), egui::Sense::click());
         if response.clicked()
@@ -283,14 +337,12 @@ impl RenderApp {
                 .interact_pointer_pos()
                 .and_then(|pos| layout.pos_to_cell(pos))
         {
-            // cropped grid coords back to the padded frame positions use
-            let clicked = (x + self.pad_w, y + self.pad_h);
             // agents can share a tile; the lowest index wins
             if let Some(agent) = self
                 .render_state
                 .agent_positions
                 .iter()
-                .position(|p| (p.x as usize, p.y as usize) == clicked)
+                .position(|p| (p.x as usize, p.y as usize) == (x, y))
             {
                 self.focused_agent = agent;
             }
@@ -299,25 +351,26 @@ impl RenderApp {
         // clip so the focused view rect can't overhang into the letterbox
         let painter = ui.painter_at(layout.grid_rect());
         let tileset = self.tileset.as_ref().expect("uploaded at the top of ui()");
-        let (pad_w, pad_h) = (self.pad_w, self.pad_h);
         let tilemap = &self.render_state.tilemap;
         draw_tile_grid(&painter, tileset, &self.art, &layout, |x, y| {
-            tilemap[[x + pad_w, y + pad_h]]
+            tilemap[[x, y]]
         });
 
-        // outline the focused agent and its egocentric view, so the partial
-        // observability the env actually exposes is visible
+        // outline the focused agent and its field of view, so the partial
+        // observability the env exposes is visible.
         if let Some(position) = self.render_state.agent_positions.get(self.focused_agent) {
-            let x = position.x as f32 - pad_w as f32;
-            let y = position.y as f32 - pad_h as f32;
-            let view_width = self.settings.view_width as f32;
-            let view_height = self.settings.view_height as f32;
+            let (x, y) = (position.x as f32, position.y as f32);
+            let fov_width = self.settings.view_width as f32;
+            let fov_height = self.settings.fov_height() as f32;
+            // the +0.5 centres an odd-sized window on the agent's cell; an
+            // even window would land half a cell off fov's [-half, half-1]
+            // convention, but every current env uses odd sizes
             painter.rect_stroke(
                 layout.cell_rect(
-                    x - view_width / 2.0 + 0.5,
-                    y - view_height / 2.0 + 0.5,
-                    view_width,
-                    view_height,
+                    x - fov_width / 2.0 + 0.5,
+                    y - fov_height / 2.0 + 0.5,
+                    fov_width,
+                    fov_height,
                 ),
                 0.0,
                 Stroke::new(1.0, Color32::YELLOW),
@@ -333,7 +386,9 @@ impl RenderApp {
     }
 
     /// The focused agent's observations as the env encoded them, which is
-    /// what a policy sees; the agent itself sits in the centre cell.
+    /// what a policy sees. The agent sits at the centre of the FOV band and
+    /// the UI band fills the rows above it, leaving the agent a little below
+    /// the centre of the grid as drawn.
     fn pov_ui(&mut self, ui: &mut egui::Ui) {
         let layout = GridLayout::fit(
             ui.max_rect(),
@@ -363,16 +418,14 @@ impl eframe::App for RenderApp {
 
         match ui.input(|state| keys::read(state, self.env.action_vocab())) {
             Some(Input::Command(command)) => self.run_command(command, ui),
-            // free-run ignores the action keys: the policy drives every agent
-            Some(Input::Action(action)) if self.pacing == PacingMode::StepOnInput => {
-                self.step_env(Some(action));
-            }
+            // the keyboard steps the env exactly when the clock does not:
+            // free-run leaves every agent to the policy, and so does
+            // step-on-input while the focused agent has no choice to make
+            Some(Input::Action(action)) if !self.clock_runs() => self.step_env(Some(action)),
             _ => {}
         }
 
-        if self.pacing == PacingMode::FreeRun {
-            self.free_run(ui);
-        }
+        self.run_clock(ui);
 
         self.env.render_state_into(&mut self.render_state);
 
@@ -401,4 +454,70 @@ pub fn open_window(app: RenderApp) -> eframe::Result {
         ..Default::default()
     };
     eframe::run_native("mapox", options, Box::new(move |_cc| Ok(Box::new(app))))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::envs::find_return::{FindReturn, FindReturnConfig};
+    use crate::envs::scouts::{Scouts, ScoutsConfig};
+
+    #[test]
+    fn scouts_render_settings_and_fov_are_correct() {
+        let env = Box::new(Scouts::new(
+            &ScoutsConfig {
+                width: 21,
+                height: 21,
+                view_width: 11,
+                view_height: 11,
+                ui_height: 2,
+                ..Default::default()
+            },
+            512,
+        ));
+        let settings = env.get_render_settings();
+        assert_eq!(settings.tile_width, 21);
+        assert_eq!(settings.tile_height, 21);
+        assert_eq!(settings.view_width, 11);
+        assert_eq!(settings.view_height, 11);
+        assert_eq!(settings.ui_height, 2);
+        assert_eq!(settings.fov_height(), 9);
+
+        let mut render_state = GridRenderState::default();
+        env.render_state_into(&mut render_state);
+        assert_eq!(render_state.tilemap.dim(), (21, 21));
+        for pos in &render_state.agent_positions {
+            assert!(pos.x >= 0 && (pos.x as usize) < 21);
+            assert!(pos.y >= 0 && (pos.y as usize) < 21);
+        }
+    }
+
+    #[test]
+    fn find_return_render_settings_and_fov_are_correct() {
+        let env = Box::new(FindReturn::new(
+            &FindReturnConfig {
+                width: 21,
+                height: 21,
+                view_width: 11,
+                view_height: 11,
+                ..Default::default()
+            },
+            512,
+        ));
+        let settings = env.get_render_settings();
+        assert_eq!(settings.tile_width, 21);
+        assert_eq!(settings.tile_height, 21);
+        assert_eq!(settings.view_width, 11);
+        assert_eq!(settings.view_height, 11);
+        assert_eq!(settings.ui_height, 0);
+        assert_eq!(settings.fov_height(), 11);
+
+        let mut render_state = GridRenderState::default();
+        env.render_state_into(&mut render_state);
+        assert_eq!(render_state.tilemap.dim(), (21, 21));
+        for pos in &render_state.agent_positions {
+            assert!(pos.x >= 0 && (pos.x as usize) < 21);
+            assert!(pos.y >= 0 && (pos.y as usize) < 21);
+        }
+    }
 }

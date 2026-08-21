@@ -18,4 +18,12 @@ pub struct GridRenderSettings {
     pub tile_height: usize,
     pub view_width: usize,
     pub view_height: usize,
+    pub ui_height: usize,
+}
+
+impl GridRenderSettings {
+    /// Height of the field-of-view band, excluding the synthetic UI band rows.
+    pub fn fov_height(&self) -> usize {
+        self.view_height.saturating_sub(self.ui_height)
+    }
 }

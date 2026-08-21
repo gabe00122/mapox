@@ -34,6 +34,7 @@ const ACTION_KEYS: &[(&str, &[Key])] = &[
     (symbols::MOVE_DOWN, &[Key::ArrowDown, Key::S]),
     (symbols::MOVE_LEFT, &[Key::ArrowLeft, Key::A]),
     (symbols::STAY, &[Key::Space]),
+    (symbols::NOOP, &[Key::Period]),
     (symbols::PRIMARY_ACTION, &[Key::F]),
     (symbols::DIG_ACTION, &[Key::E]),
     (symbols::PLACE_PIPE, &[Key::Q]),
@@ -106,7 +107,7 @@ mod tests {
 
     /// Deliberately strict: a key means one thing in the viewer, whatever env
     /// is loaded, so two rows claiming it is a mistake rather than a fallback.
-    /// [`KeyBindings::read`] would silently take the earlier row.
+    /// [`read`] would silently take the earlier row.
     #[test]
     fn no_key_is_bound_twice() {
         let mut bound: Vec<Key> = COMMAND_KEYS.iter().map(|&(key, _)| key).collect();

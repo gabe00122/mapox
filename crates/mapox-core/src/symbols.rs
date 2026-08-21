@@ -42,6 +42,7 @@ pub const MOVE_LEFT: &str = "move/left";
 pub const MOVES: [&str; 4] = [MOVE_UP, MOVE_RIGHT, MOVE_DOWN, MOVE_LEFT];
 
 pub const STAY: &str = "stay";
+pub const NOOP: &str = "noop";
 pub const PRIMARY_ACTION: &str = "primary";
 pub const DIG_ACTION: &str = "dig";
 

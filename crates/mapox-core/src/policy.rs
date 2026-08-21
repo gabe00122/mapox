@@ -52,8 +52,6 @@ impl Policy for RandomPolicy {
                         .push(VocabId::try_from(id).expect("action mask exceeds VocabId capacity"));
                 }
             }
-            // an env that emits an all-false row gets uniform over everything
-            // rather than a panic; no such env exists today
             *action = self.legal[self.rng.random_range(0..self.legal.len())];
         }
         Ok(())

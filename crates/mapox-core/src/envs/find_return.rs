@@ -12,7 +12,7 @@ use crate::{
     render::env::{GridRenderSettings, GridRenderState},
     spec::{ActionSpec, ObservationSpec},
     symbols::{
-        AGENT_GENERIC, DIG_ACTION, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, PLACE_PIPE,
+        AGENT_GENERIC, DIG_ACTION, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, NOOP, PLACE_PIPE,
         TILE_DECOR_1, TILE_DECOR_2, TILE_DECOR_3, TILE_DECOR_4, TILE_DESTRUCTIBLE_WALL, TILE_EMPTY,
         TILE_FLAG, TILE_FLAG_UNLOCKED, TILE_MASK, TILE_PIPE_HORIZONTAL, TILE_PIPE_VIRTICAL,
         TILE_UI, TILE_WALL, TILE_WATER,
@@ -122,7 +122,8 @@ vocab_enum!(FindReturnAction {
     MoveDown => MOVE_DOWN,
     MoveLeft => MOVE_LEFT,
     PlacePipe => PLACE_PIPE,
-    Dig => DIG_ACTION
+    Dig => DIG_ACTION,
+    Noop => NOOP,
 });
 
 impl FindReturnAction {
@@ -225,9 +226,6 @@ impl FindReturn {
         self.state.free_positions.shuffle(&mut self.state.rngs);
     }
 
-    /// Flips every flag from locked to claimable. Idempotent, and safe to
-    /// call with an agent standing on a flag: that agent owns the top layer
-    /// until it steps off, when the base map paints the new tile back in.
     fn unlock_flags(&mut self) {
         let FindReturnState {
             flag_positions,
@@ -247,7 +245,7 @@ impl FindReturn {
     fn encode_observations(&self, timestep: &mut TimeStepMut) {
         for (agent_id, agent) in self.state.agents.iter().enumerate() {
             // wall padding keeps the view window inside the map
-            let mut view = timestep.obs.slice_mut(s![agent_id, .., ..15, 0]);
+            let mut view = timestep.obs.slice_mut(s![agent_id, .., .., 0]);
             fov::encode_visible(
                 &self.state.map,
                 agent.position,
@@ -255,15 +253,23 @@ impl FindReturn {
                 FindReturnObs::Mask,
                 |tile| tile.opaque(),
             );
-
-            let mut ui = timestep.obs.slice_mut(s![agent_id, .., 15.., 0]);
-            ui.fill(FindReturnObs::UI as VocabId);
         }
 
         timestep.time.fill(self.state.time as i32);
         timestep.terminated.fill(self.state.time == self.length - 1);
         timestep.task_ids.fill(0);
+    }
+
+    fn encode_action_mask(&self, timestep: &mut TimeStepMut) {
         timestep.action_mask.fill(true);
+
+        for (agent_id, agent) in self.state.agents.iter().enumerate() {
+            if agent.timeout > 0 {
+                let mut mask = timestep.action_mask.row_mut(agent_id);
+                mask.fill(false);
+                mask[FindReturnAction::Noop as usize] = true;
+            }
+        }
     }
 }
 
@@ -344,6 +350,7 @@ impl Environment for FindReturn {
         timestep.reward.fill(0.0);
         timestep.last_action.fill(0);
         self.encode_observations(timestep);
+        self.encode_action_mask(timestep);
     }
 
     fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
@@ -410,6 +417,7 @@ impl Environment for FindReturn {
                         agent.timeout = self.config.digging_timeout;
                     }
                 }
+                FindReturnAction::Noop => {}
                 FindReturnAction::PlacePipe => {
                     let target_tile = &mut map[target.idx()];
 
@@ -443,6 +451,7 @@ impl Environment for FindReturn {
 
         self.state.time += 1;
         self.encode_observations(timestep);
+        self.encode_action_mask(timestep);
     }
 
     fn observation_spec(&self) -> ObservationSpec {
@@ -468,24 +477,33 @@ impl Environment for FindReturn {
     fn get_render_settings(&self) -> GridRenderSettings {
         GridRenderSettings {
             obs_vocab: self.obs_vocab.clone(),
-            tile_width: self.width as usize,
-            tile_height: self.height as usize,
+            tile_width: self.config.width as usize,
+            tile_height: self.config.height as usize,
             view_width: self.config.view_width as usize,
             view_height: self.config.view_height as usize,
+            ui_height: 0,
         }
     }
 
     fn render_state_into(&self, grid_render_state: &mut GridRenderState) {
+        let dim = (self.config.width as usize, self.config.height as usize);
         let tilemap = &mut grid_render_state.tilemap;
-        if tilemap.dim() != self.state.map.dim() {
-            *tilemap = Array2::zeros(self.state.map.dim());
+        if tilemap.dim() != dim {
+            *tilemap = Array2::zeros(dim);
         }
-        tilemap.zip_mut_with(&self.state.map, |dst, &tile| *dst = tile.into());
+        let interior = self.state.map.slice(s![
+            self.pad_width as usize..(self.width - self.pad_width) as usize,
+            self.pad_height as usize..(self.height - self.pad_height) as usize,
+        ]);
+        tilemap.zip_mut_with(&interior, |dst, &tile| *dst = tile.into());
 
         grid_render_state.agent_positions.clear();
         for agent in &self.state.agents {
-            tilemap[agent.position.idx()] = FindReturnObs::AgentGeneric.into();
-            grid_render_state.agent_positions.push(agent.position);
+            let local_pos = Position::new(
+                agent.position.x - self.pad_width,
+                agent.position.y - self.pad_height,
+            );
+            grid_render_state.agent_positions.push(local_pos);
         }
     }
 }
@@ -506,9 +524,7 @@ mod tests {
         })
     }
 
-    /// The same bare floor, but sized so that [`FindReturn::step`] can encode
-    /// an observation into it: that path splits the window at row 15 for the UI
-    /// band, so a view shorter than that slices past the end of the buffer.
+    /// An env with standard floor, for testing step dynamics.
     fn walkable_env() -> FindReturn {
         empty_env_with(FindReturnConfig {
             num_agents: 1,
@@ -756,6 +772,62 @@ mod tests {
         assert_eq!(buffers.reward[0], env.config.treasure_reward);
         // ... and the agent is respawned somewhere else rather than parked on it
         assert_ne!(env.state.agents[0].position.idx(), flag.idx());
+    }
+
+    /// The noop is exactly that: the agent keeps its square, its facing and
+    /// the map it is standing on.
+    #[test]
+    fn a_noop_changes_nothing() {
+        let mut env = walkable_env();
+        let start = center(&env);
+        spawn_agent(&mut env, start);
+
+        let mut buffers = TimeStepBuffers::new(&env);
+        let mut timestep = buffers.view_mut();
+        env.step(&[FindReturnAction::MoveRight.into()], &mut timestep);
+        let after_move = env.state.agents[0].clone();
+        env.step(&[FindReturnAction::Noop.into()], &mut timestep);
+
+        assert_eq!(
+            env.state.agents[0].position.idx(),
+            after_move.position.idx()
+        );
+        assert_eq!(env.state.agents[0].dir.idx(), after_move.dir.idx());
+        assert_eq!(env.state.map[after_move.position.idx()], AgentGeneric);
+    }
+
+    /// A digging agent is frozen for `digging_timeout` steps, and the mask
+    /// says so: through those steps the noop is the only action it may send,
+    /// and the step it comes back on it may send anything again.
+    #[test]
+    fn a_digging_agent_is_masked_to_the_noop() {
+        let mut env = flag_env(0);
+        env.config.digging_timeout = 3;
+        let start = center(&env);
+        let wall = start + Position::new(1, 0);
+        env.state.base_map[wall.idx()] = TileDestructibleWall;
+        env.state.map[wall.idx()] = TileDestructibleWall;
+        spawn_agent(&mut env, start);
+
+        let mut buffers = TimeStepBuffers::new(&env);
+        let mut timestep = buffers.view_mut();
+        // face the wall, then swing at it
+        env.step(&[FindReturnAction::MoveRight.into()], &mut timestep);
+        assert!(buffers.action_mask.row(0).iter().all(|&legal| legal));
+
+        env.step(&[FindReturnAction::Dig.into()], &mut buffers.view_mut());
+        for _ in 0..env.config.digging_timeout {
+            let mask = buffers.action_mask.row(0);
+            assert_eq!(
+                mask.iter().filter(|&&legal| legal).count(),
+                1,
+                "a frozen agent has one action"
+            );
+            assert!(mask[FindReturnAction::Noop as usize]);
+            env.step(&[FindReturnAction::Noop.into()], &mut buffers.view_mut());
+        }
+
+        assert!(buffers.action_mask.row(0).iter().all(|&legal| legal));
     }
 
     /// A zero-length preparation phase means the flag is live from reset, so an

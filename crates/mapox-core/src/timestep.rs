@@ -12,7 +12,7 @@ pub const OBS_CHANNELS: usize = 1;
 
 #[derive(Debug)]
 pub struct TimeStepMut<'a> {
-    pub obs: ArrayViewMut4<'a, VocabId>, // (num_agents, view_w, view_h, 4)
+    pub obs: ArrayViewMut4<'a, VocabId>, // (num_agents, view_w, view_h, OBS_CHANNELS)
     pub time: ArrayViewMut1<'a, i32>,    // (num_agents,)
     pub terminated: ArrayViewMut1<'a, bool>, // (num_agents,)
     pub last_action: ArrayViewMut1<'a, VocabId>, // (num_agents,)
@@ -23,7 +23,7 @@ pub struct TimeStepMut<'a> {
 
 #[derive(Debug)]
 pub struct TimeStepRef<'a> {
-    pub obs: ArrayView4<'a, VocabId>, // (num_agents, view_w, view_h, 4)
+    pub obs: ArrayView4<'a, VocabId>, // (num_agents, view_w, view_h, OBS_CHANNELS)
     pub time: ArrayView1<'a, i32>,    // (num_agents,)
     pub terminated: ArrayView1<'a, bool>, // (num_agents,)
     pub last_action: ArrayView1<'a, VocabId>, // (num_agents,)
