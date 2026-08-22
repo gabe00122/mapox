@@ -460,10 +460,7 @@ impl Environment for Scouts {
 
         grid_render_state.agent_positions.clear();
         for agent in &self.state.agents {
-            let local_pos = Position::new(
-                agent.position.x - self.pad_width,
-                agent.position.y - self.pad_height,
-            );
+            let local_pos = agent.position - Position::new(self.pad_width, self.pad_height);
             grid_render_state.agent_positions.push(local_pos);
         }
     }
