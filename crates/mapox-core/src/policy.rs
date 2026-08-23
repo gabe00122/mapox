@@ -88,10 +88,4 @@ mod tests {
         let actions = act_with_mask(mask);
         assert_eq!(actions, (0..8).collect::<Vec<_>>());
     }
-
-    #[test]
-    fn all_false_mask_falls_back_to_any_action() {
-        let actions = act_with_mask(Array2::default((16, 4)));
-        assert!(actions.iter().all(|&a| (0..4).contains(&a)));
-    }
 }

@@ -186,10 +186,13 @@ impl FindReturn {
         let pad_width = config.view_width / 2;
         let pad_height = config.view_height / 2;
 
+        let ui_height = 2;
+        let view_height = config.view_height + ui_height;
+
         let width = config.width + 2 * pad_width;
         let height = config.height + 2 * pad_height;
 
-        let obs_spec = ObservationSpec::new(config.view_width, config.view_height, obs_vocab.len());
+        let obs_spec = ObservationSpec::new(config.view_width, view_height, obs_vocab.len());
         let action_spec = ActionSpec::new(action_vocab.len());
 
         Self {
@@ -255,9 +258,11 @@ impl FindReturn {
     }
 
     fn encode_observations(&self, timestep: &mut TimeStepMut) {
+        let fov_height = self.config.view_height as usize;
+
         for (agent_id, agent) in self.state.agents.iter().enumerate() {
             // wall padding keeps the view window inside the map
-            let mut view = timestep.obs.slice_mut(s![agent_id, .., ..15, 0]);
+            let mut view = timestep.obs.slice_mut(s![agent_id, .., ..fov_height, 0]);
             fov::encode_visible(
                 &self.state.map,
                 agent.position,
@@ -266,7 +271,7 @@ impl FindReturn {
                 |tile| tile.opaque(),
             );
 
-            let mut ui = timestep.obs.slice_mut(s![agent_id, .., 15.., 0]);
+            let mut ui = timestep.obs.slice_mut(s![agent_id, .., fov_height.., 0]);
             ui.fill(FindReturnObs::UI as VocabId);
         }
 
@@ -512,7 +517,7 @@ impl Environment for FindReturn {
             tile_width: self.config.width as usize,
             tile_height: self.config.height as usize,
             view_width: self.config.view_width as usize,
-            view_height: self.config.view_height as usize,
+            view_height: (self.config.view_height + 2) as usize,
             ui_height: 2,
         }
     }

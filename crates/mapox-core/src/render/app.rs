@@ -7,21 +7,29 @@ use crate::{
     env::Environment,
     policy::Policy,
     render::{
-        env::{GridRenderSettings, GridRenderState},
+        env::{GridRenderSettings, GridRenderState, visible_tiles},
         grid::{GridLayout, draw_tile_grid},
         keys::{self, Command, Input},
         resolve_art,
         tileset::Tileset,
     },
+    symbols,
     timestep::TimeStepBuffers,
     vocab::VocabId,
 };
 use egui::{Color32, RichText, Stroke, StrokeKind};
+use ndarray::s;
 use rand::{RngExt, SeedableRng, rngs::SmallRng};
 
 /// How many steps the clock may replay in one frame to catch up after a
 /// stall; the rest of the debt is forgiven.
 const MAX_CATCH_UP_STEPS: usize = 4;
+
+/// Fog over the tiles no agent can currently see: strong enough to read as
+/// "not observed", faint enough that the map underneath stays legible. A
+/// ~43% grey, premultiplied by hand because the unpremultiplied constructor
+/// is not const.
+const UNSEEN_TILE_OVERLAY: Color32 = Color32::from_rgba_premultiplied(41, 41, 41, 110);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ViewMode {
@@ -356,26 +364,33 @@ impl RenderApp {
             tilemap[[x, y]]
         });
 
+        // grey out the tiles no agent's observation sees through, leaving
+        // the union of everyone's line of sight at full brightness; the obs
+        // vocab having no mask tile means nothing is ever hidden
+        let mask = self.settings.obs_vocab.get(symbols::TILE_MASK);
+        let seen = visible_tiles(
+            &self.settings,
+            &self.render_state.agent_positions,
+            self.buffers.obs.slice(s![.., .., .., 0]),
+            mask,
+        );
+        for x in 0..self.settings.tile_width {
+            for y in 0..self.settings.tile_height {
+                if !seen[[x, y]] {
+                    painter.rect_filled(
+                        layout.cell_rect(x as f32, y as f32, 1.0, 1.0),
+                        0.0,
+                        UNSEEN_TILE_OVERLAY,
+                    );
+                }
+            }
+        }
+
         // outline the focused agent and its field of view, so the partial
         // observability the env exposes is visible.
         if let Some(position) = self.render_state.agent_positions.get(self.focused_agent) {
             let (x, y) = (position.x as f32, position.y as f32);
-            let fov_width = self.settings.view_width as f32;
-            let fov_height = self.settings.fov_height() as f32;
-            // the +0.5 centres an odd-sized window on the agent's cell; an
-            // even window would land half a cell off fov's [-half, half-1]
-            // convention, but every current env uses odd sizes
-            painter.rect_stroke(
-                layout.cell_rect(
-                    x - fov_width / 2.0 + 0.5,
-                    y - fov_height / 2.0 + 0.5,
-                    fov_width,
-                    fov_height,
-                ),
-                0.0,
-                Stroke::new(1.0, Color32::YELLOW),
-                StrokeKind::Outside,
-            );
+
             painter.rect_stroke(
                 layout.cell_rect(x, y, 1.0, 1.0),
                 0.0,
@@ -461,6 +476,46 @@ mod tests {
     use super::*;
     use crate::envs::find_return::{FindReturn, FindReturnConfig};
     use crate::envs::scouts::{Scouts, ScoutsConfig};
+    use crate::render::env::visible_tiles;
+
+    /// The overlay reads the same buffers the env writes: every agent must
+    /// see the tile it stands on, and nobody can see past the map edge or
+    /// through more tiles than the window holds.
+    #[test]
+    fn line_of_sight_matches_the_encoded_observations() {
+        for mut env in [
+            Box::new(FindReturn::new(&FindReturnConfig::default(), 512)) as Box<dyn Environment>,
+            Box::new(Scouts::new(&ScoutsConfig::default(), 512)) as Box<dyn Environment>,
+        ] {
+            let settings = env.get_render_settings();
+            let mask = settings
+                .obs_vocab
+                .get(symbols::TILE_MASK)
+                .expect("these envs mask their observations");
+
+            let mut buffers = TimeStepBuffers::new(env.as_ref());
+            env.reset(0, &mut buffers.view_mut());
+
+            let mut render_state = GridRenderState::default();
+            env.render_state_into(&mut render_state);
+
+            let seen = visible_tiles(
+                &settings,
+                &render_state.agent_positions,
+                buffers.obs.slice(s![.., .., .., 0]),
+                Some(mask),
+            );
+
+            let per_agent_window = settings.view_width * settings.fov_height();
+            let seen_count = seen.iter().filter(|&&seen| seen).count();
+            assert!(seen_count > 0);
+            assert!(seen_count <= env.num_agents() * per_agent_window);
+
+            for position in &render_state.agent_positions {
+                assert!(seen[position.idx()], "agent's own tile is always seen");
+            }
+        }
+    }
 
     #[test]
     fn scouts_render_settings_and_fov_are_correct() {
@@ -508,8 +563,8 @@ mod tests {
         assert_eq!(settings.tile_width, 21);
         assert_eq!(settings.tile_height, 21);
         assert_eq!(settings.view_width, 11);
-        assert_eq!(settings.view_height, 11);
-        assert_eq!(settings.ui_height, 0);
+        assert_eq!(settings.view_height, 13);
+        assert_eq!(settings.ui_height, 2);
         assert_eq!(settings.fov_height(), 11);
 
         let mut render_state = GridRenderState::default();
