@@ -29,12 +29,12 @@ def rust_enjoy(env: RustEnv, length: int, seed: int, agent: Agent):
 
 
 CONFIGS = {
-    "find_return": lambda: RustFindReturnConfig(
-        view_width=15, view_height=17, width=80, height=70, mapgen_threshold=0.07
+    "find_return": RustFindReturnConfig(
+        view_width=15, view_height=15, width=80, height=70, mapgen_threshold=0.07
     ),
-    "scouts": lambda: RustScoutsConfig(
+    "scouts": RustScoutsConfig(
         view_width=15,
-        view_height=17,
+        view_height=15,
         ui_height=2,
         width=80,
         height=70,
@@ -48,7 +48,7 @@ if __name__ == "__main__":
     parser.add_argument("--env", default="find_return", choices=list(CONFIGS))
     args = parser.parse_args()
 
-    env = RustEnv(CONFIGS[args.env](), 512)
+    env = RustEnv(CONFIGS[args.env], 512)
     rng_agent = RandomAgent(env.action_spec)
 
     rust_enjoy(env, 512, 0, rng_agent)

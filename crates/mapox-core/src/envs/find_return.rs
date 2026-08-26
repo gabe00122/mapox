@@ -403,7 +403,6 @@ impl Environment for FindReturn {
         }
 
         let mut agent_respawn_ids: Vec<usize> = Vec::new();
-        let mut agent_moved_ids: Vec<usize> = Vec::new();
         self.state.agent_order.shuffle(&mut self.state.rngs);
 
         for &agent_id in &self.state.agent_order {
@@ -436,7 +435,6 @@ impl Environment for FindReturn {
                         // unpaint the agent because it's moving
                         map[agent.position.idx()] = base_map[agent.position.idx()];
                         agent.position = target;
-                        agent_moved_ids.push(agent_id);
 
                         // a locked flag is scenery: only the unlocked tile pays
                         let found_flag =
@@ -444,6 +442,8 @@ impl Environment for FindReturn {
                         if found_flag {
                             agent_respawn_ids.push(agent_id);
                             timestep.reward[agent_id] = self.config.treasure_reward;
+                        } else {
+                            map[agent.position.idx()] = FindReturnObs::AgentGeneric;
                         }
                     }
                 }
@@ -479,11 +479,6 @@ impl Environment for FindReturn {
                 agent.position = free_positions.pop().unwrap();
                 self.state.map[agent.position.idx()] = FindReturnObs::AgentGeneric;
             }
-        }
-
-        for &agent_id in &agent_moved_ids {
-            self.state.map[self.state.agents[agent_id].position.idx()] =
-                FindReturnObs::AgentGeneric;
         }
 
         self.state.time += 1;
