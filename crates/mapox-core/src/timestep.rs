@@ -45,6 +45,7 @@ impl TimeStepMut<'_> {
         }
     }
 }
+
 #[derive(Debug)]
 pub struct TimeStepBuffers {
     pub obs: Array4<VocabId>,
