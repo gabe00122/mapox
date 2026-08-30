@@ -3945,6 +3945,7 @@ dependencies = [
  "image",
  "log",
  "ndarray 0.17.2",
+ "parking_lot",
  "rand 0.10.2",
  "rayon",
  "serde",

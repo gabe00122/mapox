@@ -25,3 +25,6 @@ eframe.workspace = true
 wgpu.workspace = true
 egui.workspace = true
 image.workspace = true
+
+[dev-dependencies]
+parking_lot.workspace = true

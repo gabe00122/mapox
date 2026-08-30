@@ -73,7 +73,7 @@ impl TimeStepMut<'_> {
                     reward: ArrayViewMut1::from_shape_ptr(len, reward_ptr.add(offset)),
                     action_mask: ArrayViewMut2::from_shape_ptr(
                         (len, num_actions),
-                        action_mask_ptr.add(offset),
+                        action_mask_ptr.add(offset * num_actions),
                     ),
                     task_ids: ArrayViewMut1::from_shape_ptr(len, task_ids_ptr.add(offset)),
                 });
@@ -150,6 +150,43 @@ impl TimeStepBuffers {
             reward: self.reward.view(),
             action_mask: self.action_mask.view(),
             task_ids: self.task_ids.view(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The action mask is the one 2D field, so its partition must skip
+    /// whole rows, not single elements: a per-element offset makes the
+    /// partitions overlap and writes leak across envs.
+    #[test]
+    fn partition_mut_keeps_partitions_disjoint() {
+        let mut buffers = TimeStepBuffers::with_shape(3, 1, 1, 4);
+
+        {
+            let mut view = buffers.view_mut();
+            let mut parts = view.partition_mut(&[1, 2]);
+
+            parts[0].obs.fill(10);
+            parts[1].obs.fill(20);
+            parts[0].action_mask[[0, 0]] = true;
+            parts[1].action_mask[[0, 1]] = true;
+            parts[1].action_mask[[1, 2]] = true;
+        }
+
+        let expected = [
+            [true, false, false, false],
+            [false, true, false, false],
+            [false, false, true, false],
+        ];
+        for (agent, row) in expected.iter().enumerate() {
+            assert_eq!(buffers.obs[[agent, 0, 0, 0]], if agent == 0 { 10 } else { 20 });
+            assert_eq!(
+                buffers.action_mask.row(agent).iter().copied().collect::<Vec<_>>(),
+                row.to_vec()
+            );
         }
     }
 }
