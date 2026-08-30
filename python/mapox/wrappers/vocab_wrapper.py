@@ -47,8 +47,10 @@ class VocabWrapper(Environment):
         )
         mask = mask.at[..., self._local_to_global_action].set(ts.action_mask)
 
-        # only the first obs channel goes through the lookup
-        obs = ts.obs.at[..., 0].set(self._local_to_global_obs[ts.obs[..., 0]])
+        # only the first obs channel goes through the lookup; asarray makes
+        # the jax-array ops below valid for ndarray leaves (rust env) too
+        obs = jnp.asarray(ts.obs)
+        obs = obs.at[..., 0].set(self._local_to_global_obs[obs[..., 0]])
 
         return ts._replace(
             last_action=self._local_to_global_action[ts.last_action],

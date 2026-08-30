@@ -1,5 +1,5 @@
 from importlib.resources import files
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import jax
 import numpy as np
@@ -111,9 +111,9 @@ class GridworldRenderer:
 
         self.frames: list[np.ndarray] = []
         self._tile_size: int | None = None
-        self._tilecache = None
+        self._tilecache: Any = None
         self._agent_tile_size: int | None = None
-        self._agent_tilecache = None
+        self._agent_tilecache: Any = None
         self._view_offset_x = 0
         self._view_offset_y = 0
         self._agent_view_offset_x = 0
@@ -135,6 +135,10 @@ class GridworldRenderer:
 
     def _refresh_screen_surface(self):
         current_surface = pygame.display.get_surface()
+        if current_surface is None:
+            current_surface = pygame.display.set_mode(
+                (self.screen_width, self.screen_height)
+            )
         self.screen = current_surface
 
         width, height = current_surface.get_size()
@@ -199,6 +203,7 @@ class GridworldRenderer:
 
     def _draw_tile(self, image, x, y):
         x, y = self._tile_to_screen(x, y)
+        assert self._tile_size is not None
         px = self._view_offset_x + x * self._tile_size
         py = self._view_offset_y + y * self._tile_size
         dest = pygame.Rect(px, py, self._tile_size, self._tile_size)
@@ -211,6 +216,7 @@ class GridworldRenderer:
         y,
     ):
         sx, sy = self._tile_to_screen(x, y)
+        assert self._tile_size is not None
 
         half_w = self._view_width // 2
         half_h = self._view_height // 2
@@ -323,7 +329,10 @@ class GridworldRenderer:
         return False
 
     def record_frame(self):
-        img_data = pygame.surfarray.array3d(pygame.display.get_surface())
+        surface = pygame.display.get_surface()
+        if surface is None:
+            return
+        img_data = pygame.surfarray.array3d(surface)
         self.frames.append(img_data)
 
     def save_video(self, file_name: str):

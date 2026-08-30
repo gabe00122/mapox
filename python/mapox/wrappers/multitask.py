@@ -15,7 +15,7 @@ def _stack_pytree(batch):
 
 
 class MultiTaskWrapper(Environment):
-    def __init__(self, envs: tuple[Environment], env_names: tuple[str]) -> None:
+    def __init__(self, envs: tuple[Environment, ...], env_names: tuple[str, ...]) -> None:
         self._action_vocab = Vocabulary()
         self._obs_vocab = Vocabulary()
 

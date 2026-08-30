@@ -1,5 +1,5 @@
 from functools import cached_property
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import jax
 import numpy as np
@@ -64,6 +64,13 @@ class RustScoutsConfig(BaseModel):
 type RustEnvConfig = RustFindReturnConfig | RustScoutsConfig
 
 
+def _shape_placeholder(buffer: np.ndarray, dtype) -> jax.Array:
+    # io_callback result-spec leaf: a shape/dtype placeholder standing in for
+    # a shared buffer. The machinery only reads .shape/.dtype, never the value,
+    # but the spec must be a TimeStep for io_callback to return one.
+    return cast(jax.Array, jax.ShapeDtypeStruct(buffer.shape, dtype))
+
+
 class RustEnv(Environment[None]):
     def __init__(self, config: RustEnvConfig, length: int, num_envs: int = 1):
         config_json = config.model_dump_json()
@@ -86,13 +93,13 @@ class RustEnv(Environment[None]):
         self._task_ids = np.zeros((num_agents,), np.int32)
 
         self._result_shapes = TimeStep(
-            obs=jax.ShapeDtypeStruct(self._obs.shape, jnp.uint16),
-            time=jax.ShapeDtypeStruct(self._time.shape, jnp.int32),
-            terminated=jax.ShapeDtypeStruct(self._terminated.shape, jnp.bool_),
-            last_action=jax.ShapeDtypeStruct(self._last_action.shape, jnp.uint16),
-            reward=jax.ShapeDtypeStruct(self._reward.shape, jnp.float32),
-            action_mask=jax.ShapeDtypeStruct(self._action_mask.shape, jnp.bool_),
-            task_ids=jax.ShapeDtypeStruct(self._task_ids.shape, jnp.int32),
+            obs=_shape_placeholder(self._obs, jnp.uint16),
+            time=_shape_placeholder(self._time, jnp.int32),
+            terminated=_shape_placeholder(self._terminated, jnp.bool_),
+            last_action=_shape_placeholder(self._last_action, jnp.uint16),
+            reward=_shape_placeholder(self._reward, jnp.float32),
+            action_mask=_shape_placeholder(self._action_mask, jnp.bool_),
+            task_ids=_shape_placeholder(self._task_ids, jnp.int32),
         )
 
     # jit static-arg caching keys on (hash, eq); identity semantics so two
