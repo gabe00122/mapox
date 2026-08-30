@@ -182,9 +182,17 @@ mod tests {
             [false, false, true, false],
         ];
         for (agent, row) in expected.iter().enumerate() {
-            assert_eq!(buffers.obs[[agent, 0, 0, 0]], if agent == 0 { 10 } else { 20 });
             assert_eq!(
-                buffers.action_mask.row(agent).iter().copied().collect::<Vec<_>>(),
+                buffers.obs[[agent, 0, 0, 0]],
+                if agent == 0 { 10 } else { 20 }
+            );
+            assert_eq!(
+                buffers
+                    .action_mask
+                    .row(agent)
+                    .iter()
+                    .copied()
+                    .collect::<Vec<_>>(),
                 row.to_vec()
             );
         }

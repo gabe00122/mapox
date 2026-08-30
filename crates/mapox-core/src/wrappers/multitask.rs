@@ -169,7 +169,9 @@ mod tests {
 
         fn stamp(&mut self, timestep: &mut TimeStepMut) {
             self.calls += 1;
-            timestep.time.fill(1000 * self.index as i32 + self.calls as i32);
+            timestep
+                .time
+                .fill(1000 * self.index as i32 + self.calls as i32);
             timestep.task_ids.fill(self.index as i32);
             timestep.reward.fill(self.index as f32);
             timestep.terminated.fill(false);
@@ -277,7 +279,10 @@ mod tests {
 
         assert_eq!(env.num_agents(), 5);
         let obs_spec = env.observation_spec();
-        assert_eq!((obs_spec.width, obs_spec.height, obs_spec.num_types), (3, 2, 4));
+        assert_eq!(
+            (obs_spec.width, obs_spec.height, obs_spec.num_types),
+            (3, 2, 4)
+        );
         assert_eq!(env.action_spec().num_actions, 4);
         assert_eq!(
             env.obs_vocab().symbols(),
@@ -319,7 +324,12 @@ mod tests {
             assert_eq!(buffers.last_action[agent], 0);
             assert_eq!(buffers.obs[[agent, 0, 0, 0]], 2);
             assert_eq!(
-                buffers.action_mask.row(agent).iter().copied().collect::<Vec<_>>(),
+                buffers
+                    .action_mask
+                    .row(agent)
+                    .iter()
+                    .copied()
+                    .collect::<Vec<_>>(),
                 vec![true, true, true, false]
             );
         }
@@ -330,7 +340,12 @@ mod tests {
             assert_eq!(buffers.last_action[agent], 2);
             assert_eq!(buffers.obs[[agent, 0, 0, 0]], 3);
             assert_eq!(
-                buffers.action_mask.row(agent).iter().copied().collect::<Vec<_>>(),
+                buffers
+                    .action_mask
+                    .row(agent)
+                    .iter()
+                    .copied()
+                    .collect::<Vec<_>>(),
                 vec![true, false, true, true]
             );
         }
@@ -370,10 +385,7 @@ mod tests {
         // A second step accumulates per env: global north, stay for env 0
         // (local 1, 0); east, south, east for env 1 (local 2, 0, 2).
         env.step(&[1, 0, 3, 2, 3], &mut buffers.view_mut());
-        assert_eq!(
-            logs[0].lock().step_actions,
-            vec![vec![2, 2], vec![1, 0]]
-        );
+        assert_eq!(logs[0].lock().step_actions, vec![vec![2, 2], vec![1, 0]]);
         assert_eq!(
             logs[1].lock().step_actions,
             vec![vec![2, 1, 2], vec![2, 0, 2]]
@@ -415,7 +427,11 @@ mod tests {
         env.render_state_into(&mut state);
         assert!(state.tilemap.iter().all(|&tile| tile == 0));
         assert_eq!(
-            state.agent_positions.iter().map(|p| p.idx()).collect::<Vec<_>>(),
+            state
+                .agent_positions
+                .iter()
+                .map(|p| p.idx())
+                .collect::<Vec<_>>(),
             vec![[0, 0]; 2]
         );
     }
