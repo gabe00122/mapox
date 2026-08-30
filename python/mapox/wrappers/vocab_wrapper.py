@@ -1,12 +1,12 @@
-from typing import Any
 from functools import cached_property
+from typing import Any
 
 import jax
 from jax import numpy as jnp
 
 from mapox.environment import Environment, EnvState
 from mapox.envs.common import make_obs_spec
-from mapox.renderer import GridRenderState, GridRenderSettings
+from mapox.renderer import GridRenderSettings, GridRenderState
 from mapox.specs import ActionSpec, DiscreteActionSpec, ObservationSpec
 from mapox.timestep import TimeStep
 from mapox.vocab import Vocabulary
@@ -30,12 +30,8 @@ class VocabWrapper(Environment):
         self._action_vocab = action_vocab
         self._obs_vocab = obs_vocab
 
-        self._global_to_local_action = action_vocab.lut_to(
-            env.action_vocab, default=0
-        )
-        self._local_to_global_action = env.action_vocab.lut_to(
-            action_vocab, default=0
-        )
+        self._global_to_local_action = action_vocab.lut_to(env.action_vocab, default=0)
+        self._local_to_global_action = env.action_vocab.lut_to(action_vocab, default=0)
         # uint16 so tile-channel scatter matches the obs dtype; make_obs_spec
         # guarantees the vocab fits.
         self._local_to_global_obs = env.obs_vocab.lut_to(
@@ -65,9 +61,7 @@ class VocabWrapper(Environment):
         return state, self._encode_timestep(ts)
 
     def step(self, state, action: jax.Array, rng_key: jax.Array):
-        state, ts = self._env.step(
-            state, self._global_to_local_action[action], rng_key
-        )
+        state, ts = self._env.step(state, self._global_to_local_action[action], rng_key)
         return state, self._encode_timestep(ts)
 
     @cached_property

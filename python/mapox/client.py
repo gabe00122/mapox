@@ -1,12 +1,12 @@
-from mapox.environment import EnvState, Environment
+
+import pygame
+
+from mapox.environment import Environment, EnvState
 from mapox.renderer import GridworldRenderer
 from mapox.timestep import TimeStep
 
-import pygame
-from typing import Generic
 
-
-class GridworldClient(Generic[EnvState]):
+class GridworldClient[EnvState]:
     """EnvironmentClient that renders via GridworldRenderer using per-env adapters."""
 
     def __init__(

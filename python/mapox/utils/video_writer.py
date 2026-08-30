@@ -41,8 +41,5 @@ def save_video(frames: np.ndarray, filename: str, fps=60):
 
     vid_bytes = frames.astype(np.uint8).tobytes()
 
-    try:
-        output = ffmpeg.execute(vid_bytes, 1000)
-        print(output.decode("utf-8"))
-    except Exception as e:
-        print(e)
+    output = ffmpeg.execute(vid_bytes, 1000)
+    print(output.decode("utf-8"))

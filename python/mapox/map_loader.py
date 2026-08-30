@@ -20,16 +20,16 @@ def load_map(path: str, vocab: Vocabulary) -> jax.Array:
     if data.get("version") != 2:
         raise ValueError(f"Unsupported map version: {data.get('version')}")
 
-    legend = {int(file_id): vocab.add(symbol) for file_id, symbol in data["legend"].items()}
+    legend = {
+        int(file_id): vocab.add(symbol) for file_id, symbol in data["legend"].items()
+    }
 
     tile_list = data["tiles"]
     width = data["width"]
     height = data["height"]
 
     if len(tile_list) != width:
-        raise ValueError(
-            f"tiles has {len(tile_list)} rows but width is {width}"
-        )
+        raise ValueError(f"tiles has {len(tile_list)} rows but width is {width}")
     for i, row in enumerate(tile_list):
         if len(row) != height:
             raise ValueError(

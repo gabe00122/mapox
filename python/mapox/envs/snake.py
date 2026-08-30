@@ -9,10 +9,10 @@ import mapox.symbols as SB
 from mapox.environment import Environment
 from mapox.envs.common import DIRECTIONS, make_action_mask, make_obs_spec
 from mapox.map_generator import generate_decor_tiles, register_decor_tiles
-from mapox.vocab import Vocabulary
 from mapox.renderer import GridRenderSettings, GridRenderState
 from mapox.specs import DiscreteActionSpec, ObservationSpec
 from mapox.timestep import TimeStep
+from mapox.vocab import Vocabulary
 
 
 class SnakeConfig(BaseModel):
@@ -97,7 +97,7 @@ class SnakeEnv(Environment[SnakeState]):
         self._agent_snake_body = self._obs_vocab.add(SB.AGENT_SNAKE_BODY)
 
         moves = self._action_vocab.add_block(SB.MOVES)
-        assert moves == range(0, 4)  # DIRECTIONS indexing and reversal math
+        assert moves == range(4)  # DIRECTIONS indexing and reversal math
 
         self._base_action_mask = make_action_mask(
             list(moves), len(self._action_vocab), self.num_agents
@@ -337,9 +337,7 @@ class SnakeEnv(Environment[SnakeState]):
         # Owner ids ride along in the team channel and are remapped to the
         # egocentric 1 = self / 2 = other after the crop, so the per-agent
         # work is view-sized instead of map-sized.
-        full = jnp.stack(
-            (tiles, directions, owner.astype(jnp.uint16), health), axis=-1
-        )
+        full = jnp.stack((tiles, directions, owner.astype(jnp.uint16), health), axis=-1)
 
         def _encode_view(idx, pos):
             crop = jax.lax.dynamic_slice(

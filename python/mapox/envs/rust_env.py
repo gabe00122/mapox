@@ -150,9 +150,7 @@ class RustEnv(Environment[None]):
         )
         return None, timestep
 
-    def step(
-        self, state: None, action: Array, rng_key: Array
-    ) -> tuple[None, TimeStep]:
+    def step(self, state: None, action: Array, rng_key: Array) -> tuple[None, TimeStep]:
         # the rust env owns its rng (seeded at reset), so rng_key is unused
         del state, rng_key
         timestep = io_callback(

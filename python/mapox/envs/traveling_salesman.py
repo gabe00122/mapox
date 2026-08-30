@@ -1,17 +1,18 @@
 from functools import cached_property, partial
-from typing import NamedTuple, Literal
+from typing import Literal, NamedTuple
 
 import jax
 from jax import numpy as jnp
 from pydantic import BaseModel, ConfigDict
+
+import mapox.symbols as SB
 from mapox.environment import Environment
 from mapox.envs.common import DIRECTIONS, make_action_mask, make_obs_spec
 from mapox.map_generator import generate_decor_tiles, register_decor_tiles
+from mapox.renderer import GridRenderSettings, GridRenderState
 from mapox.specs import DiscreteActionSpec, ObservationSpec
 from mapox.timestep import TimeStep
-from mapox.renderer import GridRenderSettings, GridRenderState
 from mapox.vocab import Vocabulary
-import mapox.symbols as SB
 
 
 class TravelingSalesmanConfig(BaseModel):
@@ -67,7 +68,7 @@ class TravelingSalesmanEnv(Environment[TravelingSalesmanState]):
         self._agent_generic = self._obs_vocab.add(SB.AGENT_GENERIC)
 
         moves = self._action_vocab.add_block(SB.MOVES)
-        assert moves == range(0, 4)  # step() uses `action < 4` + DIRECTIONS[action]
+        assert moves == range(4)  # step() uses `action < 4` + DIRECTIONS[action]
         self._stay = self._action_vocab.add(SB.STAY)
 
         self._action_mask = make_action_mask(
@@ -108,7 +109,9 @@ class TravelingSalesmanEnv(Environment[TravelingSalesmanState]):
 
     def _generate_map(self, rng_key):
         decor_key, flag_key = jax.random.split(rng_key)
-        tiles = generate_decor_tiles(self.width, self.height, self._obs_vocab, decor_key)
+        tiles = generate_decor_tiles(
+            self.width, self.height, self._obs_vocab, decor_key
+        )
 
         flag_pos = self._random_positions(
             flag_key, self._config.num_flags, replace=False, pad=False

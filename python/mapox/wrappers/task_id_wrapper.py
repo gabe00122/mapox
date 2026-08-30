@@ -1,10 +1,11 @@
-from typing import Any
 from functools import cached_property
-from mapox.renderer import GridRenderState, GridRenderSettings
+from typing import Any
+
 import jax
 from jax import numpy as jnp
 
 from mapox.environment import Environment, EnvState
+from mapox.renderer import GridRenderSettings, GridRenderState
 
 
 class TaskIdWrapper(Environment):

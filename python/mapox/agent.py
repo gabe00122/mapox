@@ -1,16 +1,17 @@
-import jax
-from jax import numpy as jnp
-import numpy as np
-
-from mapox.timestep import TimeStep
-from mapox.specs import ActionSpec
 from typing import Protocol
+
+import jax
+import numpy as np
+from jax import numpy as jnp
+
+from mapox.specs import ActionSpec
+from mapox.timestep import TimeStep
+
 
 class Agent(Protocol):
     def act(self, timestep: TimeStep) -> jax.Array: ...
 
-    def reset(self, num_agents: int, seed: int) -> None:
-        ...
+    def reset(self, num_agents: int, seed: int) -> None: ...
 
 
 class RandomAgent(Agent):

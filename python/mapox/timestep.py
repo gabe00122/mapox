@@ -2,6 +2,7 @@ from typing import NamedTuple
 
 import jax
 
+
 class TimeStep(NamedTuple):
     """The observation that the agent sees.
 

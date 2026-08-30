@@ -1,23 +1,24 @@
-from mapox.vocab import Vocabulary
 from functools import cached_property, partial
-from typing import NamedTuple, Literal
+from typing import Literal, NamedTuple
 
 import jax
 from jax import numpy as jnp
 from pydantic import BaseModel, ConfigDict
 
+import mapox.symbols as SB
+from mapox.environment import Environment
+from mapox.envs.common import DIRECTIONS, make_action_mask, make_obs_spec
 from mapox.map_generator import (
+    choose_positions,
     fractal_noise,
     generate_decor_tiles,
-    choose_positions, register_decor_tiles,
+    register_decor_tiles,
 )
 from mapox.map_loader import load_map
-from mapox.environment import Environment
+from mapox.renderer import GridRenderSettings, GridRenderState
 from mapox.specs import DiscreteActionSpec, ObservationSpec
 from mapox.timestep import TimeStep
-from mapox.renderer import GridRenderSettings, GridRenderState
-import mapox.symbols as SB
-from mapox.envs.common import make_action_mask, make_obs_spec, DIRECTIONS
+from mapox.vocab import Vocabulary
 
 
 class FindReturnConfig(BaseModel):
@@ -94,13 +95,17 @@ class FindReturnEnv(Environment[FindReturnState]):
         self.width = self.unpadded_width + self.pad_width
         self.height = self.unpadded_height + self.pad_height
 
-        direction_actions = self._action_vocab.add_block([
-            SB.MOVE_UP,
-            SB.MOVE_RIGHT,
-            SB.MOVE_DOWN,
-            SB.MOVE_LEFT,
-        ])
-        self._action_mask = make_action_mask(list(direction_actions), len(self._action_vocab), self.num_agents)
+        direction_actions = self._action_vocab.add_block(
+            [
+                SB.MOVE_UP,
+                SB.MOVE_RIGHT,
+                SB.MOVE_DOWN,
+                SB.MOVE_LEFT,
+            ]
+        )
+        self._action_mask = make_action_mask(
+            list(direction_actions), len(self._action_vocab), self.num_agents
+        )
 
         self._action_vocab.freeze()
         self._obs_vocab.freeze()
@@ -114,9 +119,7 @@ class FindReturnEnv(Environment[FindReturnState]):
         tiles = generate_decor_tiles(
             self.unpadded_width, self.unpadded_height, self.obs_vocab, decor_key
         )
-        tiles = jnp.where(
-            noise > 0.05, jnp.uint16(self._tile_destructible_wall), tiles
-        )
+        tiles = jnp.where(noise > 0.05, jnp.uint16(self._tile_destructible_wall), tiles)
 
         # get the empty tiles for spawning
         x_spawns, y_spawns = jnp.where(
@@ -257,7 +260,8 @@ class FindReturnEnv(Environment[FindReturnState]):
                 # don't move if we are moving into a wall
                 new_pos = jnp.where(
                     jnp.logical_or(
-                        new_tile == self._tile_wall, new_tile == self._tile_destructible_wall
+                        new_tile == self._tile_wall,
+                        new_tile == self._tile_destructible_wall,
                     ),
                     local_position,
                     target_pos,
@@ -299,7 +303,9 @@ class FindReturnEnv(Environment[FindReturnState]):
         target_tiles = state.map[target_pos[:, 0], target_pos[:, 1]]
         map = state.map.at[target_pos[:, 0], target_pos[:, 1]].set(
             jnp.where(
-                target_tiles == self._tile_destructible_wall, self._tile_empty, target_tiles
+                target_tiles == self._tile_destructible_wall,
+                self._tile_empty,
+                target_tiles,
             )
         )
         # /dig actions
@@ -375,7 +381,6 @@ class FindReturnEnv(Environment[FindReturnState]):
             tilemap=tiles,
             agent_positions=state.agents_pos,
         )
-
 
     def get_render_settings(self) -> GridRenderSettings:
         return GridRenderSettings(

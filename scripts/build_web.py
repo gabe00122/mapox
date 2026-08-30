@@ -40,7 +40,16 @@ def ensure_target() -> None:
 
 
 def build() -> Path:
-    run("cargo", "build", "--package", "mapox-web", "--lib", "--target", TARGET, "--release")
+    run(
+        "cargo",
+        "build",
+        "--package",
+        "mapox-web",
+        "--lib",
+        "--target",
+        TARGET,
+        "--release",
+    )
     return REPO_ROOT / "target" / TARGET / "release" / f"{LIB}.wasm"
 
 
@@ -88,8 +97,11 @@ def report() -> None:
             continue
         print(f"    {name:<24} {human(staged.stat().st_size)}")
 
+
 def serve(port: int) -> None:
-    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(WEB_DIR))
+    handler = functools.partial(
+        http.server.SimpleHTTPRequestHandler, directory=str(WEB_DIR)
+    )
     with http.server.ThreadingHTTPServer(("127.0.0.1", port), handler) as httpd:
         info(f"serving on http://127.0.0.1:{port}/ (ctrl-c to stop)")
         try:

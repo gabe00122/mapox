@@ -1,9 +1,11 @@
 from functools import cached_property, partial
-from typing import NamedTuple, Literal
+from typing import Literal, NamedTuple
 
 import jax
 from jax import numpy as jnp
 from pydantic import BaseModel, ConfigDict
+
+import mapox.symbols as SB
 from mapox.environment import Environment
 from mapox.envs.common import DIRECTIONS, make_action_mask, make_obs_spec
 from mapox.map_generator import (
@@ -12,11 +14,10 @@ from mapox.map_generator import (
     generate_perlin_noise_2d,
     register_decor_tiles,
 )
+from mapox.renderer import GridRenderSettings, GridRenderState
 from mapox.specs import DiscreteActionSpec, ObservationSpec
 from mapox.timestep import TimeStep
-from mapox.renderer import GridRenderSettings, GridRenderState
 from mapox.vocab import Vocabulary
-import mapox.symbols as SB
 
 
 class KingHillConfig(BaseModel):
@@ -93,7 +94,7 @@ class KingHillEnv(Environment[KingHillState]):
         self._agent_archer = self._obs_vocab.add(SB.AGENT_ARCHER)
 
         moves = self._action_vocab.add_block(SB.MOVES)
-        assert moves == range(0, 4)  # `action < 4` and DIRECTIONS indexing
+        assert moves == range(4)  # `action < 4` and DIRECTIONS indexing
         self._stay = self._action_vocab.add(SB.STAY)
         self._primary_action = self._action_vocab.add(SB.PRIMARY_ACTION)
         self._dig_action = self._action_vocab.add(SB.DIG_ACTION)
@@ -122,7 +123,9 @@ class KingHillEnv(Environment[KingHillState]):
 
     def _generate_tiles(self, rng_key):
         decor_key, wall_key = jax.random.split(rng_key)
-        tiles = generate_decor_tiles(self.width, self.height, self._obs_vocab, decor_key)
+        tiles = generate_decor_tiles(
+            self.width, self.height, self._obs_vocab, decor_key
+        )
 
         noise = (
             generate_perlin_noise_2d(

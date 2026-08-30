@@ -14,10 +14,10 @@ from mapox.map_generator import (
     generate_perlin_noise_2d,
     register_decor_tiles,
 )
-from mapox.vocab import Vocabulary
 from mapox.renderer import GridRenderSettings, GridRenderState
 from mapox.specs import DiscreteActionSpec, ObservationSpec
 from mapox.timestep import TimeStep
+from mapox.vocab import Vocabulary
 
 
 class PreyConfig(BaseModel):
@@ -91,7 +91,7 @@ class PreyEnv(Environment[PreyState]):
         self._agent_chaser = self._obs_vocab.add(SB.AGENT_PREDATOR)
 
         moves = self._action_vocab.add_block(SB.MOVES)
-        assert moves == range(0, 4)  # _move_deltas indexing in step
+        assert moves == range(4)  # _move_deltas indexing in step
         self._stay = self._action_vocab.add(SB.STAY)
         assert self._stay == 4
 
@@ -180,7 +180,9 @@ class PreyEnv(Environment[PreyState]):
             rewards=jnp.float32(0.0),
             food_pos=food_pos,
             food_timer=jnp.zeros(self._config.num_food, dtype=jnp.int32),
-            fullness=jnp.full(self.num_agents, self._config.initial_fullness, dtype=jnp.int32),
+            fullness=jnp.full(
+                self.num_agents, self._config.initial_fullness, dtype=jnp.int32
+            ),
         )
 
         actions = jnp.zeros((self.num_agents,), dtype=jnp.uint16)
@@ -290,7 +292,9 @@ class PreyEnv(Environment[PreyState]):
         new_chaser_pos = all_pos[ns:]
 
         # --- Survival rewards (diminishing returns based on fullness) ---
-        rewards = cfg.survival_reward_scale * (fullness.astype(jnp.float32) / cfg.max_fullness)
+        rewards = cfg.survival_reward_scale * (
+            fullness.astype(jnp.float32) / cfg.max_fullness
+        )
         rewards = jnp.where(terminated, 0.0, rewards)
 
         state = PreyState(
@@ -335,7 +339,9 @@ class PreyEnv(Environment[PreyState]):
         )
 
         if conceal:
-            on_grass = state.tiles[agents_pos[:, 0], agents_pos[:, 1]] == self._tile_grass
+            on_grass = (
+                state.tiles[agents_pos[:, 0], agents_pos[:, 1]] == self._tile_grass
+            )
             agent_tiles = jnp.where(
                 on_grass, tiles[agents_pos[:, 0], agents_pos[:, 1]], agent_tiles
             )
@@ -354,7 +360,9 @@ class PreyEnv(Environment[PreyState]):
             axis=-1,
         )
 
-    def encode_observations(self, state: PreyState, actions, rewards, terminated) -> TimeStep:
+    def encode_observations(
+        self, state: PreyState, actions, rewards, terminated
+    ) -> TimeStep:
         @partial(jax.vmap, in_axes=(None, 0))
         def _encode_view(tiles, positions):
             return jax.lax.dynamic_slice(

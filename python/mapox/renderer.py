@@ -1,4 +1,3 @@
-from mapox.vocab import Vocabulary
 from importlib.resources import files
 from typing import NamedTuple
 
@@ -7,8 +6,8 @@ import numpy as np
 import pygame
 
 import mapox.symbols as SB
-
 from mapox.utils.video_writer import save_video
+from mapox.vocab import Vocabulary
 
 
 class SpriteSheet:

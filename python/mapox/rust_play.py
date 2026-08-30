@@ -1,11 +1,10 @@
 import argparse
 
-from mapox.envs.rust_env import RustEnv, RustFindReturnConfig, RustScoutsConfig
-from mapox.agent import Agent, RandomAgent
-from mapox._core import enjoy
-
 import numpy as np
 
+from mapox._core import enjoy
+from mapox.agent import Agent, RandomAgent
+from mapox.envs.rust_env import RustEnv, RustFindReturnConfig, RustScoutsConfig
 from mapox.timestep import TimeStep
 
 

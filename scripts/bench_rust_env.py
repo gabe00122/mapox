@@ -103,7 +103,14 @@ def main() -> None:
     def step_once():
         actions = rng.integers(0, num_actions, size=num_agents, dtype=np.uint16)
         env.step(
-            actions, obs, step_time, terminated, last_action, reward, action_mask, task_ids
+            actions,
+            obs,
+            step_time,
+            terminated,
+            last_action,
+            reward,
+            action_mask,
+            task_ids,
         )
 
     for _ in range(WARMUP_STEPS):

@@ -1,14 +1,15 @@
-from mapox.renderer import GridRenderSettings, GridRenderState
-from typing import Any
 from functools import cached_property
+from typing import Any
+
 import jax
-from jax import numpy as jnp
 from einops import rearrange
+from jax import numpy as jnp
 
 from mapox.environment import Environment, EnvState
+from mapox.renderer import GridRenderSettings, GridRenderState
 from mapox.specs import ActionSpec, ObservationSpec
-from mapox.vocab import Vocabulary
 from mapox.timestep import TimeStep
+from mapox.vocab import Vocabulary
 
 
 class VectorWrapper(Environment[EnvState]):

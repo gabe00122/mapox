@@ -54,9 +54,7 @@ def _make_envs():
         ("king_hill", KingHillEnv(KingHillConfig(num_agents=4, num_flags=1), LENGTH)),
         (
             "prey",
-            PreyEnv(
-                PreyConfig(num_sneakers=2, num_chasers=1, num_food=3), LENGTH
-            ),
+            PreyEnv(PreyConfig(num_sneakers=2, num_chasers=1, num_food=3), LENGTH),
         ),
         (
             "snake",

@@ -1,19 +1,19 @@
-from mapox.envs.rust_env import RustFindReturnConfig, RustScoutsConfig, RustEnv
-from typing import Literal, Any, Callable
+from collections.abc import Callable
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from mapox.envs.king_hill import KingHillConfig, KingHillEnv
+from mapox.environment import Environment
 from mapox.envs.find_return import FindReturnConfig, FindReturnEnv
+from mapox.envs.king_hill import KingHillConfig, KingHillEnv
+from mapox.envs.prey import PreyConfig, PreyEnv
+from mapox.envs.rust_env import RustEnv, RustFindReturnConfig, RustScoutsConfig
+from mapox.envs.scouts import ScoutsConfig, ScoutsEnv
+from mapox.envs.snake import SnakeConfig, SnakeEnv
 from mapox.envs.traveling_salesman import (
     TravelingSalesmanConfig,
     TravelingSalesmanEnv,
 )
-from mapox.envs.scouts import ScoutsConfig, ScoutsEnv
-from mapox.envs.prey import PreyConfig, PreyEnv
-from mapox.envs.snake import SnakeConfig, SnakeEnv
-
-from mapox.environment import Environment
 from mapox.wrappers.multitask import MultiTaskWrapper
 from mapox.wrappers.vector import VectorWrapper
 
@@ -49,9 +49,8 @@ class MultiTaskConfig(BaseModel):
 
 
 class EnvironmentFactory:
-    _registry: dict[str, Callable[[Any, int], Environment[Any]]] = {}
-
     def __init__(self):
+        self._registry: dict[str, Callable[[Any, int], Environment[Any]]] = {}
         self.register_env("find_return", FindReturnEnv)
         self.register_env("scouts", ScoutsEnv)
         self.register_env("traveling_salesman", TravelingSalesmanEnv)

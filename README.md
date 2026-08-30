@@ -41,9 +41,9 @@ state, ts = env.reset(rng)
 # Sample a random *legal* action per agent using the action mask
 rng, akey, skey = jax.random.split(rng, 3)
 logits = jax.random.uniform(akey, (env.num_agents, env.action_spec.n))
-actions = jnp.argmax(
-    jnp.where(ts.action_mask, logits, -1e9), axis=-1
-).astype(jnp.uint16)
+actions = jnp.argmax(jnp.where(ts.action_mask, logits, -1e9), axis=-1).astype(
+    jnp.uint16
+)
 
 state, ts = env.step(state, actions, skey)
 print(ts.reward, ts.terminated)

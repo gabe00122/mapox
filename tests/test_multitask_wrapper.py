@@ -113,8 +113,16 @@ def test_obs_translates_only_the_tile_channel():
     # the wrapper's obs must be the raw obs with channel 0 mapped through
     # the local->global LUT and channels 1..3 untouched.
     raw = [
-        FindReturnEnv(FindReturnConfig(**{k: v for k, v in FR_CONFIG.items() if k != "env_type"}), LENGTH),
-        TravelingSalesmanEnv(TravelingSalesmanConfig(**{k: v for k, v in TS_CONFIG.items() if k != "env_type"}), LENGTH),
+        FindReturnEnv(
+            FindReturnConfig(**{k: v for k, v in FR_CONFIG.items() if k != "env_type"}),
+            LENGTH,
+        ),
+        TravelingSalesmanEnv(
+            TravelingSalesmanConfig(
+                **{k: v for k, v in TS_CONFIG.items() if k != "env_type"}
+            ),
+            LENGTH,
+        ),
     ]
     keys = jax.random.split(key, 2)
 

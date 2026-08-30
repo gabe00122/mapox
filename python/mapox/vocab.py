@@ -1,4 +1,5 @@
-from typing import Iterable, Self, cast, Iterator
+from collections.abc import Iterable, Iterator
+from typing import Self, cast
 
 import jax
 from jax import numpy as jnp
@@ -69,7 +70,6 @@ class Vocabulary:
 
         return range(ids[0], ids[-1] + 1)
 
-
     def get(self, symbol: str) -> int | None:
         return self._ids.get(symbol)
 
@@ -115,7 +115,7 @@ class Vocabulary:
 
     def lut_to(
         self,
-        target: "Vocabulary",
+        target: Vocabulary,
         *,
         default: int | None = None,
         dtype: jnp.dtype = VOCAB_DTYPE,

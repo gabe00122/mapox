@@ -2,11 +2,10 @@ import argparse
 from functools import partial
 
 import jax
-from jax import numpy as jnp
 import pygame
+from jax import numpy as jnp
 
 import mapox.symbols as SB
-
 from mapox.agent import Agent, RandomAgent
 from mapox.client import GridworldClient
 from mapox.config import EnvironmentFactory, FindReturnConfig
@@ -54,24 +53,27 @@ def step(
     env_state, timestep = env.step(env_state, actions, env_key)
     return env_state, timestep, rng_key
 
+
 def prng_to_seed(rng: jax.Array) -> int:
     return int(jax.random.bits(rng, dtype=jnp.uint64))
+
 
 def enjoy(
     env: Environment[EnvState],
     agent: Agent,
-    rng_key: jax.Array = jax.random.PRNGKey(42),
+    rng_key: jax.Array | None = None,
     video_path: str | None = None,
     size: int = 960,
     fps: int = 15,
     human_control: bool = True,
     pov: bool = False,
 ) -> None:
+    if rng_key is None:
+        rng_key = jax.random.PRNGKey(42)
+
     focused_agent = 0 if human_control else None
 
-    client = GridworldClient(
-        env, fps=fps, screen_width=size, screen_height=size
-    )
+    client = GridworldClient(env, fps=fps, screen_width=size, screen_height=size)
     client.focus_agent(focused_agent)
 
     env_key, rng_key = jax.random.split(rng_key)
@@ -113,9 +115,7 @@ def enjoy(
             if human_control and human_action_id is not None:
                 actions = actions.at[focused_agent].set(human_action_id)
 
-            env_state, timestep, rng_key = step(
-                env, env_state, actions, rng_key
-            )
+            env_state, timestep, rng_key = step(env, env_state, actions, rng_key)
 
             if video_path is not None:
                 client.record_frame()

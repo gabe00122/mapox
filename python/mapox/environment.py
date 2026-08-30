@@ -1,20 +1,19 @@
-from mapox.vocab import Vocabulary
-from mapox.renderer import GridRenderState, GridRenderSettings
 from abc import ABC, abstractmethod
 from functools import cached_property
-from typing import Any, TypeVar, Generic
+from typing import Any, TypeVar
 
 import jax
 from jax import Array
 
+from mapox.renderer import GridRenderSettings, GridRenderState
+from mapox.specs import ActionSpec, ObservationSpec
 from mapox.timestep import TimeStep
-from mapox.specs import ObservationSpec, ActionSpec
-
+from mapox.vocab import Vocabulary
 
 EnvState = TypeVar("EnvState")
 
 
-class Environment(ABC, Generic[EnvState]):
+class Environment[EnvState](ABC):
     @abstractmethod
     def reset(self, rng_key: Array) -> tuple[EnvState, TimeStep]: ...
 

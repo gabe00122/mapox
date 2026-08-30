@@ -65,7 +65,7 @@ impl Environment for MultitaskWrapper {
             .zip(timestep.partition_mut(&self.lens))
             .enumerate()
             .for_each(|(i, (env, mut timestep))| {
-                let mut rng = SmallRng::seed_from_u64(seed + (i as u64));
+                let mut rng = SmallRng::seed_from_u64(seed.wrapping_add(i as u64));
                 let seed = rng.next_u64();
                 env.env.reset(seed, &mut timestep);
             });

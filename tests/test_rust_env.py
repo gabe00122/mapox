@@ -5,9 +5,7 @@ from mapox.envs.rust_env import RustEnv
 
 
 def test_rust_bridge_uses_uint16_observations_and_actions():
-    env = RustEnv(
-        '{"env_type":"find_return","num_agents":2,"width":12,"height":12}'
-    )
+    env = RustEnv('{"env_type":"find_return","num_agents":2,"width":12,"height":12}')
 
     _, reset_ts = env.reset(jax.random.key(0))
     assert reset_ts.obs.dtype == jnp.uint16

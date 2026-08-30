@@ -1,4 +1,3 @@
-from mapox.vocab import Vocabulary
 from functools import cached_property
 
 import jax
@@ -6,6 +5,7 @@ from jax import numpy as jnp
 
 from mapox.environment import Environment
 from mapox.specs import ActionSpec, DiscreteActionSpec, ObservationSpec
+from mapox.vocab import Vocabulary
 from mapox.wrappers.task_id_wrapper import TaskIdWrapper
 from mapox.wrappers.vocab_wrapper import VocabWrapper
 
