@@ -53,7 +53,7 @@ class MultiTaskWrapper(Environment):
 
         return tuple(states), _stack_pytree(timesteps)
 
-    def step(self, states, actions: jax.Array, rng_key: jax.Array):
+    def step(self, state, action: jax.Array, rng_key: jax.Array):
         rng_keys = jax.random.split(rng_key, len(self._envs))
 
         state_out = []
@@ -62,7 +62,7 @@ class MultiTaskWrapper(Environment):
         start = 0
         for i, env in enumerate(self._envs):
             end = start + env.num_agents
-            s, t = env.step(states[i], actions[start:end], rng_keys[i])
+            s, t = env.step(state[i], action[start:end], rng_keys[i])
             start = end
 
             state_out.append(s)

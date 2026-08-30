@@ -44,6 +44,45 @@ impl TimeStepMut<'_> {
             task_ids: self.task_ids.view(),
         }
     }
+
+    pub fn partition_mut(&mut self, lens: &[usize]) -> Vec<TimeStepMut<'_>> {
+        let (w, h, c) = (self.obs.dim().1, self.obs.dim().2, self.obs.dim().3);
+        let num_actions = self.action_mask.dim().1;
+
+        unsafe {
+            let obs_ptr = self.obs.as_mut_ptr();
+            let time_ptr = self.time.as_mut_ptr();
+            let terminated_ptr = self.terminated.as_mut_ptr();
+            let last_action_ptr = self.last_action.as_mut_ptr();
+            let reward_ptr = self.reward.as_mut_ptr();
+            let action_mask_ptr = self.action_mask.as_mut_ptr();
+            let task_ids_ptr = self.task_ids.as_mut_ptr();
+
+            let mut out = Vec::with_capacity(lens.len());
+            let mut offset = 0usize;
+
+            for &len in lens {
+                out.push(TimeStepMut {
+                    obs: ArrayViewMut4::from_shape_ptr(
+                        (len, w, h, c),
+                        obs_ptr.add(offset * w * h * c),
+                    ),
+                    time: ArrayViewMut1::from_shape_ptr(len, time_ptr.add(offset)),
+                    terminated: ArrayViewMut1::from_shape_ptr(len, terminated_ptr.add(offset)),
+                    last_action: ArrayViewMut1::from_shape_ptr(len, last_action_ptr.add(offset)),
+                    reward: ArrayViewMut1::from_shape_ptr(len, reward_ptr.add(offset)),
+                    action_mask: ArrayViewMut2::from_shape_ptr(
+                        (len, num_actions),
+                        action_mask_ptr.add(offset),
+                    ),
+                    task_ids: ArrayViewMut1::from_shape_ptr(len, task_ids_ptr.add(offset)),
+                });
+                offset += len;
+            }
+
+            out
+        }
+    }
 }
 
 #[derive(Debug)]

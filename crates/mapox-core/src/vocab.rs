@@ -49,6 +49,10 @@ impl Vocabulary {
             .map(|s| target.get(s).unwrap_or(default))
             .collect()
     }
+
+    pub fn extend_with(&mut self, other: &Vocabulary) {
+        self.extend(other.symbols().iter().copied());
+    }
 }
 
 impl PartialEq for Vocabulary {
