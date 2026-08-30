@@ -536,3 +536,541 @@ impl Environment for FindReturn {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::timestep::TimeStepBuffers;
+    use FindReturnAction::*;
+    use FindReturnObs::*;
+    use rand::RngExt;
+    use std::collections::HashSet;
+
+    /// One agent on bare floor, no flags, for poking walls, pipes, and
+    /// flags into by hand.
+    fn empty_env() -> FindReturn {
+        empty_env_with(FindReturnConfig {
+            num_agents: 1,
+            num_flags: 0,
+            width: 21,
+            height: 21,
+            ..Default::default()
+        })
+    }
+
+    fn empty_env_with(config: FindReturnConfig) -> FindReturn {
+        let mut env = FindReturn::new(&config, 512);
+
+        env.state.base_map.fill(TileWall);
+        env.state
+            .base_map
+            .slice_mut(s![
+                env.pad_width as usize..(env.width - env.pad_width) as usize,
+                env.pad_height as usize..(env.height - env.pad_height) as usize,
+            ])
+            .fill(TileEmpty);
+        env.state.map.assign(&env.state.base_map);
+
+        env
+    }
+
+    fn center(env: &FindReturn) -> Position {
+        Position::new(env.width / 2, env.height / 2)
+    }
+
+    /// Puts every agent on the map, `positions` in agent-id order.
+    fn spawn_agents(env: &mut FindReturn, positions: &[Position]) {
+        for &position in positions {
+            env.state.agents.push(FindReturnAgent {
+                position,
+                ..Default::default()
+            });
+            env.state.map[position.idx()] = AgentGeneric;
+        }
+    }
+
+    fn place_tile(env: &mut FindReturn, position: Position, tile: FindReturnObs) {
+        env.state.base_map[position.idx()] = tile;
+        env.state.map[position.idx()] = tile;
+    }
+
+    /// Places a flag the way `reset` does: on both layers, and registered
+    /// in `flag_positions`, which is the list the unlock step walks.
+    fn place_flag(env: &mut FindReturn, position: Position, tile: FindReturnObs) {
+        place_tile(env, position, tile);
+        env.state.flag_positions.push(position);
+    }
+
+    /// Steps every agent with the action named for it, and hands back the
+    /// buffers so the caller can read rewards out.
+    fn step(env: &mut FindReturn, buffers: &mut TimeStepBuffers, actions: &[FindReturnAction]) {
+        let actions: Vec<VocabId> = actions.iter().map(|&a| a.into()).collect();
+        env.step(&actions, &mut buffers.view_mut());
+    }
+
+    /// The view-window cell a map offset from the agent lands in. The agent
+    /// sits at the centre of the fov, which is the window minus its UI band.
+    fn cell(env: &FindReturn, dx: i32, dy: i32) -> [usize; 2] {
+        [
+            (env.config.view_width / 2 + dx) as usize,
+            (env.config.view_height / 2 + dy) as usize,
+        ]
+    }
+
+    fn id(tile: FindReturnObs) -> VocabId {
+        tile.into()
+    }
+
+    /// The frozen mask: nothing but the noop is legal.
+    fn masked_to_noop(buffers: &TimeStepBuffers, agent: usize) {
+        let mask = buffers.action_mask.row(agent);
+        assert_eq!(mask.iter().filter(|&&legal| legal).count(), 1);
+        assert!(mask[Noop as usize]);
+    }
+
+    /// The flag stock on the bottom layer, split by lock state.
+    fn flag_tally(env: &FindReturn) -> (usize, usize) {
+        let mut locked = 0;
+        let mut unlocked = 0;
+        for &tile in env.state.base_map.iter() {
+            match tile {
+                TileFlag => locked += 1,
+                TileFlagUnlocked => unlocked += 1,
+                _ => {}
+            }
+        }
+        (locked, unlocked)
+    }
+
+    /// Reset has to leave the map consistent: every agent painted on the top
+    /// layer, the full stock of flags on the bottom one, and the wall
+    /// padding that keeps every window and slide in bounds still in place.
+    #[test]
+    fn reset_places_every_agent_and_flag() {
+        let config = FindReturnConfig {
+            num_agents: 3,
+            num_flags: 2,
+            width: 24,
+            height: 24,
+            preparation_steps: 8,
+            ..Default::default()
+        };
+        let mut env = FindReturn::new(&config, 512);
+        let mut buffers = TimeStepBuffers::new(&env);
+        env.reset(7, &mut buffers.view_mut());
+
+        assert_eq!(env.state.agents.len(), 3);
+        let positions: HashSet<_> = env.state.agents.iter().map(|a| a.position.idx()).collect();
+        assert_eq!(positions.len(), 3, "agents share a tile");
+        for agent in &env.state.agents {
+            assert_eq!(env.state.map[agent.position.idx()], AgentGeneric);
+            let p = agent.position;
+            assert!(p.x >= env.pad_width && p.x < env.width - env.pad_width);
+            assert!(p.y >= env.pad_height && p.y < env.height - env.pad_height);
+        }
+
+        assert_eq!(flag_tally(&env), (2, 0));
+        assert_eq!(env.state.base_map[[0, 0]], TileWall);
+        assert_eq!(
+            env.state.base_map[[env.width as usize - 1, env.height as usize - 1]],
+            TileWall
+        );
+
+        // ... and with no preparation phase the flags start open instead.
+        let open = FindReturnConfig {
+            preparation_steps: 0,
+            ..config
+        };
+        let mut env = FindReturn::new(&open, 512);
+        env.reset(7, &mut buffers.view_mut());
+        assert_eq!(flag_tally(&env), (0, 2));
+    }
+
+    /// Flags sit locked while the preparation phase runs, and open on the
+    /// step after it has: `preparation_steps` full steps, then the next step
+    /// starts with the stock open.
+    #[test]
+    fn flags_unlock_after_the_preparation_steps() {
+        let mut env = empty_env_with(FindReturnConfig {
+            num_agents: 1,
+            num_flags: 0,
+            width: 21,
+            height: 21,
+            preparation_steps: 2,
+            ..Default::default()
+        });
+        let start = center(&env);
+        let flag = start + Position::new(1, 0);
+        place_flag(&mut env, flag, TileFlag);
+        spawn_agents(&mut env, &[start]);
+
+        let mut buffers = TimeStepBuffers::new(&env);
+        step(&mut env, &mut buffers, &[Noop]);
+        assert_eq!(env.state.base_map[flag.idx()], TileFlag);
+        step(&mut env, &mut buffers, &[Noop]);
+        assert_eq!(env.state.base_map[flag.idx()], TileFlag);
+        step(&mut env, &mut buffers, &[Noop]);
+        assert_eq!(env.state.base_map[flag.idx()], TileFlagUnlocked);
+    }
+
+    /// A locked flag is scenery: the agent may stand on it, but it pays
+    /// nothing and stays locked until the preparation phase is over.
+    #[test]
+    fn walking_over_a_locked_flag_pays_nothing() {
+        let mut env = empty_env_with(FindReturnConfig {
+            num_agents: 1,
+            num_flags: 0,
+            width: 21,
+            height: 21,
+            preparation_steps: 1,
+            ..Default::default()
+        });
+        let start = center(&env);
+        let flag = start + Position::new(1, 0);
+        place_flag(&mut env, flag, TileFlag);
+        spawn_agents(&mut env, &[start]);
+
+        let mut buffers = TimeStepBuffers::new(&env);
+        step(&mut env, &mut buffers, &[MoveRight]);
+
+        assert_eq!(buffers.reward[0], 0.0);
+        assert_eq!(env.state.base_map[flag.idx()], TileFlag);
+        assert_eq!(env.state.agents[0].position.idx(), flag.idx());
+        assert_eq!(env.state.map[flag.idx()], AgentGeneric);
+    }
+
+    /// The unlocked flag is the only tile that pays: walking on it rewards
+    /// the agent and sends it back to free ground, and the flag stands
+    /// there open for the next visit.
+    #[test]
+    fn an_unlocked_flag_pays_and_respawns_the_agent() {
+        let mut env = empty_env_with(FindReturnConfig {
+            num_agents: 1,
+            num_flags: 0,
+            width: 21,
+            height: 21,
+            preparation_steps: 0,
+            ..Default::default()
+        });
+        let start = center(&env);
+        let flag = start + Position::new(1, 0);
+        place_flag(&mut env, flag, TileFlagUnlocked);
+        spawn_agents(&mut env, &[start]);
+
+        let mut buffers = TimeStepBuffers::new(&env);
+        step(&mut env, &mut buffers, &[MoveRight]);
+
+        assert_eq!(buffers.reward[0], env.config.treasure_reward);
+        assert_eq!(buffers.last_action[0], VocabId::from(MoveRight));
+        assert_ne!(env.state.agents[0].position.idx(), flag.idx());
+        assert!(!env.state.base_map[env.state.agents[0].position.idx()].blocked());
+        assert_eq!(
+            env.state.map[env.state.agents[0].position.idx()],
+            AgentGeneric
+        );
+        assert_eq!(env.state.base_map[flag.idx()], TileFlagUnlocked);
+    }
+
+    /// Digging clears the wall in front of the agent for good, and costs
+    /// `digging_timeout` frozen steps: through them the noop is the only
+    /// legal action and moves are ignored, and the first free step moves
+    /// into the hole it dug.
+    #[test]
+    fn digging_clears_a_wall_and_freezes_the_agent() {
+        let mut env = empty_env_with(FindReturnConfig {
+            num_agents: 1,
+            num_flags: 0,
+            width: 21,
+            height: 21,
+            digging_timeout: 2,
+            ..Default::default()
+        });
+        let start = center(&env);
+        let wall = start + Position::new(1, 0);
+        place_tile(&mut env, wall, TileDestructibleWall);
+        spawn_agents(&mut env, &[start]);
+
+        let mut buffers = TimeStepBuffers::new(&env);
+        step(&mut env, &mut buffers, &[MoveRight]); // face the wall, do not pass
+        assert_eq!(env.state.agents[0].position.idx(), start.idx());
+
+        step(&mut env, &mut buffers, &[Dig]);
+        assert_eq!(env.state.base_map[wall.idx()], TileEmpty);
+        assert_eq!(env.state.map[wall.idx()], TileEmpty);
+        assert_eq!(env.state.agents[0].timeout, env.config.digging_timeout);
+        masked_to_noop(&buffers, 0);
+
+        for _ in 0..env.config.digging_timeout {
+            step(&mut env, &mut buffers, &[MoveRight]); // frozen: ignored
+            assert_eq!(env.state.agents[0].position.idx(), start.idx());
+        }
+        assert_eq!(env.state.agents[0].timeout, 0);
+
+        step(&mut env, &mut buffers, &[MoveRight]);
+        assert_eq!(env.state.agents[0].position.idx(), wall.idx());
+    }
+
+    /// A dig with nothing destructible in front is a free step: no freeze,
+    /// no movement, and the mask keeps saying digging is illegal.
+    #[test]
+    fn digging_needs_something_to_dig() {
+        let mut env = empty_env();
+        let start = center(&env);
+        spawn_agents(&mut env, &[start]);
+
+        let mut buffers = TimeStepBuffers::new(&env);
+        step(&mut env, &mut buffers, &[MoveRight]);
+        step(&mut env, &mut buffers, &[Dig]);
+
+        assert_eq!(
+            env.state.agents[0].position.idx(),
+            (start + Position::new(1, 0)).idx()
+        );
+        assert_eq!(env.state.agents[0].timeout, 0);
+        assert_eq!(
+            env.state.map[(start + Position::new(2, 0)).idx()],
+            TileEmpty
+        );
+        let mask = buffers.action_mask.row(0);
+        assert!(!mask[Dig as usize]);
+        assert!(mask[MoveRight as usize]);
+    }
+
+    /// A horizontal run of pipes is a slideway: one move carries the agent
+    /// the whole length of it, to the first tile that is not pipe.
+    #[test]
+    fn a_move_slides_over_pipes() {
+        let mut env = empty_env();
+        let start = center(&env);
+        for dx in 1..=3 {
+            place_tile(&mut env, start + Position::new(dx, 0), PipeHorizontal);
+        }
+        spawn_agents(&mut env, &[start]);
+
+        let mut buffers = TimeStepBuffers::new(&env);
+        step(&mut env, &mut buffers, &[MoveRight]);
+
+        assert_eq!(
+            env.state.agents[0].position.idx(),
+            (start + Position::new(4, 0)).idx()
+        );
+    }
+
+    /// A slide runs until the pipe run ends, and a run that ends on a wall
+    /// is a trap: the whole move is cancelled rather than stopping short.
+    #[test]
+    fn a_slide_stops_at_a_wall() {
+        let mut env = empty_env();
+        let start = center(&env);
+        for dx in 1..=2 {
+            place_tile(&mut env, start + Position::new(dx, 0), PipeHorizontal);
+        }
+        place_tile(&mut env, start + Position::new(3, 0), TileWall);
+        spawn_agents(&mut env, &[start]);
+
+        let mut buffers = TimeStepBuffers::new(&env);
+        step(&mut env, &mut buffers, &[MoveRight]);
+
+        assert_eq!(env.state.agents[0].position.idx(), start.idx());
+        assert_eq!(env.state.map[start.idx()], AgentGeneric);
+    }
+
+    /// Sliding only follows a pipe's run: a vertical pipe in the path of a
+    /// horizontal move is plain floor, one tile deep.
+    #[test]
+    fn a_crosswise_pipe_is_just_a_floor_tile() {
+        let mut env = empty_env();
+        let start = center(&env);
+        let pipe = start + Position::new(1, 0);
+        place_tile(&mut env, pipe, PipeVirtical);
+        spawn_agents(&mut env, &[start]);
+
+        let mut buffers = TimeStepBuffers::new(&env);
+        step(&mut env, &mut buffers, &[MoveRight]);
+
+        assert_eq!(env.state.agents[0].position.idx(), pipe.idx());
+        assert_eq!(env.state.map[pipe.idx()], AgentGeneric);
+    }
+
+    /// A pipe is laid one tile in front of the facing, perpendicular to it:
+    /// facing up or down lays a horizontal pipe, facing left or right a
+    /// vertical one, and a blocked tile takes nothing at all.
+    #[test]
+    fn a_pipe_is_laid_perpendicular_to_the_facing() {
+        let mut env = empty_env();
+        let start = center(&env);
+        spawn_agents(&mut env, &[start]);
+
+        let mut buffers = TimeStepBuffers::new(&env);
+        step(&mut env, &mut buffers, &[MoveUp]);
+        step(&mut env, &mut buffers, &[PlacePipe]);
+        let above = start + Position::new(0, 2);
+        assert_eq!(env.state.map[above.idx()], PipeHorizontal);
+        assert_eq!(env.state.base_map[above.idx()], PipeHorizontal);
+
+        step(&mut env, &mut buffers, &[MoveRight]);
+        step(&mut env, &mut buffers, &[PlacePipe]);
+        let ahead = start + Position::new(2, 1);
+        assert_eq!(env.state.map[ahead.idx()], PipeVirtical);
+        assert_eq!(env.state.base_map[ahead.idx()], PipeVirtical);
+
+        // a wall in front takes nothing
+        let wall = start + Position::new(3, 1);
+        place_tile(&mut env, wall, TileWall);
+        step(&mut env, &mut buffers, &[MoveRight]); // onto the pipe it just laid
+        assert_eq!(env.state.agents[0].position.idx(), ahead.idx());
+        step(&mut env, &mut buffers, &[PlacePipe]);
+        assert_eq!(env.state.map[wall.idx()], TileWall);
+        assert_eq!(env.state.base_map[wall.idx()], TileWall);
+    }
+
+    /// Agents are solid: two of them never share a cell, whichever order the
+    /// step happens to shuffle them into.
+    #[test]
+    fn agents_block_each_other() {
+        let mut env = empty_env_with(FindReturnConfig {
+            num_agents: 2,
+            num_flags: 0,
+            width: 21,
+            height: 21,
+            ..Default::default()
+        });
+        let start = center(&env);
+        let other = start + Position::new(1, 0);
+        spawn_agents(&mut env, &[start, other]);
+
+        let mut buffers = TimeStepBuffers::new(&env);
+        step(&mut env, &mut buffers, &[MoveRight, MoveLeft]);
+
+        assert_eq!(env.state.agents[0].position.idx(), start.idx());
+        assert_eq!(env.state.agents[1].position.idx(), other.idx());
+    }
+
+    /// Water stops feet but not eyes: the agent cannot cross the lake, yet
+    /// the lake and the ground beyond it both show in its window.
+    #[test]
+    fn water_blocks_movement_but_not_sight() {
+        let mut env = empty_env();
+        let start = center(&env);
+        let pond = start + Position::new(1, 0);
+        place_tile(&mut env, pond, TileWater);
+        spawn_agents(&mut env, &[start]);
+
+        let mut buffers = TimeStepBuffers::new(&env);
+        step(&mut env, &mut buffers, &[MoveRight]);
+
+        assert_eq!(env.state.agents[0].position.idx(), start.idx());
+        let view = buffers.obs.slice(s![0, .., .., 0]);
+        assert_eq!(view[cell(&env, 1, 0)], id(TileWater));
+        assert_eq!(view[cell(&env, 2, 0)], id(TileEmpty));
+    }
+
+    /// The noop is exactly that: the agent keeps its square and its facing,
+    /// and a fresh agent's zero facing keeps its dig aimed at itself, where
+    /// there is nothing to dig.
+    #[test]
+    fn a_noop_changes_nothing() {
+        let mut env = empty_env_with(FindReturnConfig {
+            num_agents: 1,
+            num_flags: 0,
+            width: 21,
+            height: 21,
+            preparation_steps: 0,
+            ..Default::default()
+        });
+        let start = center(&env);
+        let flag = start + Position::new(1, 0);
+        place_flag(&mut env, flag, TileFlagUnlocked);
+        spawn_agents(&mut env, &[start]);
+
+        let mut buffers = TimeStepBuffers::new(&env);
+        step(&mut env, &mut buffers, &[Noop]);
+        step(&mut env, &mut buffers, &[Dig]);
+
+        assert_eq!(env.state.agents[0].position.idx(), start.idx());
+        assert_eq!(buffers.reward[0], 0.0);
+        assert_eq!(env.state.agents[0].timeout, 0);
+        assert_eq!(env.state.base_map[flag.idx()], TileFlagUnlocked);
+        assert_eq!(env.state.map[start.idx()], AgentGeneric);
+    }
+
+    /// The UI band is a placeholder, but it has to be a consistent one: the
+    /// top rows of every agent's window carry the UI tile and nothing else,
+    /// and the field of view stops short of them rather than running under.
+    #[test]
+    fn the_ui_band_caps_every_window() {
+        let mut env = empty_env_with(FindReturnConfig {
+            num_agents: 2,
+            num_flags: 0,
+            width: 21,
+            height: 21,
+            ..Default::default()
+        });
+        let start = center(&env);
+        spawn_agents(&mut env, &[start, start + Position::new(0, 5)]);
+
+        let mut buffers = TimeStepBuffers::new(&env);
+        env.encode_observations(&mut buffers.view_mut());
+
+        let fov_height = env.config.view_height as usize;
+        assert_eq!(buffers.obs.dim().1, env.config.view_width as usize);
+        assert_eq!(buffers.obs.dim().2, fov_height + 2);
+
+        for agent_id in 0..env.num_agents() {
+            let window = buffers.obs.slice(s![agent_id, .., .., 0]);
+            for y in 0..fov_height + 2 {
+                let row_is_ui =
+                    (0..env.config.view_width as usize).all(|x| window[[x, y]] == id(UI));
+                let row_has_ui =
+                    (0..env.config.view_width as usize).any(|x| window[[x, y]] == id(UI));
+
+                if y >= fov_height {
+                    assert!(row_is_ui, "row {y} of agent {agent_id} is not all UI");
+                } else {
+                    assert!(!row_has_ui, "UI leaked into fov row {y}");
+                }
+            }
+        }
+    }
+
+    /// A full episode on generated maps, driven by random actions: the env
+    /// has to survive whatever the noise hands it, nobody may share a tile,
+    /// and the flag stock can only shrink, never grow: laying a pipe on a
+    /// flag erases it, and nothing adds flags back.
+    #[test]
+    fn a_random_rollout_keeps_the_world_consistent() {
+        let config = FindReturnConfig {
+            preparation_steps: 0,
+            ..Default::default()
+        };
+        let mut env = FindReturn::new(&config, 256);
+        let mut buffers = TimeStepBuffers::new(&env);
+        let mut rng = SmallRng::seed_from_u64(11);
+
+        for seed in 0..4 {
+            env.reset(seed, &mut buffers.view_mut());
+
+            for _ in 0..256 {
+                let actions: Vec<VocabId> = (0..env.num_agents())
+                    .map(|_| rng.random_range(0..env.action_spec.num_actions) as VocabId)
+                    .collect();
+                env.step(&actions, &mut buffers.view_mut());
+            }
+
+            let positions: HashSet<_> = env.state.agents.iter().map(|a| a.position.idx()).collect();
+            assert_eq!(positions.len(), env.num_agents(), "on seed {seed}");
+            for agent in &env.state.agents {
+                assert_eq!(env.state.map[agent.position.idx()], AgentGeneric);
+                let p = agent.position;
+                assert!(p.x >= env.pad_width && p.x < env.width - env.pad_width);
+                assert!(p.y >= env.pad_height && p.y < env.height - env.pad_height);
+            }
+
+            let (locked, unlocked) = flag_tally(&env);
+            assert!(
+                locked + unlocked <= config.num_flags,
+                "flag stock grew on seed {seed}"
+            );
+        }
+    }
+}
