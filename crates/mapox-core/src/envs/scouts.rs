@@ -115,7 +115,7 @@ vocab_enum!(ScoutsObs {
 impl ScoutsObs {
     fn blocked(self) -> bool {
         use ScoutsObs::*;
-        matches!(self, TileWall | TileWater | AgentScout | AgentHarvester)
+        matches!(self, TileWall | TileWater)
     }
 
     fn opaque(self) -> bool {
@@ -137,8 +137,6 @@ vocab_enum!(ScoutsAction {
 });
 
 impl ScoutsAction {
-    /// The noop's zero delta walks an agent into its own cell, which the
-    /// step reads as blocked and skips.
     fn direction(self) -> Position {
         use ScoutsAction::*;
         match self {
@@ -241,8 +239,7 @@ impl Scouts {
             for y in self.pad_height..self.height - self.pad_height {
                 let position = Position::new(x, y);
 
-                // the top layer, so a cell an agent is standing on is taken
-                if self.state.map[position.idx()].spawnable() {
+                if self.state.base_map[position.idx()].spawnable() {
                     self.state.free_positions.push(position);
                 }
             }
@@ -258,6 +255,18 @@ impl Scouts {
             };
             self.state.base_map[position.idx()] = ScoutsObs::TileFlag;
             self.state.map[position.idx()] = ScoutsObs::TileFlag;
+        }
+    }
+
+    /// Repaint the top layer of the map: the base plus every agent. A
+    /// scout can share a cell with a harvester, so harvesters are painted
+    /// first and a scout riding one stays visible on top.
+    fn repaint(&mut self) {
+        self.state.map.assign(&self.state.base_map);
+        for role in [Role::Harvester, Role::Scout] {
+            for agent in self.state.agents.iter().filter(|a| a.role == role) {
+                self.state.map[agent.position.idx()] = role.tile();
+            }
         }
     }
 
@@ -360,16 +369,28 @@ impl Environment for Scouts {
 
         self.place_treasures(self.config.num_treasures);
 
+        // Harvesters take free cells first, then every scout spawns on top
+        // of a harvester; a surplus scout cycles onto a shared one.
+        let mut ridden: Vec<Position> = Vec::with_capacity(self.config.num_harvesters);
+        for _ in 0..self.config.num_harvesters {
+            ridden.push(self.state.free_positions.pop().unwrap());
+        }
+        ridden.shuffle(&mut self.state.rngs);
+
         for agent_id in 0..self.num_agents() {
-            let position = self.state.free_positions.pop().unwrap();
             let role = self.role(agent_id);
+            let position = match role {
+                Role::Scout if !ridden.is_empty() => ridden[agent_id % ridden.len()],
+                Role::Scout => self.state.free_positions.pop().unwrap(),
+                Role::Harvester => ridden[agent_id - self.config.num_scouts],
+            };
             self.state.agents.push(ScoutsAgent {
                 role,
                 position,
                 timeout: 0,
             });
-            self.state.map[position.idx()] = role.tile();
         }
+        self.repaint();
 
         timestep.reward.fill(0.0);
         timestep.last_action.fill(0);
@@ -396,7 +417,10 @@ impl Environment for Scouts {
 
             let (role, from) = (agent.role, agent.position);
             let target = from + ScoutsAction::from_id(actions[agent_id]).direction();
-            if self.state.map[target.idx()].blocked() {
+
+            // Only terrain stops an agent: agents walk over each other,
+            // whichever role they are.
+            if self.state.base_map[target.idx()].blocked() {
                 continue;
             }
 
@@ -405,11 +429,10 @@ impl Environment for Scouts {
                 timestep.reward[agent_id] = reward;
             }
 
-            self.state.map[from.idx()] = self.state.base_map[from.idx()];
-            self.state.map[target.idx()] = role.tile();
             self.state.agents[agent_id].position = target;
         }
 
+        self.repaint();
         self.state.time += 1;
         self.encode_observations(timestep);
         self.encode_action_mask(timestep);
@@ -780,10 +803,10 @@ mod tests {
         assert_eq!(view[cell(&env, 2, 0)], id(AgentHarvester));
     }
 
-    /// Agents are solid: two of them never share a cell, whichever order the
-    /// step happens to shuffle them into.
+    /// A scout walks over a harvester and the cell they share reads as the
+    /// scout: no agent blocks another's movement.
     #[test]
-    fn agents_block_each_other() {
+    fn scouts_and_harvesters_share_cells() {
         let mut env = empty_env();
         let scout = center(&env);
         let harvester = scout + Position::new(1, 0);
@@ -793,10 +816,40 @@ mod tests {
         step(
             &mut env,
             &mut buffers,
-            &[ScoutsAction::MoveRight, ScoutsAction::MoveLeft],
+            &[ScoutsAction::MoveRight, ScoutsAction::Noop],
         );
 
-        assert_ne!(
+        assert_eq!(
+            env.state.agents[0].position.idx(),
+            env.state.agents[1].position.idx()
+        );
+        assert_eq!(env.state.map[harvester.idx()], AgentScout);
+    }
+
+    /// The same is true of an agent's own kind: two scouts stack in one
+    /// cell rather than refusing it.
+    #[test]
+    fn agents_of_one_role_walk_over_each_other_too() {
+        let mut env = empty_env_with(ScoutsConfig {
+            num_scouts: 2,
+            num_harvesters: 0,
+            num_treasures: 0,
+            width: 21,
+            height: 21,
+            ..Default::default()
+        });
+        let scout = center(&env);
+        let peer = scout + Position::new(1, 0);
+        spawn_agents(&mut env, &[scout, peer]);
+
+        let mut buffers = TimeStepBuffers::new(&env);
+        step(
+            &mut env,
+            &mut buffers,
+            &[ScoutsAction::MoveRight, ScoutsAction::Noop],
+        );
+
+        assert_eq!(
             env.state.agents[0].position.idx(),
             env.state.agents[1].position.idx()
         );
@@ -885,7 +938,24 @@ mod tests {
         assert_eq!(env.state.agents.len(), 5);
         for (agent_id, agent) in env.state.agents.iter().enumerate() {
             assert_eq!(agent.role, env.role(agent_id));
-            assert_eq!(env.state.map[agent.position.idx()], agent.role.tile());
+            let painted = env.state.map[agent.position.idx()];
+            if agent.role == Role::Scout {
+                // a scout is always the tile you see on its cell
+                assert_eq!(painted, Role::Scout.tile());
+            } else {
+                // ... and it is the only thing that can hide a harvester
+                assert!(painted == Role::Scout.tile() || painted == Role::Harvester.tile());
+            }
+        }
+
+        // every scout started life on a harvester's back
+        for scout in &env.state.agents[..config.num_scouts] {
+            assert!(
+                env.state.agents[config.num_scouts..]
+                    .iter()
+                    .any(|h| h.position.idx() == scout.position.idx()),
+                "a scout spawned off the harvesters"
+            );
         }
 
         let locked = env

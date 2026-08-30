@@ -108,11 +108,19 @@ vocab_enum!(FindReturnObs {
 });
 
 impl FindReturnObs {
-    fn blocked(self) -> bool {
+    fn move_blocked(self) -> bool {
         use FindReturnObs::*;
         matches!(
             self,
-            TileWall | TileDestructibleWall | TileWater | AgentGeneric // | PipeHorizontal | PipeVirtical
+            TileWall | TileDestructibleWall | TileWater | AgentGeneric
+        )
+    }
+
+    fn spawnable(self) -> bool {
+        use FindReturnObs::*;
+        matches!(
+            self,
+            TileEmpty | TileDecor1 | TileDecor2 | TileDecor3 | TileDecor4
         )
     }
 
@@ -232,7 +240,7 @@ impl FindReturn {
                 let position = Position::new(x, y);
                 let tile = self.state.map[position.idx()];
 
-                if !tile.blocked() {
+                if tile.spawnable() {
                     self.state.free_positions.push(position);
                 }
             }
@@ -299,7 +307,7 @@ impl FindReturn {
                     | FindReturnAction::MoveDown
                     | FindReturnAction::MoveLeft => {
                         let target = agent.slide_target(&self.state.map, action.direction());
-                        !self.state.map[target.idx()].blocked()
+                        !self.state.map[target.idx()].move_blocked()
                     }
                     FindReturnAction::Dig => {
                         let target = agent.position + agent.dir;
@@ -307,7 +315,7 @@ impl FindReturn {
                     }
                     FindReturnAction::PlacePipe => {
                         let target = agent.position + agent.dir;
-                        !self.state.map[target.idx()].blocked()
+                        self.state.map[target.idx()].spawnable()
                     }
                     FindReturnAction::Noop => true,
                 };
@@ -431,7 +439,7 @@ impl Environment for FindReturn {
                 | FindReturnAction::MoveRight
                 | FindReturnAction::MoveDown
                 | FindReturnAction::MoveLeft => {
-                    if !map[target.idx()].blocked() {
+                    if !map[target.idx()].move_blocked() {
                         // unpaint the agent because it's moving
                         map[agent.position.idx()] = base_map[agent.position.idx()];
                         agent.position = target;
@@ -458,7 +466,7 @@ impl Environment for FindReturn {
                 FindReturnAction::PlacePipe => {
                     let target_tile = &mut map[target.idx()];
 
-                    if !target_tile.blocked() {
+                    if target_tile.spawnable() {
                         *target_tile = if agent.dir.x == 0 {
                             FindReturnObs::PipeHorizontal
                         } else {
@@ -763,7 +771,7 @@ mod tests {
         assert_eq!(buffers.reward[0], env.config.treasure_reward);
         assert_eq!(buffers.last_action[0], VocabId::from(MoveRight));
         assert_ne!(env.state.agents[0].position.idx(), flag.idx());
-        assert!(!env.state.base_map[env.state.agents[0].position.idx()].blocked());
+        assert!(!env.state.base_map[env.state.agents[0].position.idx()].move_blocked());
         assert_eq!(
             env.state.map[env.state.agents[0].position.idx()],
             AgentGeneric
