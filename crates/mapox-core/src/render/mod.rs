@@ -29,6 +29,17 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::AGENT_GENERIC, 104, 0),
     (symbols::AGENT_SCOUT, 3, 16),
     (symbols::AGENT_HARVESTER, 13, 14),
+    (symbols::TILE_FOOD, 62, 45),
+    (symbols::AGENT_SNAKE_RED, 52, 45),
+    (symbols::AGENT_SNAKE_ORANGE, 53, 45),
+    (symbols::AGENT_SNAKE_YELLOW, 54, 45),
+    (symbols::AGENT_SNAKE_GOLD, 55, 45),
+    (symbols::AGENT_SNAKE_GREEN, 56, 45),
+    (symbols::AGENT_SNAKE_BLUE, 57, 45),
+    (symbols::AGENT_SNAKE_PURPLE, 58, 45),
+    (symbols::AGENT_SNAKE_PINK, 59, 45),
+    (symbols::AGENT_SNAKE_GRAY, 60, 45),
+    (symbols::AGENT_SNAKE_WHITE, 61, 45),
 ];
 
 pub(crate) fn resolve_art(vocab: &Vocabulary) -> Vec<(u32, u32)> {
@@ -51,6 +62,7 @@ mod tests {
     use crate::env::Environment;
     use crate::envs::find_return::{FindReturn, FindReturnConfig};
     use crate::envs::scouts::{Scouts, ScoutsConfig};
+    use crate::envs::snake::{Snake, SnakeConfig};
     use tileset::{TILESET_COLS, TILESET_ROWS};
 
     /// One of each env, at its defaults, to check the tables against.
@@ -58,6 +70,7 @@ mod tests {
         vec![
             Box::new(FindReturn::new(&FindReturnConfig::default(), 512)),
             Box::new(Scouts::new(&ScoutsConfig::default(), 512)),
+            Box::new(Snake::new(&SnakeConfig::default(), 512)),
         ]
     }
 

@@ -4,7 +4,7 @@ Steps mapox._core.Env in a plain Python loop with numpy buffers.
 With vec_count > 1 the envs are wrapped in the mapox-core VectorWrapper,
 which steps them in parallel (crates/mapox-core/src/wrappers/vector.rs).
 
-Run: uv run python scripts/bench_rust_env.py [--env {find_return,scouts}]
+Run: uv run python scripts/bench_rust_env.py [--env {find_return,scouts,snake}]
                                       [--agents N] [--vec-count K]
 """
 
@@ -13,9 +13,12 @@ import math
 import time
 
 import numpy as np
-
 from mapox._core import Env
-from mapox.envs.rust_env import RustFindReturnConfig, RustScoutsConfig
+from mapox.envs.rust_env import (
+    RustFindReturnConfig,
+    RustScoutsConfig,
+    RustSnakeConfig,
+)
 
 STEPS = 6400  # timed steps (128 x 50, as in the old JAX rollout bench)
 WARMUP_STEPS = 128
@@ -38,6 +41,8 @@ def make_config(name: str, agents_per_env: int, side: int):
             width=side,
             height=side,
         )
+    if name == "snake":
+        return RustSnakeConfig(num_agents=agents_per_env, width=side, height=side)
     return RustFindReturnConfig(num_agents=agents_per_env, width=side, height=side)
 
 
@@ -58,7 +63,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--env",
-        choices=["find_return", "scouts"],
+        choices=["find_return", "scouts", "snake"],
         default="find_return",
         help="which rust env to bench",
     )

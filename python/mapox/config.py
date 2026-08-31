@@ -7,7 +7,12 @@ from mapox.environment import Environment
 from mapox.envs.find_return import FindReturnConfig, FindReturnEnv
 from mapox.envs.king_hill import KingHillConfig, KingHillEnv
 from mapox.envs.prey import PreyConfig, PreyEnv
-from mapox.envs.rust_env import RustEnv, RustFindReturnConfig, RustScoutsConfig
+from mapox.envs.rust_env import (
+    RustEnv,
+    RustFindReturnConfig,
+    RustScoutsConfig,
+    RustSnakeConfig,
+)
 from mapox.envs.scouts import ScoutsConfig, ScoutsEnv
 from mapox.envs.snake import SnakeConfig, SnakeEnv
 from mapox.envs.traveling_salesman import (
@@ -26,6 +31,7 @@ type EnvironmentConfig = (
     | SnakeConfig
     | RustFindReturnConfig
     | RustScoutsConfig
+    | RustSnakeConfig
 )
 
 

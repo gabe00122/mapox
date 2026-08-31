@@ -5,6 +5,7 @@ use crate::{
     envs::{
         find_return::{FindReturn, FindReturnConfig},
         scouts::{Scouts, ScoutsConfig},
+        snake::{Snake, SnakeConfig},
     },
     wrappers::{
         multitask::MultitaskWrapper, task_id_wrapper::TaskIdWrapper, vector::VectorWrapper,
@@ -16,12 +17,14 @@ use crate::{
 pub enum EnvConfig {
     RustFindReturn(FindReturnConfig),
     RustScouts(ScoutsConfig),
+    RustSnake(SnakeConfig),
 }
 
 pub fn make(config: &EnvConfig, length: usize) -> Box<dyn Environment> {
     match config {
         EnvConfig::RustFindReturn(config) => Box::new(FindReturn::new(config, length)),
         EnvConfig::RustScouts(config) => Box::new(Scouts::new(config, length)),
+        EnvConfig::RustSnake(config) => Box::new(Snake::new(config, length)),
     }
 }
 
@@ -123,6 +126,17 @@ mod tests {
             parsed,
             EnvConfig::RustFindReturn(FindReturnConfig::default())
         );
+    }
+
+    /// Same again for the snake, whose config carries no mapgen keys.
+    #[test]
+    fn a_snake_config_dump_parses() {
+        let json = r#"{"env_type":"rust_snake","num_agents":4,"width":24,"height":24,
+            "view_width":11,"view_height":11,"initial_length":3,"initial_food":8,
+            "food_spawn_prob":0.15,"food_reward":1.0,"death_reward":-1.0}"#;
+
+        let parsed: EnvConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed, EnvConfig::RustSnake(SnakeConfig::default()));
     }
 
     /// The multitask shape: the same config dumps as the single-env tests,

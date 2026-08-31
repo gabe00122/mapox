@@ -61,7 +61,24 @@ class RustScoutsConfig(BaseModel):
     harvester_reward: float = 1.0
 
 
-type RustEnvConfig = RustFindReturnConfig | RustScoutsConfig
+class RustSnakeConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    env_type: Literal["rust_snake"] = "rust_snake"
+
+    num_agents: int = 4
+    width: int = 24
+    height: int = 24
+    view_width: int = 11
+    view_height: int = 11
+
+    initial_length: int = 3
+    initial_food: int = 8
+    food_spawn_prob: float = 0.15
+    food_reward: float = 1.0
+    death_reward: float = -1.0
+
+
+type RustEnvConfig = RustFindReturnConfig | RustScoutsConfig | RustSnakeConfig
 
 
 def _shape_placeholder(buffer: np.ndarray, dtype) -> jax.Array:

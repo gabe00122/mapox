@@ -88,7 +88,7 @@ tilemap = {
     SB.TILE_DECOR_4: (14, 5),
     SB.TILE_ARROW: (80, 21),
     SB.TILE_GRASS: (6, 9),
-    SB.TILE_FOOD: (8, 18),
+    SB.TILE_FOOD: (62, 45),
     SB.AGENT_SNAKE_HEAD: (0, 0),
     SB.AGENT_SNAKE_BODY: (0, 0),
 }

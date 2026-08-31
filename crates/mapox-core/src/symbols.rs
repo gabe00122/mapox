@@ -29,8 +29,16 @@ pub const AGENT_PREY: &str = "agent/prey";
 pub const AGENT_PREDATOR: &str = "agent/predator";
 pub const AGENT_KNIGHT: &str = "agent/knight";
 pub const AGENT_ARCHER: &str = "agent/archer";
-pub const AGENT_SNAKE_HEAD: &str = "agent/snake_head";
-pub const AGENT_SNAKE_BODY: &str = "agent/snake_body";
+pub const AGENT_SNAKE_RED: &str = "agent/snake_red";
+pub const AGENT_SNAKE_ORANGE: &str = "agent/snake_orange";
+pub const AGENT_SNAKE_YELLOW: &str = "agent/snake_yellow";
+pub const AGENT_SNAKE_GOLD: &str = "agent/snake_gold";
+pub const AGENT_SNAKE_GREEN: &str = "agent/snake_green";
+pub const AGENT_SNAKE_BLUE: &str = "agent/snake_blue";
+pub const AGENT_SNAKE_PURPLE: &str = "agent/snake_purple";
+pub const AGENT_SNAKE_PINK: &str = "agent/snake_pink";
+pub const AGENT_SNAKE_GRAY: &str = "agent/snake_gray";
+pub const AGENT_SNAKE_WHITE: &str = "agent/snake_white";
 
 // --- action symbols ---
 

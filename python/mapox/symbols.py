@@ -46,6 +46,18 @@ AGENT_ARCHER = "agent/archer"
 AGENT_SNAKE_HEAD = "agent/snake_head"
 AGENT_SNAKE_BODY = "agent/snake_body"
 
+# the rust snake paints bodies in ten colours, agent index modulo ten
+AGENT_SNAKE_RED = "agent/snake_red"
+AGENT_SNAKE_ORANGE = "agent/snake_orange"
+AGENT_SNAKE_YELLOW = "agent/snake_yellow"
+AGENT_SNAKE_GOLD = "agent/snake_gold"
+AGENT_SNAKE_GREEN = "agent/snake_green"
+AGENT_SNAKE_BLUE = "agent/snake_blue"
+AGENT_SNAKE_PURPLE = "agent/snake_purple"
+AGENT_SNAKE_PINK = "agent/snake_pink"
+AGENT_SNAKE_GRAY = "agent/snake_gray"
+AGENT_SNAKE_WHITE = "agent/snake_white"
+
 # --- action symbols ---
 
 MOVE_UP = "move/up"

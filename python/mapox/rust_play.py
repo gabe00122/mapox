@@ -4,7 +4,12 @@ import numpy as np
 
 from mapox._core import enjoy
 from mapox.agent import Agent, RandomAgent
-from mapox.envs.rust_env import RustEnv, RustFindReturnConfig, RustScoutsConfig
+from mapox.envs.rust_env import (
+    RustEnv,
+    RustFindReturnConfig,
+    RustScoutsConfig,
+    RustSnakeConfig,
+)
 from mapox.timestep import TimeStep
 
 
@@ -39,6 +44,7 @@ CONFIGS = {
         height=70,
         mapgen_threshold=0.07,
     ),
+    "snake": RustSnakeConfig(view_width=15, view_height=15, width=40, height=40),
 }
 
 

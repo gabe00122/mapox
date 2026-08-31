@@ -1,11 +1,23 @@
 import jax
+import pytest
 from jax import numpy as jnp
+from mapox.envs.rust_env import (
+    RustEnv,
+    RustFindReturnConfig,
+    RustScoutsConfig,
+    RustSnakeConfig,
+)
 
-from mapox.envs.rust_env import RustEnv
+CONFIGS = {
+    "find_return": RustFindReturnConfig(num_agents=2, width=12, height=12),
+    "scouts": RustScoutsConfig(num_scouts=1, num_harvesters=1, width=12, height=12),
+    "snake": RustSnakeConfig(num_agents=2, width=12, height=12),
+}
 
 
-def test_rust_bridge_uses_uint16_observations_and_actions():
-    env = RustEnv('{"env_type":"find_return","num_agents":2,"width":12,"height":12}')
+@pytest.mark.parametrize("config", CONFIGS.values(), ids=CONFIGS)
+def test_rust_bridge_uses_uint16_observations_and_actions(config):
+    env = RustEnv(config, 128)
 
     _, reset_ts = env.reset(jax.random.key(0))
     assert reset_ts.obs.dtype == jnp.uint16
