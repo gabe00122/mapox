@@ -15,6 +15,7 @@ from mapox.config import (
     ScoutsConfig,
     SnakeConfig,
     TravelingSalesmanConfig,
+    VecConfig,
 )
 from mapox.environment import Environment
 from mapox.specs import ActionSpec, ObservationSpec
@@ -40,6 +41,7 @@ __all__ = [
     "SnakeConfig",
     "TimeStep",
     "TravelingSalesmanConfig",
+    "VecConfig",
     "VectorWrapper",
     "VocabWrapper",
     "concat_one_hot",

@@ -6,7 +6,7 @@ import numpy as np
 from jax import Array
 from jax import numpy as jnp
 from jax.experimental import io_callback
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from mapox._core import Env as _CoreEnv
 from mapox.environment import Environment
@@ -78,7 +78,49 @@ class RustSnakeConfig(BaseModel):
     death_reward: float = -1.0
 
 
-type RustEnvConfig = RustFindReturnConfig | RustScoutsConfig | RustSnakeConfig
+class RustVecConfig(BaseModel):
+    """Vectorized copies of one rust env; the rust side steps them in parallel."""
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    env_type: Literal["vec"] = "vec"
+
+    num: int = 1
+    env: RustEnvConfig = Field(discriminator="env_type")
+
+
+class RustMultiEnvSpec(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    name: str
+    num: int = 1
+    env: RustEnvConfig = Field(discriminator="env_type")
+
+
+class RustMultiConfig(BaseModel):
+    """A batch of rust envs; the rust MultitaskWrapper is the vectorizer."""
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    env_type: Literal["multi"] = "multi"
+
+    envs: tuple[RustMultiEnvSpec, ...]
+
+    @field_validator("envs", mode="before")
+    @classmethod
+    def coerce_envs(cls, v):
+        # JSON gives list; accept list and turn into tuple
+        return tuple(v) if isinstance(v, list) else v
+
+
+type RustEnvConfig = (
+    RustFindReturnConfig
+    | RustScoutsConfig
+    | RustSnakeConfig
+    | RustVecConfig
+    | RustMultiConfig
+)
+
+# the wrapper configs refer to RustEnvConfig, which includes them: the
+# alias above is what makes the forward references resolvable
+RustVecConfig.model_rebuild()
+RustMultiEnvSpec.model_rebuild()
+RustMultiConfig.model_rebuild()
 
 
 def _shape_placeholder(buffer: np.ndarray, dtype) -> jax.Array:
@@ -89,9 +131,9 @@ def _shape_placeholder(buffer: np.ndarray, dtype) -> jax.Array:
 
 
 class RustEnv(Environment[None]):
-    def __init__(self, config: RustEnvConfig, length: int, num_envs: int = 1):
+    def __init__(self, config: RustEnvConfig, length: int):
         config_json = config.model_dump_json()
-        self.inner = _CoreEnv(config_json, length, num_envs)
+        self.inner = _CoreEnv(config_json, length)
 
         num_agents, view_width, view_height, channels = self.inner.observation_shape
         num_actions = self.inner.num_actions

@@ -1,9 +1,9 @@
 """VectorWrapper — flattening (vec_count, agents) must be correct."""
 
 import jax
-from jax import numpy as jnp
-
 import mapox.symbols as SB
+from jax import numpy as jnp
+from mapox.config import EnvironmentFactory, VecConfig
 from mapox.envs.find_return import FindReturnConfig, FindReturnEnv
 from mapox.wrappers.vector import VectorWrapper
 
@@ -53,3 +53,16 @@ def test_teams_none():
     inner = _make_find_return()
     venv = VectorWrapper(inner, VEC_COUNT)
     assert venv.teams is None
+
+def test_factory_vec_of_jax_env_uses_vector_wrapper():
+    config = VecConfig(
+        num=VEC_COUNT,
+        env={"env_type": "king_hill", "num_agents": 2, "num_flags": 1},
+    )
+    venv, _ = EnvironmentFactory().create_env(config, LENGTH)
+
+    assert isinstance(venv, VectorWrapper)
+    assert venv.num_agents == VEC_COUNT * 2
+
+    _, ts = jax.jit(venv.reset)(jax.random.key(0))
+    assert ts.obs.shape[0] == venv.num_agents

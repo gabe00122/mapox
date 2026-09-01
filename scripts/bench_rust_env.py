@@ -1,8 +1,8 @@
 """Direct throughput of the rust env through the pyo3 binding.
 
 Steps mapox._core.Env in a plain Python loop with numpy buffers.
-With vec_count > 1 the envs are wrapped in the mapox-core VectorWrapper,
-which steps them in parallel (crates/mapox-core/src/wrappers/vector.rs).
+With --vec-count > 1 the config is wrapped in a `vec` env_type and the
+mapox-core VectorWrapper steps the copies in parallel (crates/mapox-core/src/wrappers/vector.rs).
 
 Run: uv run python scripts/bench_rust_env.py [--env {find_return,scouts,snake}]
                                       [--agents N] [--vec-count K]
@@ -18,6 +18,7 @@ from mapox.envs.rust_env import (
     RustFindReturnConfig,
     RustScoutsConfig,
     RustSnakeConfig,
+    RustVecConfig,
 )
 
 STEPS = 6400  # timed steps (128 x 50, as in the old JAX rollout bench)
@@ -93,7 +94,7 @@ def main() -> None:
     side = max(40, math.isqrt(args.agents * 8) + 1)
 
     config = make_config(args.env, agents_per_env, side)
-    env = Env(config.model_dump_json(), STEPS, args.vec_count)
+    env = Env(RustVecConfig(num=args.vec_count, env=config).model_dump_json(), STEPS)
     assert env.num_agents == args.agents, (env.num_agents, args.agents)
     obs, step_time, terminated, last_action, reward, action_mask, task_ids = (
         make_buffers(env)

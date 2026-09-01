@@ -2,7 +2,7 @@
 mod _core {
     use mapox_core::{
         env::Environment,
-        make::{EnvConfig, MultitaskEnvSpec, make_multitask, make_vec},
+        make::{EnvConfig, make},
         policy::{Policy, PolicyError, RandomPolicy},
         render::{RenderApp, open_window},
         timestep::{OBS_CHANNELS, TimeStepMut, TimeStepRef},
@@ -117,19 +117,12 @@ mod _core {
     #[pymethods]
     impl Env {
         #[new]
-        fn new(config_json: &str, length: usize, num_envs: usize) -> PyResult<Self> {
-            let value: serde_json::Value = serde_json::from_str(config_json)
+        fn new(config_json: &str, length: usize) -> PyResult<Self> {
+            let config: EnvConfig = serde_json::from_str(config_json)
                 .map_err(|err| PyValueError::new_err(err.to_string()))?;
 
-            let inner: Box<dyn Environment + Send + Sync> = if value.is_array() {
-                let specs: Vec<MultitaskEnvSpec> = serde_json::from_value(value)
-                    .map_err(|err| PyValueError::new_err(err.to_string()))?;
-                make_multitask(&specs, length).map_err(|err| PyValueError::new_err(err))?
-            } else {
-                let config: EnvConfig = serde_json::from_value(value)
-                    .map_err(|err| PyValueError::new_err(err.to_string()))?;
-                make_vec(&config, length, num_envs)
-            };
+            let inner: Box<dyn Environment + Send + Sync> =
+                make(&config, length).map_err(PyValueError::new_err)?;
 
             Ok(Self { inner: Some(inner) })
         }

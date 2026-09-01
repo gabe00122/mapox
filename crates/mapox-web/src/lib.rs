@@ -74,7 +74,8 @@ fn setup(policy_bytes: &[u8], seed: u32) -> Result<Running, JsValue> {
         .map_err(|err| JsValue::from_str(&format!("parsing the embedded env config: {err}")))?;
     // the episode runs for one policy context, which the export declares
     let length = loaded.meta.max_seq_length;
-    let env = make(&env_config, length);
+    let env = make(&env_config, length)
+        .map_err(|err| JsValue::from_str(&format!("building the env: {err}")))?;
 
     let policy = BurnPolicy::<Flex>::new(loaded, env.num_agents(), seed.into());
     Ok((env, length, Box::new(policy)))

@@ -140,7 +140,7 @@ https://github.com/user-attachments/assets/3483745f-7c53-46e9-b838-3cc76b9e3ee4
 - `MultiTaskWrapper((env1, env2, ...), (name1, name2, ...))`  
   Combines multiple environments into one by concatenating their agents. Adds a per-agent `task_ids` field to the `TimeStep` via `TaskIdWrapper`.
 
-The `EnvironmentFactory` also supports a `MultiTaskConfig` that can build a multitask environment (and optionally vectorize each task).
+The `EnvironmentFactory` also supports a `MultiTaskConfig` that builds a multitask environment (optionally vectorizing each task) and a `VecConfig` that builds `num` copies of a single environment. Configs that reference only rust environments (`rust_*`) run entirely on the rust side: a `MultiTaskConfig` becomes the rust `MultitaskWrapper` — which is itself the vectorizer — and a `VecConfig` becomes the rust `VectorWrapper`.
 
 ## Acknowledgements
 

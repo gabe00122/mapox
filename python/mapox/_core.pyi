@@ -5,7 +5,7 @@ import numpy as np
 class Env:
     """Compiled gridworld environment; see crates/mapox-py."""
 
-    def __init__(self, config_json: str, length: int, num_envs: int) -> None: ...
+    def __init__(self, config_json: str, length: int) -> None: ...
 
     num_agents: int
     num_actions: int
