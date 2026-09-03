@@ -257,6 +257,10 @@ class RustEnv(Environment[None]):
     def num_agents(self) -> int:
         return self.inner.num_agents
 
+    @property
+    def num_tasks(self) -> int:
+        return self.inner.num_tasks
+
     def get_render_settings(self) -> GridRenderSettings:
         raise NotImplementedError(
             "RustEnv does not expose render state; use mapox.run_demo for the "

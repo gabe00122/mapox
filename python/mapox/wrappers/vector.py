@@ -38,6 +38,11 @@ class VectorWrapper(Environment[EnvState]):
         return self._vec_count * self._env.num_agents
 
     @property
+    def num_tasks(self) -> int:
+        # copies of one env are still one task
+        return self._env.num_tasks
+
+    @property
     def teams(self) -> jax.Array | None:
         if self._env.teams is None:
             return None

@@ -133,6 +133,11 @@ mod _core {
         }
 
         #[getter]
+        fn num_tasks(&self) -> usize {
+            self.env().num_tasks()
+        }
+
+        #[getter]
         fn num_actions(&self) -> usize {
             self.env().action_spec().num_actions
         }

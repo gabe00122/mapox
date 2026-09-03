@@ -103,9 +103,9 @@ def test_factory_routes_all_rust_multi_to_rust_env():
             ),
         )
     )
-    env, num_tasks = EnvironmentFactory().create_env(config, 32)
+    env = EnvironmentFactory().create_env(config, 32)
     assert isinstance(env, RustEnv)
-    assert num_tasks == 2
+    assert env.num_tasks == 2
     assert env.num_agents == 6
 
 
@@ -115,7 +115,7 @@ def test_factory_routes_vec_of_rust_to_rust_env():
         env={"env_type": "rust_scouts", "num_scouts": 1, "num_harvesters": 1,
              "width": 12, "height": 12},
     )
-    env, _ = EnvironmentFactory().create_env(config, 32)
+    env = EnvironmentFactory().create_env(config, 32)
     assert isinstance(env, RustEnv)
     assert env.num_agents == 4
 

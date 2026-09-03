@@ -407,6 +407,10 @@ class PreyEnv(Environment[PreyState]):
         return self._num_sneakers + self._num_chasers
 
     @property
+    def num_tasks(self) -> int:
+        return 1
+
+    @property
     def obs_vocab(self) -> Vocabulary:
         return self._obs_vocab
 

@@ -41,6 +41,10 @@ class Environment[EnvState](ABC):
     def num_agents(self) -> int: ...
 
     @property
+    @abstractmethod
+    def num_tasks(self) -> int: ...
+
+    @property
     def teams(self) -> jax.Array | None:
         return None
 

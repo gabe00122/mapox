@@ -33,7 +33,7 @@ import jax.numpy as jnp
 from mapox import EnvironmentFactory, FindReturnConfig
 
 factory = EnvironmentFactory()
-env, _ = factory.create_env(FindReturnConfig(num_agents=2), length=512)
+env = factory.create_env(FindReturnConfig(num_agents=2), length=512)
 
 rng = jax.random.PRNGKey(0)
 state, ts = env.reset(rng)

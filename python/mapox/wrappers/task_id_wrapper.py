@@ -31,6 +31,11 @@ class TaskIdWrapper(Environment):
         return self._env.num_agents
 
     @property
+    def num_tasks(self) -> int:
+        # abstract on Environment, so __getattr__ never stands in for it
+        return self._env.num_tasks
+
+    @property
     def teams(self) -> jax.Array | None:
         # Environment.teams has a concrete default, so __getattr__ never
         # delegates it; forward explicitly.

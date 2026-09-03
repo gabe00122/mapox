@@ -7,27 +7,26 @@ use crate::{
         scouts::{Scouts, ScoutsConfig},
         snake::{Snake, SnakeConfig},
     },
-    wrappers::{
-        multitask::MultitaskWrapper, task_id_wrapper::TaskIdWrapper, vector::VectorWrapper,
-    },
+    wrappers::{multitask::MultitaskWrapper, vector::VectorWrapper},
 };
 
-/// Config for anything the rust side can build: the concrete gridworlds,
-/// vectorized copies of one env (`Vec`), or a multitask batch of them
-/// (`Multi`). `Vec` and `Multi` embed another `EnvConfig`; the `Box` keeps
-/// the enum's size finite and is the python side's recursion boundary.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "env_type", rename_all = "snake_case")]
 pub enum EnvConfig {
     RustFindReturn(FindReturnConfig),
     RustScouts(ScoutsConfig),
     RustSnake(SnakeConfig),
-    RustVec { num: usize, env: Box<EnvConfig> },
-    RustMulti { envs: Vec<MultiEnvSpec> },
+    #[serde(rename = "vec")]
+    RustVec {
+        num: usize,
+        env: Box<EnvConfig>,
+    },
+    #[serde(rename = "multi")]
+    RustMulti {
+        envs: Vec<MultiEnvSpec>,
+    },
 }
 
-/// One entry of a `Multi` config: `num` copies of `env`. `name` is what the
-/// python side uses to address a single task out of the batch.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct MultiEnvSpec {
     pub name: String,
@@ -40,85 +39,8 @@ pub fn make(config: &EnvConfig, length: usize) -> Result<Box<dyn Environment>, S
         EnvConfig::RustFindReturn(config) => Ok(Box::new(FindReturn::new(config, length))),
         EnvConfig::RustScouts(config) => Ok(Box::new(Scouts::new(config, length))),
         EnvConfig::RustSnake(config) => Ok(Box::new(Snake::new(config, length))),
-        EnvConfig::RustVec { num, env } => {
-            if *num == 0 {
-                return Err("vec env num must be at least 1".into());
-            }
-            if *num == 1 {
-                return make(env, length);
-            }
-            let envs = (0..*num)
-                .map(|_| make(env, length))
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(Box::new(VectorWrapper::new(envs)))
-        }
-        EnvConfig::RustMulti { envs } => make_multi(envs, length),
-    }
-}
-
-/// Build a `MultitaskWrapper` from the entries of a `Multi` config.
-/// Every env instance becomes a direct (flat) child of the wrapper — the
-/// wrapper's own parallel reset/step is the vectorizer — each wrapped in
-/// its entry's TaskIdWrapper.
-fn make_multi(specs: &[MultiEnvSpec], length: usize) -> Result<Box<dyn Environment>, String> {
-    if specs.is_empty() {
-        return Err("multitask config must list at least one env".into());
-    }
-    for (i, spec) in specs.iter().enumerate() {
-        if spec.num == 0 {
-            return Err(format!(
-                "multitask env {i} '{}' has num 0; every env needs at least one instance",
-                spec.name
-            ));
-        }
-        // A nested `Multi` would sit inside this entry's TaskIdWrapper,
-        // which clobbers the task ids the inner wrapper wrote.
-        if contains_multi(&spec.env) {
-            return Err(format!(
-                "multitask env {i} '{}' nests another multitask config; its task ids would be clobbered",
-                spec.name
-            ));
-        }
-    }
-
-    // One flat child per env instance: each instance is wrapped in the
-    // entry's TaskIdWrapper before being handed to the MultitaskWrapper
-    // (which adds a VocabWrapper on top). A VectorWrapper child would run
-    // a second par_iter_mut inside the MultitaskWrapper's own loop.
-    let mut envs: Vec<Box<dyn Environment>> = Vec::new();
-    for (i, spec) in specs.iter().enumerate() {
-        for _ in 0..spec.num {
-            envs.push(Box::new(TaskIdWrapper::new(
-                make(&spec.env, length)?,
-                i as i32,
-            )));
-        }
-    }
-
-    // `MultitaskWrapper` serves every agent's obs from one shared
-    // (width, height) shape taken from the first env (see the TODO on its
-    // `observation_spec`), so mismatched view sizes must be rejected here
-    // instead of panicking deep in buffer indexing.
-    let first = envs[0].observation_spec();
-    for (i, (env, entry)) in envs.iter().zip(specs.iter()).enumerate().skip(1) {
-        let spec = env.observation_spec();
-        if (spec.width, spec.height) != (first.width, first.height) {
-            return Err(format!(
-                "multitask env {i} '{}' has view {}x{}, but env 0 has view {}x{}; all envs must share one view size",
-                entry.name, spec.width, spec.height, first.width, first.height
-            ));
-        }
-    }
-
-    Ok(Box::new(MultitaskWrapper::new(envs)))
-}
-
-/// Whether `config` builds a `MultitaskWrapper` anywhere in its subtree.
-fn contains_multi(config: &EnvConfig) -> bool {
-    match config {
-        EnvConfig::RustMulti { .. } => true,
-        EnvConfig::RustVec { env, .. } => contains_multi(env),
-        _ => false,
+        EnvConfig::RustVec { num, env } => Ok(Box::new(VectorWrapper::new(*num, env, length)?)),
+        EnvConfig::RustMulti { envs } => Ok(Box::new(MultitaskWrapper::new(envs, length)?)),
     }
 }
 
@@ -258,6 +180,7 @@ mod tests {
 
         let mut env = make(&config, 32).unwrap();
         assert_eq!(env.num_agents(), 12); // 2 * (2 + 2) + 4
+        assert_eq!(env.num_tasks(), 2); // copies of an entry are one task
 
         let mut buffers = TimeStepBuffers::new(&*env);
         env.reset(1, &mut buffers.view_mut());
@@ -271,7 +194,7 @@ mod tests {
     }
 
     #[test]
-    fn make_vec_builds_num_copies_and_num_one_is_plain() {
+    fn make_vec_builds_num_copies() {
         let scouts = Box::new(EnvConfig::RustScouts(ScoutsConfig {
             num_scouts: 1,
             num_harvesters: 1,
@@ -289,6 +212,8 @@ mod tests {
         )
         .unwrap();
         assert_eq!(env.num_agents(), 6);
+
+        assert_eq!(env.num_tasks(), 1);
 
         let env = make(
             &EnvConfig::RustVec {

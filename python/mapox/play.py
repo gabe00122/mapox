@@ -161,7 +161,7 @@ def main():
         "snake": SnakeConfig,
     }[args.env]()
 
-    env, _ = env_factory.create_env(config, 512)
+    env = env_factory.create_env(config, 512)
 
     agent = RandomAgent(env.action_spec)
 

@@ -8,6 +8,7 @@ class Env:
     def __init__(self, config_json: str, length: int) -> None: ...
 
     num_agents: int
+    num_tasks: int
     num_actions: int
     observation_shape: tuple[int, int, int, int]
     obs_symbols: list[str]

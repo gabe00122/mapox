@@ -26,22 +26,20 @@ def _make_wrapper():
         ),
     )
     factory = EnvironmentFactory()
-    wrapper, num_tasks = factory.create_env(config, LENGTH)
-    return wrapper, num_tasks
+    return factory.create_env(config, LENGTH)
 
 
 def test_num_agents():
-    wrapper, _ = _make_wrapper()
+    wrapper = _make_wrapper()
     assert wrapper.num_agents == 4
 
 
 def test_num_tasks():
-    _, num_tasks = _make_wrapper()
-    assert num_tasks == 2
+    assert _make_wrapper().num_tasks == 2
 
 
 def test_merged_vocabs():
-    wrapper, _ = _make_wrapper()
+    wrapper = _make_wrapper()
 
     # Union of both envs; shared symbols appear once.
     assert SB.TILE_DESTRUCTIBLE_WALL in wrapper.obs_vocab  # fr only
@@ -53,12 +51,12 @@ def test_merged_vocabs():
 
 
 def test_action_spec_is_global_width():
-    wrapper, _ = _make_wrapper()
+    wrapper = _make_wrapper()
     assert wrapper.action_spec.n == len(wrapper.action_vocab) == 5
 
 
 def test_observation_spec_keeps_channel_structure():
-    wrapper, _ = _make_wrapper()
+    wrapper = _make_wrapper()
     max_value = wrapper.observation_spec.max_value
 
     # Channel 0 grows to the global vocab; the structural channels
@@ -67,7 +65,7 @@ def test_observation_spec_keeps_channel_structure():
 
 
 def test_reset_concatenates():
-    wrapper, _ = _make_wrapper()
+    wrapper = _make_wrapper()
     key = jax.random.key(0)
     _, ts = wrapper.reset(key)
 
@@ -78,7 +76,7 @@ def test_reset_concatenates():
 
 
 def test_task_ids():
-    wrapper, _ = _make_wrapper()
+    wrapper = _make_wrapper()
     key = jax.random.key(0)
     _, ts = wrapper.reset(key)
 
@@ -89,7 +87,7 @@ def test_task_ids():
 
 
 def test_action_mask_lifted_to_global_slots():
-    wrapper, _ = _make_wrapper()
+    wrapper = _make_wrapper()
     _, ts = wrapper.reset(jax.random.key(0))
 
     stay = wrapper.action_vocab.id(SB.STAY)
@@ -105,7 +103,7 @@ def test_action_mask_lifted_to_global_slots():
 
 
 def test_obs_translates_only_the_tile_channel():
-    wrapper, _ = _make_wrapper()
+    wrapper = _make_wrapper()
     key = jax.random.key(0)
     _, ts = wrapper.reset(key)
 
@@ -138,7 +136,7 @@ def test_obs_translates_only_the_tile_channel():
 
 
 def test_step_translates_global_actions():
-    wrapper, _ = _make_wrapper()
+    wrapper = _make_wrapper()
     k1, k2 = jax.random.split(jax.random.key(0))
 
     states, _ = wrapper.reset(k1)
@@ -155,7 +153,7 @@ def test_step_translates_global_actions():
 def test_untranslatable_action_is_safe():
     # stay is not in find_return's vocabulary; sending it must not crash,
     # and ts agents (who do have stay) must see it echoed back globally.
-    wrapper, _ = _make_wrapper()
+    wrapper = _make_wrapper()
     k1, k2 = jax.random.split(jax.random.key(0))
 
     states, _ = wrapper.reset(k1)
@@ -168,7 +166,7 @@ def test_untranslatable_action_is_safe():
 
 
 def test_teams_none_when_no_env_has_teams():
-    wrapper, _ = _make_wrapper()
+    wrapper = _make_wrapper()
     assert wrapper.teams is None
 
 
@@ -186,7 +184,7 @@ def test_teams_forwarded_through_task_id_wrapper():
         ),
     )
     factory = EnvironmentFactory()
-    wrapper, _ = factory.create_env(config, LENGTH)
+    wrapper = factory.create_env(config, LENGTH)
 
     teams = wrapper.teams
     assert teams is not None
@@ -195,6 +193,6 @@ def test_teams_forwarded_through_task_id_wrapper():
     assert jnp.array_equal(teams[:2], jnp.zeros(2, teams.dtype))
     assert teams.max() == 1
 
-    single, _ = factory.create_env(config, LENGTH, env_name="kh")
+    single = factory.create_env(config, LENGTH, env_name="kh")
     assert single.teams is not None
     assert jnp.array_equal(single.teams, wrapper.teams[2:])

@@ -167,6 +167,10 @@ class TravelingSalesmanEnv(Environment[TravelingSalesmanState]):
         return self._num_agents
 
     @property
+    def num_tasks(self) -> int:
+        return 1
+
+    @property
     def obs_vocab(self) -> Vocabulary:
         return self._obs_vocab
 

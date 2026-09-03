@@ -268,6 +268,10 @@ class ScoutsEnv(Environment[ScoutsState]):
         return self._num_scouts + self._num_harvesters
 
     @property
+    def num_tasks(self) -> int:
+        return 1
+
+    @property
     def obs_vocab(self) -> Vocabulary:
         return self._obs_vocab
 

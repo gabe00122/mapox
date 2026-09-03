@@ -32,10 +32,11 @@ def _make(env_name, vec_count=1):
 
 
 def test_single_env_matches_multitask_interface():
-    full, _ = EnvironmentFactory().create_env(CONFIG, LENGTH)
-    single, num_tasks = _make("fr")
+    full = EnvironmentFactory().create_env(CONFIG, LENGTH)
+    single = _make("fr")
 
-    assert num_tasks == 2
+    assert full.num_tasks == 2
+    assert single.num_tasks == 1
     assert single.action_spec == full.action_spec
     assert single.observation_spec == full.observation_spec
     assert single.action_vocab == full.action_vocab
@@ -44,7 +45,7 @@ def test_single_env_matches_multitask_interface():
 
 
 def test_action_mask_lifted_to_global_slots():
-    single, _ = _make("fr")
+    single = _make("fr")
     _, ts = single.reset(jax.random.key(0))
 
     assert ts.action_mask.shape == (single.num_agents, single.action_spec.n)
@@ -56,7 +57,7 @@ def test_action_mask_lifted_to_global_slots():
 
 
 def test_task_ids_preserved():
-    single, _ = _make("ts")
+    single = _make("ts")
     _, ts = single.reset(jax.random.key(0))
 
     assert ts.task_ids is not None
@@ -64,7 +65,7 @@ def test_task_ids_preserved():
 
 
 def test_step_translates_global_actions():
-    single, _ = _make("ts")
+    single = _make("ts")
     k1, k2 = jax.random.split(jax.random.key(0))
 
     state, _ = single.reset(k1)
@@ -77,7 +78,7 @@ def test_step_translates_global_actions():
 
 
 def test_obs_uses_global_ids():
-    single, _ = _make("fr")
+    single = _make("fr")
     _, ts = single.reset(jax.random.key(0))
 
     # fr's tile channel must decode through the global vocab: every id it
@@ -87,7 +88,7 @@ def test_obs_uses_global_ids():
 
 
 def test_vec_count_applies_to_selected_env_only():
-    single, _ = _make("fr", vec_count=3)
+    single = _make("fr", vec_count=3)
     assert single.num_agents == 6
 
     _, ts = single.reset(jax.random.key(0))

@@ -3,10 +3,12 @@ use rand::{Rng, SeedableRng};
 use rayon::prelude::*;
 
 use crate::env::Environment;
+use crate::make::{EnvConfig, MultiEnvSpec, make};
 use crate::render::env::{GridRenderSettings, GridRenderState};
 use crate::spec::{ActionSpec, ObservationSpec};
 use crate::timestep::TimeStepMut;
 use crate::vocab::{VocabId, Vocabulary};
+use crate::wrappers::task_id_wrapper::TaskIdWrapper;
 use crate::wrappers::vocab_wrapper::VocabWrapper;
 
 struct EnvironmentInfo {
@@ -24,7 +26,75 @@ pub struct MultitaskWrapper {
 }
 
 impl MultitaskWrapper {
-    pub fn new(envs: Vec<Box<dyn Environment>>) -> Self {
+    /// Build the wrapper from the entries of a `RustMulti` config. Each
+    /// entry becomes one task group holding its `num` instances, built
+    /// through `make`; every instance is a flat child — this wrapper's own
+    /// parallel reset/step is the vectorizer — each wrapped in its entry's
+    /// TaskIdWrapper.
+    pub fn new(specs: &[MultiEnvSpec], length: usize) -> Result<Self, String> {
+        if specs.is_empty() {
+            return Err("multitask config must list at least one env".into());
+        }
+        for (i, spec) in specs.iter().enumerate() {
+            if spec.num == 0 {
+                return Err(format!(
+                    "multitask env {i} '{}' has num 0; every env needs at least one instance",
+                    spec.name
+                ));
+            }
+            // A nested `RustMulti` would sit inside this entry's
+            // TaskIdWrapper, which clobbers the task ids the inner wrapper wrote.
+            if contains_multi(&spec.env) {
+                return Err(format!(
+                    "multitask env {i} '{}' nests another multitask config; its task ids would be clobbered",
+                    spec.name
+                ));
+            }
+        }
+
+        // The grouping tells the wrapper which instances share a task id.
+        // A VectorWrapper child would run a second par_iter_mut inside this
+        // wrapper's own loop, so the instances stay flat.
+        let mut tasks: Vec<Vec<Box<dyn Environment>>> = Vec::new();
+        for (i, spec) in specs.iter().enumerate() {
+            let instances = (0..spec.num)
+                .map(|_| {
+                    Ok(
+                        Box::new(TaskIdWrapper::new(make(&spec.env, length)?, i as i32))
+                            as Box<dyn Environment>,
+                    )
+                })
+                .collect::<Result<Vec<Box<dyn Environment>>, String>>()?;
+            tasks.push(instances);
+        }
+
+        // Every agent's obs is served from one shared (width, height) shape
+        // taken from the first env (see the TODO on `observation_spec`), so
+        // mismatched view sizes must be rejected here instead of panicking
+        // deep in buffer indexing.
+        let first = tasks[0][0].observation_spec();
+        for (i, task) in tasks.iter().enumerate().skip(1) {
+            let spec = task[0].observation_spec();
+            if (spec.width, spec.height) != (first.width, first.height) {
+                return Err(format!(
+                    "multitask env {i} '{}' has view {}x{}, but env 0 has view {}x{}; all envs must share one view size",
+                    specs[i].name, spec.width, spec.height, first.width, first.height
+                ));
+            }
+        }
+
+        Ok(Self::from_tasks(tasks))
+    }
+
+    /// Assemble from already-built instances: one inner `Vec` per task,
+    /// each group listing that task's instances. All instances become flat
+    /// children, but the task count is the number of groups, so `num`
+    /// copies of one task stay one task — matching the python
+    /// `MultiTaskWrapper`, which nests copies inside per-task envs.
+    fn from_tasks(tasks: Vec<Vec<Box<dyn Environment>>>) -> Self {
+        let num_tasks = tasks.len();
+        let envs: Vec<Box<dyn Environment>> = tasks.into_iter().flatten().collect();
+
         let mut obs_vocab = Vocabulary::new();
         let mut action_vocab = Vocabulary::new();
 
@@ -35,7 +105,6 @@ impl MultitaskWrapper {
 
         let lens: Vec<usize> = envs.iter().map(|env| env.num_agents()).collect();
         let num_agents = envs.iter().map(|env| env.num_agents()).sum();
-        let num_tasks = envs.iter().map(|env| env.num_tasks()).sum();
 
         let wrappers = envs
             .into_iter()
@@ -58,6 +127,15 @@ impl MultitaskWrapper {
             obs_vocab,
             action_vocab,
         }
+    }
+}
+
+/// Whether `config` builds a `MultitaskWrapper` anywhere in its subtree.
+fn contains_multi(config: &EnvConfig) -> bool {
+    match config {
+        EnvConfig::RustMulti { .. } => true,
+        EnvConfig::RustVec { env, .. } => contains_multi(env),
+        _ => false,
     }
 }
 
@@ -258,23 +336,23 @@ mod tests {
         let logs: Vec<Arc<Mutex<FakeLog>>> = (0..2)
             .map(|_| Arc::new(Mutex::new(FakeLog::default())))
             .collect();
-        let envs: Vec<Box<dyn Environment>> = vec![
-            Box::new(FakeEnv::new(
+        let envs: Vec<Vec<Box<dyn Environment>>> = vec![
+            vec![Box::new(FakeEnv::new(
                 0,
                 2,
                 vocab(&["floor", "wall", "scout"]),
                 vocab(&["stay", "north", "south"]),
                 logs[0].clone(),
-            )),
-            Box::new(FakeEnv::new(
+            ))],
+            vec![Box::new(FakeEnv::new(
                 1,
                 3,
                 vocab(&["wall", "floor", "treasure"]),
                 vocab(&["south", "stay", "east"]),
                 logs[1].clone(),
-            )),
+            ))],
         ];
-        (MultitaskWrapper::new(envs), logs)
+        (MultitaskWrapper::from_tasks(envs), logs)
     }
 
     /// The per-env seed the wrapper derives: the base seed remixed with the
@@ -289,6 +367,7 @@ mod tests {
         let (env, _) = merged_env();
 
         assert_eq!(env.num_agents(), 5);
+        assert_eq!(env.num_tasks(), 2);
         let obs_spec = env.observation_spec();
         assert_eq!(
             (obs_spec.width, obs_spec.height, obs_spec.num_types),
@@ -413,9 +492,10 @@ mod tests {
             vocab(&["stay", "north"]),
             log.clone(),
         );
-        let mut wrapped = MultitaskWrapper::new(vec![Box::new(env)]);
+        let mut wrapped = MultitaskWrapper::from_tasks(vec![vec![Box::new(env)]]);
 
         assert_eq!(wrapped.num_agents(), 3);
+        assert_eq!(wrapped.num_tasks(), 1);
         assert_eq!(wrapped.observation_spec().num_types, 2);
         assert_eq!(wrapped.action_spec().num_actions, 2);
 
@@ -425,6 +505,26 @@ mod tests {
         let expected = derived_seed(99, 0);
         assert_eq!(log.lock().reset_seeds, vec![expected]);
         assert_ne!(expected, 99);
+    }
+
+    /// Two instances in one task group are two copies of the same task,
+    /// not two tasks — the group count is what `num_tasks` reports.
+    #[test]
+    fn copies_within_a_group_are_one_task() {
+        let log = Arc::new(Mutex::new(FakeLog::default()));
+        let fake = |index: u8| -> Box<dyn Environment> {
+            Box::new(FakeEnv::new(
+                index,
+                2,
+                vocab(&["floor", "wall"]),
+                vocab(&["stay", "north"]),
+                log.clone(),
+            ))
+        };
+        let env = MultitaskWrapper::from_tasks(vec![vec![fake(0), fake(1)], vec![fake(2)]]);
+
+        assert_eq!(env.num_agents(), 6);
+        assert_eq!(env.num_tasks(), 2);
     }
 
     #[test]

@@ -10,11 +10,8 @@ from mapox.envs.prey import PreyConfig, PreyEnv
 from mapox.envs.rust_env import (
     RustEnv,
     RustFindReturnConfig,
-    RustMultiConfig,
-    RustMultiEnvSpec,
     RustScoutsConfig,
     RustSnakeConfig,
-    RustVecConfig,
 )
 from mapox.envs.scouts import ScoutsConfig, ScoutsEnv
 from mapox.envs.snake import SnakeConfig, SnakeEnv
@@ -84,47 +81,20 @@ class EnvironmentFactory:
     def register_env(self, name: str, fn: Callable[[Any, int], Environment[Any]]):
         self._registry[name] = fn
 
-    def _build_sub_env(self, env_config: Any, length: int, num: int) -> Environment:
-        """One sub-env of a multi config: rust sub-envs carry their vector
-        count in the config (the rust side steps the copies in parallel),
-        JAX sub-envs are vectorized here."""
-        if env_config.env_type.startswith("rust"):
-            if num == 1:
-                return RustEnv(env_config, length)
-            return RustEnv(RustVecConfig(num=num, env=env_config), length)
-        return self.create_env(env_config, length, num)[0]
-
     def create_env(
         self,
         env_config: Any,
         length: int,
-        vec_count: int = 1,
         env_name: str | None = None,
-    ) -> tuple[Environment, int]:
-        num_tasks = 1
-
+    ) -> Environment:
         if env_config.env_type.startswith("rust"):
-            if vec_count > 1:
-                raise ValueError(
-                    "vector count for rust envs is set in the config "
-                    "(env_type='vec'), not via create_env's vec_count"
-                )
-            return RustEnv(env_config, length), 1
+            return RustEnv(env_config, length)
 
         if env_config.env_type == "vec":
-            if env_config.env.env_type.startswith("rust"):
-                # the rust VectorWrapper steps the copies in parallel
-                return (
-                    RustEnv(RustVecConfig(num=env_config.num, env=env_config.env), length),
-                    1,
-                )
-            if env_config.num == 1:
-                return self.create_env(env_config.env, length)
-            inner, _ = self.create_env(env_config.env, length)
-            return VectorWrapper(inner, env_config.num), 1
+            inner = self.create_env(env_config.env, length)
+            return VectorWrapper(inner, env_config.num)
 
         if env_config.env_type == "multi":
-            num_tasks = len(env_config.envs)
             env_names = tuple(env_def.name for env_def in env_config.envs)
 
             if env_name is not None:
@@ -135,38 +105,22 @@ class EnvironmentFactory:
                 # Every sub-env is built so the union vocab matches training;
                 # only the selected one is kept, so the rest stay unvectorized.
                 out_envs = tuple(
-                    self._build_sub_env(
-                        env_def.env, length, vec_count if i == task_id else 1
-                    )
+                    self.create_env(env_def.env, length)
                     for i, env_def in enumerate(env_config.envs)
                 )
                 wrapper = MultiTaskWrapper(out_envs, env_names)
 
-                return wrapper.task_envs[task_id], num_tasks
-
-            if all(env_def.env.env_type.startswith("rust") for env_def in env_config.envs):
-                # an all-rust batch runs entirely on the rust side, where the
-                # MultitaskWrapper is the vectorizer
-                rust_config = RustMultiConfig(
-                    envs=tuple(
-                        RustMultiEnvSpec(**env_def.model_dump())
-                        for env_def in env_config.envs
-                    )
-                )
-                return RustEnv(rust_config, length), num_tasks
+                return wrapper.task_envs[task_id]
 
             out_envs = tuple(
-                self._build_sub_env(env_def.env, length, env_def.num)
+                self.create_env(env_def.env, length)
                 for env_def in env_config.envs
             )
 
-            return MultiTaskWrapper(out_envs, env_names), num_tasks
+            return MultiTaskWrapper(out_envs, env_names)
 
         if env_config.env_type in self._registry:
             env = self._registry[env_config.env_type](env_config, length)
-            if vec_count > 1:
-                env = VectorWrapper(env, vec_count)
-
-            return env, 1
+            return env
 
         raise ValueError("Could not find env type matching that name")

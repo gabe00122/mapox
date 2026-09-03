@@ -244,6 +244,10 @@ class FindReturnEnv(Environment[FindReturnState]):
     def num_agents(self) -> int:
         return self._num_agents
 
+    @property
+    def num_tasks(self) -> int:
+        return 1
+
     def step(
         self, state: FindReturnState, action: jax.Array, rng_key: jax.Array
     ) -> tuple[FindReturnState, TimeStep]:

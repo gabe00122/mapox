@@ -3,6 +3,7 @@ use rand::{RngExt, SeedableRng, rngs::SmallRng};
 use rayon::prelude::*;
 
 use crate::env::Environment;
+use crate::make::{EnvConfig, make};
 use crate::render::env::{GridRenderSettings, GridRenderState};
 use crate::spec::{ActionSpec, ObservationSpec};
 use crate::timestep::TimeStepMut;
@@ -13,8 +14,16 @@ pub struct VectorWrapper {
 }
 
 impl VectorWrapper {
-    pub fn new(envs: Vec<Box<dyn Environment>>) -> Self {
-        Self { envs }
+    /// `num` copies of `config`, each built through `make` and stepped in
+    /// parallel by this wrapper's own reset/step loop.
+    pub fn new(num: usize, config: &EnvConfig, length: usize) -> Result<Self, String> {
+        if num == 0 {
+            return Err("vec env num must be at least 1".into());
+        }
+        let envs = (0..num)
+            .map(|_| make(config, length))
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(Self { envs })
     }
 }
 

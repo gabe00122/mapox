@@ -59,7 +59,7 @@ def test_factory_vec_of_jax_env_uses_vector_wrapper():
         num=VEC_COUNT,
         env={"env_type": "king_hill", "num_agents": 2, "num_flags": 1},
     )
-    venv, _ = EnvironmentFactory().create_env(config, LENGTH)
+    venv = EnvironmentFactory().create_env(config, LENGTH)
 
     assert isinstance(venv, VectorWrapper)
     assert venv.num_agents == VEC_COUNT * 2
