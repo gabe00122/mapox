@@ -432,9 +432,12 @@ impl Snake {
                 .skip(1)
                 .copied()
                 .find(|cell| {
-                    !self.state.plans.iter().enumerate().any(|(j, plan)| {
-                        j != agent_id && !plan.died && plan.new_head == *cell
-                    })
+                    !self
+                        .state
+                        .plans
+                        .iter()
+                        .enumerate()
+                        .any(|(j, plan)| j != agent_id && !plan.died && plan.new_head == *cell)
                 })
                 .or_else(|| corpse.front().copied())
                 .expect("a dead snake still holds its corpse")
@@ -738,6 +741,10 @@ impl Environment for Snake {
             let local_pos = snake.head() - Position::new(self.pad_width, self.pad_height);
             grid_render_state.agent_positions.push(local_pos);
         }
+    }
+
+    fn num_tasks(&self) -> usize {
+        1
     }
 }
 

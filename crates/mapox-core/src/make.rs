@@ -22,13 +22,8 @@ pub enum EnvConfig {
     RustFindReturn(FindReturnConfig),
     RustScouts(ScoutsConfig),
     RustSnake(SnakeConfig),
-    Vec {
-        num: usize,
-        env: Box<EnvConfig>,
-    },
-    Multi {
-        envs: Vec<MultiEnvSpec>,
-    },
+    RustVec { num: usize, env: Box<EnvConfig> },
+    RustMulti { envs: Vec<MultiEnvSpec> },
 }
 
 /// One entry of a `Multi` config: `num` copies of `env`. `name` is what the
@@ -45,7 +40,7 @@ pub fn make(config: &EnvConfig, length: usize) -> Result<Box<dyn Environment>, S
         EnvConfig::RustFindReturn(config) => Ok(Box::new(FindReturn::new(config, length))),
         EnvConfig::RustScouts(config) => Ok(Box::new(Scouts::new(config, length))),
         EnvConfig::RustSnake(config) => Ok(Box::new(Snake::new(config, length))),
-        EnvConfig::Vec { num, env } => {
+        EnvConfig::RustVec { num, env } => {
             if *num == 0 {
                 return Err("vec env num must be at least 1".into());
             }
@@ -57,7 +52,7 @@ pub fn make(config: &EnvConfig, length: usize) -> Result<Box<dyn Environment>, S
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(Box::new(VectorWrapper::new(envs)))
         }
-        EnvConfig::Multi { envs } => make_multi(envs, length),
+        EnvConfig::RustMulti { envs } => make_multi(envs, length),
     }
 }
 
@@ -121,8 +116,8 @@ fn make_multi(specs: &[MultiEnvSpec], length: usize) -> Result<Box<dyn Environme
 /// Whether `config` builds a `MultitaskWrapper` anywhere in its subtree.
 fn contains_multi(config: &EnvConfig) -> bool {
     match config {
-        EnvConfig::Multi { .. } => true,
-        EnvConfig::Vec { env, .. } => contains_multi(env),
+        EnvConfig::RustMulti { .. } => true,
+        EnvConfig::RustVec { env, .. } => contains_multi(env),
         _ => false,
     }
 }
@@ -184,7 +179,7 @@ mod tests {
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();
         assert_eq!(
             parsed,
-            EnvConfig::Vec {
+            EnvConfig::RustVec {
                 num: 32,
                 env: Box::new(EnvConfig::RustScouts(ScoutsConfig::default())),
             }
@@ -210,7 +205,7 @@ mod tests {
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();
         assert_eq!(
             parsed,
-            EnvConfig::Multi {
+            EnvConfig::RustMulti {
                 envs: vec![
                     MultiEnvSpec {
                         name: "scouts".into(),
@@ -220,9 +215,7 @@ mod tests {
                     MultiEnvSpec {
                         name: "fr".into(),
                         num: 3,
-                        env: Box::new(EnvConfig::RustFindReturn(
-                            FindReturnConfig::default()
-                        )),
+                        env: Box::new(EnvConfig::RustFindReturn(FindReturnConfig::default())),
                     },
                 ],
             }
@@ -231,7 +224,7 @@ mod tests {
 
     #[test]
     fn make_multi_groups_each_entry_and_assigns_task_ids_per_entry() {
-        let config = EnvConfig::Multi {
+        let config = EnvConfig::RustMulti {
             envs: vec![
                 MultiEnvSpec {
                     name: "scouts".into(),
@@ -287,50 +280,66 @@ mod tests {
             ..ScoutsConfig::default()
         }));
 
-        let env = make(&EnvConfig::Vec { num: 3, env: scouts.clone() }, 32).unwrap();
+        let env = make(
+            &EnvConfig::RustVec {
+                num: 3,
+                env: scouts.clone(),
+            },
+            32,
+        )
+        .unwrap();
         assert_eq!(env.num_agents(), 6);
 
-        let env = make(&EnvConfig::Vec { num: 1, env: scouts }, 32).unwrap();
+        let env = make(
+            &EnvConfig::RustVec {
+                num: 1,
+                env: scouts,
+            },
+            32,
+        )
+        .unwrap();
         assert_eq!(env.num_agents(), 2);
     }
 
     #[test]
     fn make_rejects_degenerate_configs() {
-        assert!(make(&EnvConfig::Multi { envs: vec![] }, 32).is_err());
-        assert!(make(
-            &EnvConfig::Multi {
-                envs: vec![MultiEnvSpec {
-                    name: "scouts".into(),
+        assert!(make(&EnvConfig::RustMulti { envs: vec![] }, 32).is_err());
+        assert!(
+            make(
+                &EnvConfig::RustMulti {
+                    envs: vec![MultiEnvSpec {
+                        name: "scouts".into(),
+                        num: 0,
+                        env: Box::new(EnvConfig::RustScouts(ScoutsConfig::default())),
+                    }],
+                },
+                32
+            )
+            .is_err()
+        );
+        assert!(
+            make(
+                &EnvConfig::RustVec {
                     num: 0,
                     env: Box::new(EnvConfig::RustScouts(ScoutsConfig::default())),
-                }],
-            },
-            32
-        )
-        .is_err());
-        assert!(make(
-            &EnvConfig::Vec {
-                num: 0,
-                env: Box::new(EnvConfig::RustScouts(ScoutsConfig::default())),
-            },
-            32
-        )
-        .is_err());
+                },
+                32
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn make_rejects_nested_multitask() {
-        let config = EnvConfig::Multi {
+        let config = EnvConfig::RustMulti {
             envs: vec![MultiEnvSpec {
                 name: "inner".into(),
                 num: 1,
-                env: Box::new(EnvConfig::Multi {
+                env: Box::new(EnvConfig::RustMulti {
                     envs: vec![MultiEnvSpec {
                         name: "fr".into(),
                         num: 1,
-                        env: Box::new(EnvConfig::RustFindReturn(
-                            FindReturnConfig::default()
-                        )),
+                        env: Box::new(EnvConfig::RustFindReturn(FindReturnConfig::default())),
                     }],
                 }),
             }],
@@ -345,7 +354,7 @@ mod tests {
     /// A config view of 13 (→ obs 15) does not.
     #[test]
     fn make_rejects_mismatched_view_sizes() {
-        let config = EnvConfig::Multi {
+        let config = EnvConfig::RustMulti {
             envs: vec![
                 MultiEnvSpec {
                     name: "scouts".into(),

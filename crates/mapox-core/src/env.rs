@@ -16,4 +16,6 @@ pub trait Environment: Send + Sync {
 
     fn get_render_settings(&self) -> GridRenderSettings;
     fn render_state_into(&self, grid_render_state: &mut GridRenderState);
+
+    fn num_tasks(&self) -> usize;
 }

@@ -487,6 +487,10 @@ impl Environment for Scouts {
             grid_render_state.agent_positions.push(local_pos);
         }
     }
+
+    fn num_tasks(&self) -> usize {
+        1
+    }
 }
 
 #[cfg(test)]

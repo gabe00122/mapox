@@ -107,4 +107,8 @@ impl Environment for VectorWrapper {
     fn render_state_into(&self, grid_render_state: &mut GridRenderState) {
         self.envs[0].render_state_into(grid_render_state);
     }
+
+    fn num_tasks(&self) -> usize {
+        self.envs[0].num_tasks()
+    }
 }

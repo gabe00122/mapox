@@ -20,6 +20,7 @@ pub struct MultitaskWrapper {
     obs_vocab: Vocabulary,
     action_vocab: Vocabulary,
     num_agents: usize,
+    num_tasks: usize,
 }
 
 impl MultitaskWrapper {
@@ -34,6 +35,7 @@ impl MultitaskWrapper {
 
         let lens: Vec<usize> = envs.iter().map(|env| env.num_agents()).collect();
         let num_agents = envs.iter().map(|env| env.num_agents()).sum();
+        let num_tasks = envs.iter().map(|env| env.num_tasks()).sum();
 
         let wrappers = envs
             .into_iter()
@@ -52,6 +54,7 @@ impl MultitaskWrapper {
             envs: wrappers,
             lens,
             num_agents,
+            num_tasks,
             obs_vocab,
             action_vocab,
         }
@@ -116,6 +119,10 @@ impl Environment for MultitaskWrapper {
 
     fn render_state_into(&self, grid_render_state: &mut GridRenderState) {
         self.envs[0].env.render_state_into(grid_render_state);
+    }
+
+    fn num_tasks(&self) -> usize {
+        self.num_tasks
     }
 }
 
@@ -229,6 +236,10 @@ mod tests {
             grid_render_state.agent_positions = (0..self.num_agents)
                 .map(|_| Position::new(self.index as i32, 0))
                 .collect();
+        }
+
+        fn num_tasks(&self) -> usize {
+            1
         }
     }
 

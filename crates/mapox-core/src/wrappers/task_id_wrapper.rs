@@ -8,51 +8,55 @@ use crate::vocab::Vocabulary;
 
 pub struct TaskIdWrapper {
     task_id: i32,
-    env: Box<dyn Environment>,
+    inner: Box<dyn Environment>,
 }
 
 impl TaskIdWrapper {
-    pub fn new(env: Box<dyn Environment>, task_id: i32) -> Self {
-        Self { task_id, env }
+    pub fn new(inner: Box<dyn Environment>, task_id: i32) -> Self {
+        Self { task_id, inner }
     }
 }
 
 impl Environment for TaskIdWrapper {
     fn reset(&mut self, seed: u64, timestep: &mut TimeStepMut) {
-        self.env.reset(seed, timestep);
+        self.inner.reset(seed, timestep);
         timestep.task_ids.fill(self.task_id);
     }
 
     fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
-        self.env.step(actions, timestep);
+        self.inner.step(actions, timestep);
         timestep.task_ids.fill(self.task_id);
     }
 
     fn num_agents(&self) -> usize {
-        self.env.num_agents()
+        self.inner.num_agents()
     }
 
     fn action_spec(&self) -> ActionSpec {
-        self.env.action_spec()
+        self.inner.action_spec()
     }
 
     fn observation_spec(&self) -> crate::spec::ObservationSpec {
-        self.env.observation_spec()
+        self.inner.observation_spec()
     }
 
     fn obs_vocab(&self) -> &Vocabulary {
-        self.env.obs_vocab()
+        self.inner.obs_vocab()
     }
 
     fn action_vocab(&self) -> &Vocabulary {
-        self.env.action_vocab()
+        self.inner.action_vocab()
     }
 
     fn get_render_settings(&self) -> GridRenderSettings {
-        self.env.get_render_settings()
+        self.inner.get_render_settings()
     }
 
     fn render_state_into(&self, grid_render_state: &mut GridRenderState) {
-        self.env.render_state_into(grid_render_state)
+        self.inner.render_state_into(grid_render_state)
+    }
+
+    fn num_tasks(&self) -> usize {
+        self.inner.num_tasks()
     }
 }
