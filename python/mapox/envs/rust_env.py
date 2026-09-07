@@ -81,7 +81,7 @@ class RustSnakeConfig(BaseModel):
 class RustVecConfig(BaseModel):
     """Vectorized copies of one rust env; the rust side steps them in parallel."""
     model_config = ConfigDict(extra="forbid", frozen=True)
-    env_type: Literal["vec"] = "vec"
+    env_type: Literal["rust_vec"] = "rust_vec"
 
     num: int = 1
     env: RustEnvConfig = Field(discriminator="env_type")
@@ -97,7 +97,7 @@ class RustMultiEnvSpec(BaseModel):
 class RustMultiConfig(BaseModel):
     """A batch of rust envs; the rust MultitaskWrapper is the vectorizer."""
     model_config = ConfigDict(extra="forbid", frozen=True)
-    env_type: Literal["multi"] = "multi"
+    env_type: Literal["rust_multi"] = "rust_multi"
 
     envs: tuple[RustMultiEnvSpec, ...]
 
@@ -131,8 +131,9 @@ def _shape_placeholder(buffer: np.ndarray, dtype) -> jax.Array:
 
 
 class RustEnv(Environment[None]):
-    def __init__(self, config: RustEnvConfig, length: int):
+    def __init__(self, config: BaseModel, length: int):
         config_json = config.model_dump_json()
+        self.config_json = config_json
         self.inner = _CoreEnv(config_json, length)
 
         num_agents, view_width, view_height, channels = self.inner.observation_shape

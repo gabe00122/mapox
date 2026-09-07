@@ -16,15 +16,8 @@ pub enum EnvConfig {
     RustFindReturn(FindReturnConfig),
     RustScouts(ScoutsConfig),
     RustSnake(SnakeConfig),
-    #[serde(rename = "vec")]
-    RustVec {
-        num: usize,
-        env: Box<EnvConfig>,
-    },
-    #[serde(rename = "multi")]
-    RustMulti {
-        envs: Vec<MultiEnvSpec>,
-    },
+    RustVec { num: usize, env: Box<EnvConfig> },
+    RustMulti { envs: Vec<MultiEnvSpec> },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -92,7 +85,7 @@ mod tests {
     /// The vectorized shape: `num` copies of a plain env config.
     #[test]
     fn a_vec_config_parses() {
-        let json = r#"{"env_type":"vec","num":32,"env":{"env_type":"rust_scouts",
+        let json = r#"{"env_type":"rust_vec","num":32,"env":{"env_type":"rust_scouts",
             "num_scouts":4,"num_harvesters":4,"num_treasures":12,"width":40,"height":40,
             "view_width":11,"view_height":13,"ui_height":2,"mapgen_threshold":0.3,
             "water_threshold":-0.45,"harvesters_move_every":6,
@@ -112,7 +105,7 @@ mod tests {
     /// and a plain env config.
     #[test]
     fn a_multi_config_parses() {
-        let json = r#"{"env_type":"multi","envs":[
+        let json = r#"{"env_type":"rust_multi","envs":[
             {"name":"scouts","num":2,"env":{"env_type":"rust_scouts","num_scouts":4,
                 "num_harvesters":4,"num_treasures":12,"width":40,"height":40,
                 "view_width":11,"view_height":13,"ui_height":2,"mapgen_threshold":0.3,

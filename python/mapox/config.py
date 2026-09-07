@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
 from mapox.environment import Environment
 from mapox.envs.find_return import FindReturnConfig, FindReturnEnv
@@ -10,8 +10,10 @@ from mapox.envs.prey import PreyConfig, PreyEnv
 from mapox.envs.rust_env import (
     RustEnv,
     RustFindReturnConfig,
+    RustMultiConfig,
     RustScoutsConfig,
     RustSnakeConfig,
+    RustVecConfig,
 )
 from mapox.envs.scouts import ScoutsConfig, ScoutsEnv
 from mapox.envs.snake import SnakeConfig, SnakeEnv
@@ -23,6 +25,14 @@ from mapox.wrappers.multitask import MultiTaskWrapper
 from mapox.wrappers.vector import VectorWrapper
 
 
+class EnvironmentConfig(BaseModel):
+    """Top-level environment config. The env type is resolved through the
+    EnvironmentFactory registry at make time, where the config is validated
+    against the model the env registered with (if any)."""
+    model_config = ConfigDict(extra="allow", frozen=True)
+    env_type: str
+
+
 class VecConfig(BaseModel):
     """Vectorized copies of one env; rust envs are stepped in parallel,
     JAX envs are vmapped."""
@@ -30,30 +40,14 @@ class VecConfig(BaseModel):
     env_type: Literal["vec"] = "vec"
 
     num: int = 1
-    env: EnvironmentConfig = Field(discriminator="env_type")
-
-
-type EnvironmentConfig = (
-    FindReturnConfig
-    | TravelingSalesmanConfig
-    | ScoutsConfig
-    | KingHillConfig
-    | PreyConfig
-    | SnakeConfig
-    | RustFindReturnConfig
-    | RustScoutsConfig
-    | RustSnakeConfig
-    | VecConfig
-)
-
-VecConfig.model_rebuild()
+    env: EnvironmentConfig
 
 
 class MultiTaskEnvConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     num: int = 1
     name: str
-    env: EnvironmentConfig = Field(discriminator="env_type")
+    env: EnvironmentConfig
 
 
 class MultiTaskConfig(BaseModel):
@@ -70,32 +64,43 @@ class MultiTaskConfig(BaseModel):
 
 class EnvironmentFactory:
     def __init__(self):
-        self._registry: dict[str, Callable[[Any, int], Environment[Any]]] = {}
-        self.register_env("find_return", FindReturnEnv)
-        self.register_env("scouts", ScoutsEnv)
-        self.register_env("traveling_salesman", TravelingSalesmanEnv)
-        self.register_env("king_hill", KingHillEnv)
-        self.register_env("prey", PreyEnv)
-        self.register_env("snake", SnakeEnv)
+        self._registry: dict[
+            str, tuple[Callable[[Any, int], Environment[Any]], type[BaseModel]]
+        ] = {}
+        self.register_env("find_return", FindReturnEnv, FindReturnConfig)
+        self.register_env("scouts", ScoutsEnv, ScoutsConfig)
+        self.register_env("traveling_salesman", TravelingSalesmanEnv, TravelingSalesmanConfig)
+        self.register_env("king_hill", KingHillEnv, KingHillConfig)
+        self.register_env("prey", PreyEnv, PreyConfig)
+        self.register_env("snake", SnakeEnv, SnakeConfig)
+        self.register_env("rust_find_return", RustEnv, RustFindReturnConfig)
+        self.register_env("rust_scouts", RustEnv, RustScoutsConfig)
+        self.register_env("rust_snake", RustEnv, RustSnakeConfig)
+        self.register_env("rust_vec", RustEnv, RustVecConfig)
+        self.register_env("rust_multi", RustEnv, RustMultiConfig)
 
-    def register_env(self, name: str, fn: Callable[[Any, int], Environment[Any]]):
-        self._registry[name] = fn
+    def register_env(
+        self,
+        name: str,
+        fn: Callable[[Any, int], Environment[Any]],
+        config_model: type[BaseModel],
+    ):
+        self._registry[name] = (fn, config_model)
 
     def create_env(
         self,
-        env_config: Any,
+        env_config: EnvironmentConfig,
         length: int,
         env_name: str | None = None,
     ) -> Environment:
-        if env_config.env_type.startswith("rust"):
-            return RustEnv(env_config, length)
-
         if env_config.env_type == "vec":
-            inner = self.create_env(env_config.env, length)
-            return VectorWrapper(inner, env_config.num)
+            config = VecConfig.model_validate(env_config.model_dump())
+            inner = self.create_env(config.env, length)
+            return VectorWrapper(inner, config.num)
 
         if env_config.env_type == "multi":
-            env_names = tuple(env_def.name for env_def in env_config.envs)
+            config = MultiTaskConfig.model_validate(env_config.model_dump())
+            env_names = tuple(env_def.name for env_def in config.envs)
 
             if env_name is not None:
                 if env_name not in env_names:
@@ -105,22 +110,21 @@ class EnvironmentFactory:
                 # Every sub-env is built so the union vocab matches training;
                 # only the selected one is kept, so the rest stay unvectorized.
                 out_envs = tuple(
-                    self.create_env(env_def.env, length)
-                    for i, env_def in enumerate(env_config.envs)
+                    self.create_env(env_def.env, length) for env_def in config.envs
                 )
                 wrapper = MultiTaskWrapper(out_envs, env_names)
 
                 return wrapper.task_envs[task_id]
 
             out_envs = tuple(
-                self.create_env(env_def.env, length)
-                for env_def in env_config.envs
+                self.create_env(env_def.env, length) for env_def in config.envs
             )
 
             return MultiTaskWrapper(out_envs, env_names)
 
-        if env_config.env_type in self._registry:
-            env = self._registry[env_config.env_type](env_config, length)
-            return env
-
-        raise ValueError("Could not find env type matching that name")
+        entry = self._registry.get(env_config.env_type)
+        if entry is None:
+            raise ValueError(f"Could not find env type matching that name: {env_config.env_type}")
+        fn, config_model = entry
+        validated_config = config_model.model_validate(env_config.model_dump())
+        return fn(validated_config, length)

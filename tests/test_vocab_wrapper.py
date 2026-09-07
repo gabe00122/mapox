@@ -6,9 +6,8 @@ global ids at the boundary, so checkpoints restore without shape mismatches.
 """
 
 import jax
-from jax import numpy as jnp
-
 import mapox.symbols as SB
+from jax import numpy as jnp
 from mapox.config import EnvironmentFactory, MultiTaskConfig, MultiTaskEnvConfig
 
 LENGTH = 32
@@ -26,9 +25,9 @@ CONFIG = MultiTaskConfig(
 )
 
 
-def _make(env_name, vec_count=1):
+def _make(env_name):
     factory = EnvironmentFactory()
-    return factory.create_env(CONFIG, LENGTH, vec_count, env_name=env_name)
+    return factory.create_env(CONFIG, LENGTH, env_name=env_name)
 
 
 def test_single_env_matches_multitask_interface():
@@ -87,9 +86,3 @@ def test_obs_uses_global_ids():
     assert SB.TILE_DESTRUCTIBLE_WALL in single.obs_vocab
 
 
-def test_vec_count_applies_to_selected_env_only():
-    single = _make("fr", vec_count=3)
-    assert single.num_agents == 6
-
-    _, ts = single.reset(jax.random.key(0))
-    assert ts.obs.shape[0] == 6
