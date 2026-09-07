@@ -337,6 +337,7 @@ impl RenderApp {
             ui.max_rect(),
             self.settings.tile_width,
             self.settings.tile_height,
+            ui.ctx().pixels_per_point(),
         );
 
         let response = ui.allocate_rect(layout.grid_rect(), egui::Sense::click());
@@ -409,6 +410,7 @@ impl RenderApp {
             ui.max_rect(),
             self.settings.view_width,
             self.settings.view_height,
+            ui.ctx().pixels_per_point(),
         );
         let tileset = self.tileset.as_ref().expect("uploaded at the top of ui()");
         let obs = &self.buffers.obs;

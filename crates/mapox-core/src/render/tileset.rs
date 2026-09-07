@@ -10,8 +10,10 @@ use egui::{Color32, ColorImage, Rect, TextureHandle, TextureOptions, Vec2, pos2}
 /// `.rodata` in every artifact.
 const TILESET_PNG: &[u8] = include_bytes!("../../assets/urizen_onebit_tileset__v2d0.png");
 
-/// Side of one tile, in sheet pixels.
-const TILE_SIZE: f32 = 12.0;
+/// Side of one tile, in sheet pixels. Also the art-pixel unit the
+/// [`GridLayout`](super::grid::GridLayout) snaps its scale to, so each sprite
+/// texel lands on a whole number of screen pixels.
+pub(crate) const TILE_SIZE: f32 = 12.0;
 /// Separator between tiles. It is also a border, so tile (0, 0) starts at (1, 1).
 const TILE_PAD: f32 = 1.0;
 
