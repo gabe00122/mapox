@@ -44,7 +44,14 @@ CONFIGS = {
         height=70,
         mapgen_threshold=0.07,
     ),
-    "snake": RustSnakeConfig(view_width=15, view_height=15, width=40, height=40),
+    "snake": RustSnakeConfig(
+        view_width=15,
+        view_height=15,
+        num_agents=4096,
+        food_spawn_prob=0.001,
+        width=500,
+        height=500
+    ),
 }
 
 

@@ -75,8 +75,8 @@ mod tests {
     #[test]
     fn a_snake_config_dump_parses() {
         let json = r#"{"env_type":"rust_snake","num_agents":4,"width":24,"height":24,
-            "view_width":11,"view_height":11,"initial_length":3,"initial_food":8,
-            "food_spawn_prob":0.15,"food_reward":1.0,"death_reward":-1.0}"#;
+            "view_width":11,"view_height":11,"food_spawn_prob":0.002,
+            "food_reward":1.0,"death_reward":-1.0}"#;
 
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();
         assert_eq!(parsed, EnvConfig::RustSnake(SnakeConfig::default()));

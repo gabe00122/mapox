@@ -71,9 +71,9 @@ class RustSnakeConfig(BaseModel):
     view_width: int = 11
     view_height: int = 11
 
-    initial_length: int = 3
-    initial_food: int = 8
-    food_spawn_prob: float = 0.15
+    # every open tile independently grows a pellet with this probability
+    # each step; snakes always start as a single cell on a bare board
+    food_spawn_prob: float = 0.002
     food_reward: float = 1.0
     death_reward: float = -1.0
 

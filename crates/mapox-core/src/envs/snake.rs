@@ -28,8 +28,8 @@ pub struct SnakeConfig {
     pub view_width: i32,
     pub view_height: i32,
 
-    pub initial_length: usize,
-    pub initial_food: usize,
+    /// Every open tile independently grows a pellet with this probability
+    /// on each step; occupied tiles never do. The board always starts bare.
     pub food_spawn_prob: f32,
     pub food_reward: f32,
     pub death_reward: f32,
@@ -43,9 +43,7 @@ impl Default for SnakeConfig {
             height: 24,
             view_width: 11,
             view_height: 11,
-            initial_length: 3,
-            initial_food: 8,
-            food_spawn_prob: 0.15,
+            food_spawn_prob: 0.002,
             food_reward: 1.0,
             death_reward: -1.0,
         }
@@ -165,8 +163,8 @@ struct SnakeState {
     /// food may sit under a snake.
     food: Array2<bool>,
 
-    /// Every open cell (no wall, no body, no food) in one pool, so spawns,
-    /// pellets, and drops sample in O(1) instead of scanning the map.
+    /// Every open cell (no wall, no body, no food) in one pool, so spawns
+    /// draw in O(1) and the food roll sweeps open tiles only.
     free: Vec<Position>,
     /// Each cell's slot in `free`, or [`POOL_NONE`], for O(1) removal.
     free_at: Array2<u32>,
@@ -230,15 +228,14 @@ impl SnakeState {
 /// occupancy, so a snake may safely follow a tail that vacates this step,
 /// but the body of a snake dying this same step still kills. Half of a dead
 /// snake's body (alternating segments from the tail) turns into food and the
-/// snake respawns, body stacked, on a random open cell. Reversing into your
+/// snake respawns as a single cell on a random open tile. Reversing into your
 /// own neck is masked out and, if forced, keeps the snake moving straight.
 /// A snake is flagged terminated on the step it dies; every agent is
 /// flagged on the episode's last step, and the board is rebuilt by `reset`.
 ///
 /// Every body is a growable deque and every open cell sits in an index pool,
-/// so a step costs work per snake (plus the view-sized observation crops)
-/// rather than work per map cell: board and agent counts scale independently
-/// of step cost.
+/// so a step costs work per snake plus the view-sized observation crops and
+/// one pass over the open pool that rolls every tile's food spawn.
 #[derive(Debug, Clone)]
 pub struct Snake {
     pub config: SnakeConfig,
@@ -264,7 +261,6 @@ pub struct Snake {
 
 impl Snake {
     pub fn new(config: &SnakeConfig, length: usize) -> Self {
-        assert!(config.initial_length >= 1, "initial_length must be >= 1");
         assert!(
             config.num_agents < u16::MAX as usize,
             "the owner grid packs agent ids into a u16"
@@ -283,10 +279,9 @@ impl Snake {
 
         let interior = (config.width * config.height) as usize;
         assert!(
-            interior >= config.num_agents + config.initial_food,
-            "the board cannot hold {num_agents} snakes and {initial_food} pellets at {w}x{h}",
+            interior >= config.num_agents,
+            "the board cannot hold {num_agents} snakes at {w}x{h}",
             num_agents = config.num_agents,
-            initial_food = config.initial_food,
             w = config.width,
             h = config.height,
         );
@@ -383,12 +378,11 @@ impl Snake {
         if !grows {
             // The tail vacates; without growth the body slides forward.
             let tail = self.state.snakes[agent_id].body.pop_front().unwrap();
-            // The cell only empties if this pop was its last owner: a
-            // stacked respawn body still holds it, and an earlier advance
-            // this phase may have moved another snake's head onto it.
-            let held = self.state.snakes[agent_id].body.front() == Some(&tail);
+            // The cell only empties if this snake still owns it: an
+            // earlier advance this phase may have moved another snake's
+            // head onto the vacating tail.
             let mine = self.state.owner[tail.idx()] == id;
-            if !held && mine {
+            if mine {
                 self.state.owner[tail.idx()] = 0;
                 // Food can hide under a body (a head can enter a cell that
                 // turned into food on the very step it was entered), so a
@@ -415,15 +409,15 @@ impl Snake {
         self.state.snakes[agent_id].dir = plan.heading;
     }
 
-    /// Respawns a dead snake, body stacked on one fresh open cell so it
-    /// grows out of the spawn instead of dragging a full body onto the
-    /// board. If the pool is empty — the board entirely full of bodies
-    /// and pellets — fall back to one of the corpse's own cells, skipping
-    /// the tail: the tail may have been legally entered by a living snake
-    /// this step ("follow a vacating tail"), while phase 2 kills anything
-    /// aiming at a non-tail body cell, so a mid-body cell cannot carry a
-    /// living head. A length-1 corpse has only the tail, so the fallback
-    /// still cannot save that case on a truly full board.
+    /// Respawns a dead snake as a single cell on a fresh open tile; the
+    /// body grows out of the spawn from there. If the pool is empty — the
+    /// board entirely full of bodies and pellets — fall back to one of the
+    /// corpse's own cells, skipping the tail: the tail may have been
+    /// legally entered by a living snake this step ("follow a vacating
+    /// tail"), while phase 2 kills anything aiming at a non-tail body
+    /// cell, so a mid-body cell cannot carry a living head. A length-1
+    /// corpse has only the tail, so the fallback still cannot save that
+    /// case on a truly full board.
     fn respawn(&mut self, agent_id: usize) {
         let spawn = self.state.draw_open(&mut self.rngs).unwrap_or_else(|| {
             let corpse = &self.state.snakes[agent_id].body;
@@ -442,15 +436,34 @@ impl Snake {
                 .or_else(|| corpse.front().copied())
                 .expect("a dead snake still holds its corpse")
         });
-        let length = self.config.initial_length;
         let dir = self.rngs.random_range(0..4) as u8;
 
-        self.state.snakes[agent_id].body = vec![spawn; length].into();
+        self.state.snakes[agent_id].body = [spawn].into();
         self.state.snakes[agent_id].dir = dir;
 
         self.state.owner[spawn.idx()] = (agent_id + 1) as u16;
         self.state.map[spawn.idx()] = snake_tile((agent_id + 1) as u16);
         self.state.withdraw(spawn);
+    }
+
+    /// Rolls every open tile for a pellet, each tile independently with
+    /// `food_spawn_prob`. Occupied tiles are not in the pool, so they never
+    /// spawn; walking the pool back to front means `withdraw`'s swap of the
+    /// last cell into the hole only ever moves cells the cursor has already
+    /// rolled past, so no tile is skipped and none is rolled twice.
+    fn spawn_food(&mut self) {
+        let prob = f64::from(self.config.food_spawn_prob);
+        if prob <= 0.0 {
+            return;
+        }
+        for slot in (0..self.state.free.len()).rev() {
+            if self.rngs.random_bool(prob) {
+                let cell = self.state.free[slot];
+                self.state.food[cell.idx()] = true;
+                self.state.map[cell.idx()] = SnakeObs::TileFood;
+                self.state.withdraw(cell);
+            }
+        }
     }
 
     fn encode_observations(&self, timestep: &mut TimeStepMut) {
@@ -525,8 +538,9 @@ impl Environment for Snake {
             }
         }
 
-        // Snakes first, then pellets: both draw distinct cells from the same
-        // pool, so neither lands on the other.
+        // Every snake starts as a single cell on its own spawn, and the
+        // board starts bare: pellets arrive only through the food roll and
+        // dissolved corpses.
         self.state.snakes.clear();
         for agent_id in 0..self.config.num_agents {
             let spawn = self
@@ -534,22 +548,13 @@ impl Environment for Snake {
                 .draw_open(&mut self.rngs)
                 .expect("checked for room in new()");
             let dir = self.rngs.random_range(0..4) as u8;
-            let length = self.config.initial_length;
 
             self.state.snakes.push(SnakeAgent {
-                body: vec![spawn; length].into(),
+                body: [spawn].into(),
                 dir,
             });
             self.state.owner[spawn.idx()] = (agent_id + 1) as u16;
             self.state.map[spawn.idx()] = snake_tile((agent_id + 1) as u16);
-        }
-
-        for _ in 0..self.config.initial_food {
-            let Some(cell) = self.state.draw_open(&mut self.rngs) else {
-                break;
-            };
-            self.state.food[cell.idx()] = true;
-            self.state.map[cell.idx()] = SnakeObs::TileFood;
         }
 
         timestep.reward.fill(0.0);
@@ -602,18 +607,13 @@ impl Environment for Snake {
                 continue;
             }
 
-            // A cell is blocked unless it is the tail of a snake that is not
-            // growing this step — growing covers eating, there is no length
-            // cap to make the two diverge. A stacked respawn body keeps the
-            // cell: its second segment does not leave, so the tail is not
-            // empty for anybody to walk into.
+            // A cell is blocked unless it is the tail of a snake that is
+            // not growing this step — growing covers eating, there is no
+            // length cap to make the two diverge.
             let owner = self.state.owner[target.idx()];
             if owner > 0 {
                 let j = (owner - 1) as usize;
-                let tail = self.state.snakes[j].tail();
-                let held =
-                    self.state.snakes[j].body.len() > 1 && self.state.snakes[j].body[1] == tail;
-                let vacating = target == tail && !held && !self.state.plans[j].eats;
+                let vacating = target == self.state.snakes[j].tail() && !self.state.plans[j].eats;
                 if !vacating {
                     self.state.plans[i].died = true;
                     continue;
@@ -646,7 +646,7 @@ impl Environment for Snake {
         // Phase 4: mutate the world in the order the layers need. The dead
         // first, freeing their cells and dropping corpse food; then the
         // living, whose heads may land exactly where a vacated tail was;
-        // then the respawns and the pellet drop over the settled board.
+        // then the respawns and the food roll over the settled board.
         for i in 0..n {
             if self.state.plans[i].died {
                 self.dissolve(i);
@@ -663,14 +663,7 @@ impl Environment for Snake {
             }
         }
 
-        if self
-            .rngs
-            .random_bool(f64::from(self.config.food_spawn_prob))
-            && let Some(cell) = self.state.draw_open(&mut self.rngs)
-        {
-            self.state.food[cell.idx()] = true;
-            self.state.map[cell.idx()] = SnakeObs::TileFood;
-        }
+        self.spawn_food();
 
         // Phase 5: report.
         self.state.time += 1;
@@ -772,8 +765,6 @@ mod tests {
             num_agents: 2,
             width: 12,
             height: 12,
-            initial_length: 3,
-            initial_food: 0,
             food_spawn_prob: 0.0,
             ..Default::default()
         }
@@ -1013,8 +1004,8 @@ mod tests {
         // Alternating segments from the tail become food: here just the tail.
         assert!(env.state.food[pos(15, 8).idx()]);
         assert!(!env.state.food[pos(16, 8).idx()]);
-        // Respawned fresh, stacked, somewhere else.
-        assert_eq!(env.state.snakes[0].body.len(), env.config.initial_length);
+        // Respawned fresh as a lone cell somewhere else.
+        assert_eq!(env.state.snakes[0].body.len(), 1);
         assert_ne!(env.state.snakes[0].head(), pos(17, 8));
         check_consistency(&env);
     }
@@ -1055,7 +1046,7 @@ mod tests {
         assert_eq!(env.state.snakes[1].head(), tail);
         assert_eq!(buffers.reward[1], env.config.food_reward);
         assert_eq!(env.state.owner[tail.idx()], 2);
-        assert_eq!(cells(&env, 0), vec![head; env.config.initial_length]);
+        assert_eq!(cells(&env, 0), vec![head]);
         assert_eq!(env.state.owner[head.idx()], 1);
         check_consistency(&env);
     }
@@ -1096,12 +1087,7 @@ mod tests {
         assert!(buffers.terminated[0]);
         assert!(buffers.terminated[1]);
         assert_ne!(env.state.snakes[0].head(), env.state.snakes[1].head());
-        assert!(
-            env.state
-                .snakes
-                .iter()
-                .all(|s| s.body.len() == env.config.initial_length)
-        );
+        assert!(env.state.snakes.iter().all(|s| s.body.len() == 1));
         check_consistency(&env);
     }
 
@@ -1266,51 +1252,64 @@ mod tests {
     }
 
     #[test]
-    fn reset_places_snakes_and_food() {
-        let config = SnakeConfig {
-            initial_food: 8,
-            ..test_config()
-        };
-        let mut env = Snake::new(&config, 512);
+    fn reset_starts_lone_snakes_on_a_bare_board() {
+        let mut env = test_env();
         let mut buffers = TimeStepBuffers::new(&env);
         env.reset(7, &mut buffers.view_mut());
 
-        assert_eq!(env.state.snakes.len(), config.num_agents);
+        assert_eq!(env.state.snakes.len(), env.config.num_agents);
         let heads: HashSet<_> = env.state.snakes.iter().map(|s| s.head().idx()).collect();
-        assert_eq!(heads.len(), config.num_agents, "snakes share a spawn");
+        assert_eq!(heads.len(), env.config.num_agents, "snakes share a spawn");
         for snake in &env.state.snakes {
-            assert_eq!(snake.body.len(), config.initial_length);
-            assert!(snake.body.iter().all(|&c| c == snake.head()));
+            assert_eq!(snake.body.len(), 1);
         }
-        let food = env.state.food.iter().filter(|&&f| f).count();
-        assert_eq!(food, config.initial_food);
+        assert_eq!(env.state.food.iter().filter(|&&f| f).count(), 0);
         assert_eq!(buffers.reward.iter().sum::<f32>(), 0.0);
         check_consistency(&env);
     }
 
+    /// At probability 1 the food roll covers every open tile: each tile is
+    /// rolled independently, and the tiles the snakes stand on never spawn.
     #[test]
-    fn food_spawns_over_time() {
+    fn food_grows_on_every_open_tile() {
         let config = SnakeConfig {
             food_spawn_prob: 1.0,
             ..test_config()
         };
         let mut env = Snake::new(&config, 512);
+        setup(
+            &mut env,
+            &[(&[pos(9, 8)], RIGHT), (&[pos(15, 15)], UP)],
+            &[],
+        );
         let mut buffers = TimeStepBuffers::new(&env);
-        env.reset(0, &mut buffers.view_mut());
-        assert_eq!(env.state.food.iter().filter(|&&f| f).count(), 0);
+        step(&mut env, &mut buffers, &[RIGHT, UP]);
 
-        for _ in 0..3 {
-            let legal: Vec<u8> = (0..env.num_agents())
-                .map(|i| {
-                    (0..4)
-                        .find(|a| buffers.action_mask[[i, *a as usize]])
-                        .unwrap() as u8
-                })
-                .collect();
-            step(&mut env, &mut buffers, &legal);
+        assert!(env.state.free.is_empty());
+        for x in env.pad_width..env.width - env.pad_width {
+            for y in env.pad_height..env.height - env.pad_height {
+                let cell = pos(x, y);
+                let open = env.state.owner[cell.idx()] == 0;
+                assert_eq!(env.state.food[cell.idx()], open, "tile {cell:?}");
+            }
+        }
+        check_consistency(&env);
+    }
+
+    #[test]
+    fn food_never_spawns_at_probability_zero() {
+        let mut env = test_env();
+        setup(
+            &mut env,
+            &[(&[pos(9, 8)], RIGHT), (&[pos(15, 10)], LEFT)],
+            &[],
+        );
+        let mut buffers = TimeStepBuffers::new(&env);
+        for _ in 0..6 {
+            step(&mut env, &mut buffers, &[RIGHT, LEFT]);
         }
 
-        assert!(env.state.food.iter().any(|&f| f));
+        assert_eq!(env.state.food.iter().filter(|&&f| f).count(), 0);
         check_consistency(&env);
     }
 
@@ -1322,7 +1321,6 @@ mod tests {
             num_agents: 4,
             width: 12,
             height: 12,
-            initial_food: 6,
             food_spawn_prob: 0.3,
             ..Default::default()
         };
@@ -1348,18 +1346,18 @@ mod tests {
         assert!(env.state.time >= 200);
     }
 
-    /// An episode is `length` timesteps: the reset plus `length - 1` steps,
-    /// and the last one is flagged terminated for every agent.
+    /// An episode ends on its `length`-th step — the flag fires when `time`
+    /// reaches `length`, the convention every env in this crate shares.
     #[test]
     fn episode_ends_on_the_last_step() {
         let mut env = Snake::new(&test_config(), 4);
         setup(&mut env, &[(&[pos(10, 5)], UP), (&[pos(15, 5)], UP)], &[]);
         let mut buffers = TimeStepBuffers::new(&env);
 
-        for time in 0..3i32 {
+        for time in 0..4i32 {
             step(&mut env, &mut buffers, &[UP, UP]);
             assert_eq!(buffers.time[0], time + 1);
-            assert_eq!(buffers.terminated[0], time == 2);
+            assert_eq!(buffers.terminated[0], time == 3);
         }
     }
 }
