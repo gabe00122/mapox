@@ -475,7 +475,7 @@ impl Snake {
         }
 
         timestep.time.fill(self.state.time as i32);
-        timestep.terminated.fill(self.state.time == self.length - 1);
+        timestep.terminated.fill(self.state.time == self.length);
         timestep.task_ids.fill(0);
     }
 
