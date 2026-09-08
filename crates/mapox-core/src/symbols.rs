@@ -13,6 +13,9 @@ pub const TILE_ARROW: &str = "tile/arrow";
 pub const TILE_GRASS: &str = "tile/grass";
 pub const TILE_WATER: &str = "tile/water";
 pub const TILE_FOOD: &str = "tile/food";
+/// The power pellet that frightens the ghosts in pacman; a dot is plain
+/// [`TILE_FOOD`].
+pub const TILE_POWER: &str = "tile/power";
 
 pub const TILE_PIPE_HORIZONTAL: &str = "tile/pipe_horizontal";
 pub const TILE_PIPE_VIRTICAL: &str = "tile/pipe_virtical";
@@ -39,6 +42,13 @@ pub const AGENT_SNAKE_PURPLE: &str = "agent/snake_purple";
 pub const AGENT_SNAKE_PINK: &str = "agent/snake_pink";
 pub const AGENT_SNAKE_GRAY: &str = "agent/snake_gray";
 pub const AGENT_SNAKE_WHITE: &str = "agent/snake_white";
+pub const AGENT_PACMAN: &str = "agent/pacman";
+pub const AGENT_GHOST_PINKY: &str = "agent/ghost_pinky";
+pub const AGENT_GHOST_BLINKY: &str = "agent/ghost_blinky";
+pub const AGENT_GHOST_INKY: &str = "agent/ghost_inky";
+pub const AGENT_GHOST_CLYDE: &str = "agent/ghost_clyde";
+pub const AGENT_GHOST_FRIGHTENED: &str = "agent/ghost_frightened";
+pub const AGENT_GHOST_EYES: &str = "agent/ghost_eyes";
 
 // --- action symbols ---
 

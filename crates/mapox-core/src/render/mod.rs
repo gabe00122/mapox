@@ -40,6 +40,14 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::AGENT_SNAKE_PINK, 59, 45),
     (symbols::AGENT_SNAKE_GRAY, 60, 45),
     (symbols::AGENT_SNAKE_WHITE, 61, 45),
+    (symbols::TILE_POWER, 28, 44),
+    (symbols::AGENT_PACMAN, 1, 46),
+    (symbols::AGENT_GHOST_PINKY, 32, 45),
+    (symbols::AGENT_GHOST_BLINKY, 26, 45),
+    (symbols::AGENT_GHOST_INKY, 30, 45),
+    (symbols::AGENT_GHOST_CLYDE, 27, 45),
+    (symbols::AGENT_GHOST_FRIGHTENED, 31, 45),
+    (symbols::AGENT_GHOST_EYES, 36, 45),
 ];
 
 pub(crate) fn resolve_art(vocab: &Vocabulary) -> Vec<(u32, u32)> {
@@ -61,6 +69,7 @@ mod tests {
     use super::*;
     use crate::env::Environment;
     use crate::envs::find_return::{FindReturn, FindReturnConfig};
+    use crate::envs::pacman::{Pacman, PacmanConfig};
     use crate::envs::scouts::{Scouts, ScoutsConfig};
     use crate::envs::snake::{Snake, SnakeConfig};
     use tileset::{TILESET_COLS, TILESET_ROWS};
@@ -71,6 +80,7 @@ mod tests {
             Box::new(FindReturn::new(&FindReturnConfig::default(), 512)),
             Box::new(Scouts::new(&ScoutsConfig::default(), 512)),
             Box::new(Snake::new(&SnakeConfig::default(), 512)),
+            Box::new(Pacman::new(&PacmanConfig::default(), 512)),
         ]
     }
 

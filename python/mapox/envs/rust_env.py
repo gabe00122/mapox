@@ -78,6 +78,26 @@ class RustSnakeConfig(BaseModel):
     death_reward: float = -1.0
 
 
+class RustPacmanConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    env_type: Literal["rust_pacman"] = "rust_pacman"
+
+    view_width: int = 11
+    view_height: int = 11
+
+    # the maze is the fixed classic layout; these are the round's rules
+    randomize_starting_position: bool = False
+    min_start_timeout: int = 0
+    max_start_timeout: int = 49
+    frightened_time: int = 35
+    max_mode_changes: int = 6
+    scatter_mode_length: int = 700
+    chase_mode_length: int = 70
+
+    dot_reward: float = 1.0
+    ghost_reward: float = 1.0
+
+
 class RustVecConfig(BaseModel):
     """Vectorized copies of one rust env; the rust side steps them in parallel."""
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -112,6 +132,7 @@ type RustEnvConfig = (
     RustFindReturnConfig
     | RustScoutsConfig
     | RustSnakeConfig
+    | RustPacmanConfig
     | RustVecConfig
     | RustMultiConfig
 )

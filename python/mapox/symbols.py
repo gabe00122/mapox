@@ -24,6 +24,7 @@ TILE_FLAG_UNLOCKED = "tile/flag_unlocked"  # scouts: flag made available for tak
 TILE_ARROW = "tile/arrow"  # king_hill: projectile in flight
 TILE_GRASS = "tile/grass"
 TILE_FOOD = "tile/food"
+TILE_POWER = "tile/power"  # pacman: the pellet that frightens the ghosts
 
 TILE_DECOR_1 = "tile/decor_1"
 TILE_DECOR_2 = "tile/decor_2"
@@ -57,6 +58,14 @@ AGENT_SNAKE_PURPLE = "agent/snake_purple"
 AGENT_SNAKE_PINK = "agent/snake_pink"
 AGENT_SNAKE_GRAY = "agent/snake_gray"
 AGENT_SNAKE_WHITE = "agent/snake_white"
+
+AGENT_PACMAN = "agent/pacman"
+AGENT_GHOST_PINKY = "agent/ghost_pinky"
+AGENT_GHOST_BLINKY = "agent/ghost_blinky"
+AGENT_GHOST_INKY = "agent/ghost_inky"
+AGENT_GHOST_CLYDE = "agent/ghost_clyde"
+AGENT_GHOST_FRIGHTENED = "agent/ghost_frightened"
+AGENT_GHOST_EYES = "agent/ghost_eyes"
 
 # --- action symbols ---
 

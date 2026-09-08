@@ -9,6 +9,7 @@ from mapox.envs.rust_env import (
     RustFindReturnConfig,
     RustScoutsConfig,
     RustSnakeConfig,
+    RustPacmanConfig,
 )
 from mapox.timestep import TimeStep
 
@@ -51,6 +52,10 @@ CONFIGS = {
         food_spawn_prob=0.001,
         width=500,
         height=500
+    ),
+    "pacman": RustPacmanConfig(
+        view_width=15,
+        view_height=15,
     ),
 }
 

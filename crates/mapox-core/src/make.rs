@@ -4,6 +4,7 @@ use crate::{
     env::Environment,
     envs::{
         find_return::{FindReturn, FindReturnConfig},
+        pacman::{Pacman, PacmanConfig},
         scouts::{Scouts, ScoutsConfig},
         snake::{Snake, SnakeConfig},
     },
@@ -13,9 +14,10 @@ use crate::{
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "env_type", rename_all = "snake_case")]
 pub enum EnvConfig {
-    RustFindReturn(FindReturnConfig),
-    RustScouts(ScoutsConfig),
-    RustSnake(SnakeConfig),
+    RustFindReturn(Box<FindReturnConfig>),
+    RustScouts(Box<ScoutsConfig>),
+    RustSnake(Box<SnakeConfig>),
+    RustPacman(PacmanConfig),
     RustVec { num: usize, env: Box<EnvConfig> },
     RustMulti { envs: Vec<MultiEnvSpec> },
 }
@@ -32,6 +34,7 @@ pub fn make(config: &EnvConfig, length: usize) -> Result<Box<dyn Environment>, S
         EnvConfig::RustFindReturn(config) => Ok(Box::new(FindReturn::new(config, length))),
         EnvConfig::RustScouts(config) => Ok(Box::new(Scouts::new(config, length))),
         EnvConfig::RustSnake(config) => Ok(Box::new(Snake::new(config, length))),
+        EnvConfig::RustPacman(config) => Ok(Box::new(Pacman::new(config, length))),
         EnvConfig::RustVec { num, env } => Ok(Box::new(VectorWrapper::new(*num, env, length)?)),
         EnvConfig::RustMulti { envs } => Ok(Box::new(MultitaskWrapper::new(envs, length)?)),
     }
@@ -80,6 +83,19 @@ mod tests {
 
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();
         assert_eq!(parsed, EnvConfig::RustSnake(SnakeConfig::default()));
+    }
+
+    /// And for pacman, whose maze is fixed so its config has no size keys.
+    #[test]
+    fn a_pacman_config_dump_parses() {
+        let json = r#"{"env_type":"rust_pacman","view_width":11,"view_height":11,
+            "randomize_starting_position":false,"min_start_timeout":0,
+            "max_start_timeout":49,"frightened_time":35,"max_mode_changes":6,
+            "scatter_mode_length":700,"chase_mode_length":70,
+            "dot_reward":1.0,"ghost_reward":1.0}"#;
+
+        let parsed: EnvConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed, EnvConfig::RustPacman(PacmanConfig::default()));
     }
 
     /// The vectorized shape: `num` copies of a plain env config.

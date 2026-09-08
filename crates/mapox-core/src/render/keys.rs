@@ -67,6 +67,7 @@ mod tests {
     use super::*;
     use crate::env::Environment;
     use crate::envs::find_return::{FindReturn, FindReturnConfig};
+    use crate::envs::pacman::{Pacman, PacmanConfig};
     use crate::envs::scouts::{Scouts, ScoutsConfig};
     use egui::{Event, Modifiers};
 
@@ -93,6 +94,7 @@ mod tests {
         let envs: Vec<Box<dyn Environment>> = vec![
             Box::new(FindReturn::new(&FindReturnConfig::default(), 512)),
             Box::new(Scouts::new(&ScoutsConfig::default(), 512)),
+            Box::new(Pacman::new(&PacmanConfig::default(), 512)),
         ];
 
         for env in envs {
