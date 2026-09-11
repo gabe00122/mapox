@@ -29,7 +29,7 @@ pub struct MultitaskWrapper {
 
 impl MultitaskWrapper {
     pub fn new(specs: &[MultiEnvSpec], length: usize) -> Result<Self, String> {
-        let num_tasks = specs.len();
+        let num_tasks = specs.len(); // this assumes each task has only one sub task, to support arbitrarily nested subtasks we need to gather the num_tasks from actual child task instances
         let mut task_offsets: Vec<usize> = Vec::new();
         let mut envs: Vec<Box<dyn Environment>> = Vec::new();
 
@@ -157,7 +157,14 @@ impl Environment for MultitaskWrapper {
     }
 
     fn set_enjoy_mode(&mut self, task_num: Option<usize>) {
+        if let Some(idx) = self.enjoy_mode {
+            self.envs[idx].env.set_enjoy_mode(None);
+        }
         self.enjoy_mode = task_num.map(|tm| self.task_offsets[tm]);
+        if let Some(idx) = self.enjoy_mode {
+            // The multitask wrapper currently assumes it's child tasks have no child tasks of their own, this could change in the future
+            self.envs[idx].env.set_enjoy_mode(Some(0));
+        }
     }
 }
 
