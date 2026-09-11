@@ -10,6 +10,7 @@ use crate::timestep::TimeStepMut;
 use crate::vocab::{VocabId, Vocabulary};
 
 pub struct VectorWrapper {
+    enjoy_mode: bool,
     envs: Vec<Box<dyn Environment>>,
 }
 
@@ -23,7 +24,10 @@ impl VectorWrapper {
         let envs = (0..num)
             .map(|_| make(config, length))
             .collect::<Result<Vec<_>, _>>()?;
-        Ok(Self { envs })
+        Ok(Self {
+            envs,
+            enjoy_mode: false,
+        })
     }
 }
 
@@ -66,6 +70,11 @@ fn split_timestep<'a>(
 
 impl Environment for VectorWrapper {
     fn reset(&mut self, seed: u64, timestep: &mut TimeStepMut) {
+        if self.enjoy_mode {
+            self.envs[0].reset(seed, timestep);
+            return;
+        }
+
         let mut rng = SmallRng::seed_from_u64(seed);
         let seeds: Vec<u64> = (0..self.envs.len()).map(|_| rng.random()).collect();
 
@@ -79,6 +88,11 @@ impl Environment for VectorWrapper {
     }
 
     fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
+        if self.enjoy_mode {
+            self.envs[0].step(actions, timestep);
+            return;
+        }
+
         let agents_per_env = self.envs[0].num_agents();
         let chunks = split_timestep(timestep, agents_per_env);
 
@@ -98,7 +112,11 @@ impl Environment for VectorWrapper {
     }
 
     fn num_agents(&self) -> usize {
-        self.envs.len() * self.envs[0].num_agents()
+        if self.enjoy_mode {
+            self.envs.len() * self.envs[0].num_agents()
+        } else {
+            self.envs[0].num_agents()
+        }
     }
 
     fn obs_vocab(&self) -> &Vocabulary {
@@ -119,5 +137,10 @@ impl Environment for VectorWrapper {
 
     fn num_tasks(&self) -> usize {
         self.envs[0].num_tasks()
+    }
+
+    fn set_enjoy_mode(&mut self, task_num: Option<usize>) {
+        self.enjoy_mode = task_num != None;
+        self.envs[0].set_enjoy_mode(task_num);
     }
 }

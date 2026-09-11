@@ -13,9 +13,9 @@ use crate::{
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "env_type", rename_all = "snake_case")]
 pub enum EnvConfig {
-    RustFindReturn(FindReturnConfig),
-    RustScouts(ScoutsConfig),
-    RustSnake(SnakeConfig),
+    RustFindReturn(Box<FindReturnConfig>),
+    RustScouts(Box<ScoutsConfig>),
+    RustSnake(Box<SnakeConfig>),
     RustVec { num: usize, env: Box<EnvConfig> },
     RustMulti { envs: Vec<MultiEnvSpec> },
 }
@@ -53,7 +53,10 @@ mod tests {
             "harvesters_move_every":6,"scout_reward":1.0,"harvester_reward":1.0}"#;
 
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();
-        assert_eq!(parsed, EnvConfig::RustScouts(ScoutsConfig::default()));
+        assert_eq!(
+            parsed,
+            EnvConfig::RustScouts(Box::new(ScoutsConfig::default()))
+        );
     }
 
     /// And the same for the env that was here first.
@@ -67,7 +70,7 @@ mod tests {
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();
         assert_eq!(
             parsed,
-            EnvConfig::RustFindReturn(FindReturnConfig::default())
+            EnvConfig::RustFindReturn(Box::new(FindReturnConfig::default()))
         );
     }
 
@@ -79,7 +82,10 @@ mod tests {
             "food_reward":1.0,"death_reward":-1.0}"#;
 
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();
-        assert_eq!(parsed, EnvConfig::RustSnake(SnakeConfig::default()));
+        assert_eq!(
+            parsed,
+            EnvConfig::RustSnake(Box::new(SnakeConfig::default()))
+        );
     }
 
     /// The vectorized shape: `num` copies of a plain env config.
@@ -96,7 +102,7 @@ mod tests {
             parsed,
             EnvConfig::RustVec {
                 num: 32,
-                env: Box::new(EnvConfig::RustScouts(ScoutsConfig::default())),
+                env: Box::new(EnvConfig::RustScouts(Box::new(ScoutsConfig::default()))),
             }
         );
     }
@@ -125,12 +131,14 @@ mod tests {
                     MultiEnvSpec {
                         name: "scouts".into(),
                         num: 2,
-                        env: Box::new(EnvConfig::RustScouts(ScoutsConfig::default())),
+                        env: Box::new(EnvConfig::RustScouts(Box::new(ScoutsConfig::default()))),
                     },
                     MultiEnvSpec {
                         name: "fr".into(),
                         num: 3,
-                        env: Box::new(EnvConfig::RustFindReturn(FindReturnConfig::default())),
+                        env: Box::new(EnvConfig::RustFindReturn(Box::new(
+                            FindReturnConfig::default(),
+                        ))),
                     },
                 ],
             }
@@ -144,7 +152,7 @@ mod tests {
                 MultiEnvSpec {
                     name: "scouts".into(),
                     num: 2,
-                    env: Box::new(EnvConfig::RustScouts(ScoutsConfig {
+                    env: Box::new(EnvConfig::RustScouts(Box::new(ScoutsConfig {
                         num_scouts: 2,
                         num_harvesters: 2,
                         width: 12,
@@ -152,12 +160,12 @@ mod tests {
                         view_width: 11,
                         view_height: 13,
                         ..ScoutsConfig::default()
-                    })),
+                    }))),
                 },
                 MultiEnvSpec {
                     name: "fr".into(),
                     num: 1,
-                    env: Box::new(EnvConfig::RustFindReturn(FindReturnConfig {
+                    env: Box::new(EnvConfig::RustFindReturn(Box::new(FindReturnConfig {
                         num_agents: 4,
                         width: 12,
                         height: 12,
@@ -166,7 +174,7 @@ mod tests {
                         // matches the scouts obs view above.
                         view_height: 11,
                         ..FindReturnConfig::default()
-                    })),
+                    }))),
                 },
             ],
         };
@@ -188,13 +196,13 @@ mod tests {
 
     #[test]
     fn make_vec_builds_num_copies() {
-        let scouts = Box::new(EnvConfig::RustScouts(ScoutsConfig {
+        let scouts = Box::new(EnvConfig::RustScouts(Box::new(ScoutsConfig {
             num_scouts: 1,
             num_harvesters: 1,
             width: 12,
             height: 12,
             ..ScoutsConfig::default()
-        }));
+        })));
 
         let env = make(
             &EnvConfig::RustVec {
@@ -228,7 +236,7 @@ mod tests {
                     envs: vec![MultiEnvSpec {
                         name: "scouts".into(),
                         num: 0,
-                        env: Box::new(EnvConfig::RustScouts(ScoutsConfig::default())),
+                        env: Box::new(EnvConfig::RustScouts(Box::new(ScoutsConfig::default()))),
                     }],
                 },
                 32
@@ -239,7 +247,7 @@ mod tests {
             make(
                 &EnvConfig::RustVec {
                     num: 0,
-                    env: Box::new(EnvConfig::RustScouts(ScoutsConfig::default())),
+                    env: Box::new(EnvConfig::RustScouts(Box::new(ScoutsConfig::default()))),
                 },
                 32
             )
@@ -257,7 +265,9 @@ mod tests {
                     envs: vec![MultiEnvSpec {
                         name: "fr".into(),
                         num: 1,
-                        env: Box::new(EnvConfig::RustFindReturn(FindReturnConfig::default())),
+                        env: Box::new(EnvConfig::RustFindReturn(Box::new(
+                            FindReturnConfig::default(),
+                        ))),
                     }],
                 }),
             }],
@@ -277,15 +287,15 @@ mod tests {
                 MultiEnvSpec {
                     name: "scouts".into(),
                     num: 1,
-                    env: Box::new(EnvConfig::RustScouts(ScoutsConfig::default())),
+                    env: Box::new(EnvConfig::RustScouts(Box::new(ScoutsConfig::default()))),
                 },
                 MultiEnvSpec {
                     name: "fr".into(),
                     num: 1,
-                    env: Box::new(EnvConfig::RustFindReturn(FindReturnConfig {
+                    env: Box::new(EnvConfig::RustFindReturn(Box::new(FindReturnConfig {
                         view_height: 13,
                         ..FindReturnConfig::default()
-                    })),
+                    }))),
                 },
             ],
         };

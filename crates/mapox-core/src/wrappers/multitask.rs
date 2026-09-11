@@ -3,7 +3,7 @@ use rand::{Rng, SeedableRng};
 use rayon::prelude::*;
 
 use crate::env::Environment;
-use crate::make::{EnvConfig, MultiEnvSpec, make};
+use crate::make::{MultiEnvSpec, make};
 use crate::render::env::{GridRenderSettings, GridRenderState};
 use crate::spec::{ActionSpec, ObservationSpec};
 use crate::timestep::TimeStepMut;
@@ -23,77 +23,25 @@ pub struct MultitaskWrapper {
     action_vocab: Vocabulary,
     num_agents: usize,
     num_tasks: usize,
+    task_offsets: Vec<usize>,
+    enjoy_mode: Option<usize>,
 }
 
 impl MultitaskWrapper {
-    /// Build the wrapper from the entries of a `RustMulti` config. Each
-    /// entry becomes one task group holding its `num` instances, built
-    /// through `make`; every instance is a flat child — this wrapper's own
-    /// parallel reset/step is the vectorizer — each wrapped in its entry's
-    /// TaskIdWrapper.
     pub fn new(specs: &[MultiEnvSpec], length: usize) -> Result<Self, String> {
-        if specs.is_empty() {
-            return Err("multitask config must list at least one env".into());
-        }
-        for (i, spec) in specs.iter().enumerate() {
-            if spec.num == 0 {
-                return Err(format!(
-                    "multitask env {i} '{}' has num 0; every env needs at least one instance",
-                    spec.name
-                ));
-            }
-            // A nested `RustMulti` would sit inside this entry's
-            // TaskIdWrapper, which clobbers the task ids the inner wrapper wrote.
-            if contains_multi(&spec.env) {
-                return Err(format!(
-                    "multitask env {i} '{}' nests another multitask config; its task ids would be clobbered",
-                    spec.name
-                ));
+        let num_tasks = specs.len();
+        let mut task_offsets: Vec<usize> = Vec::new();
+        let mut envs: Vec<Box<dyn Environment>> = Vec::new();
+
+        for (task_id, spec) in specs.iter().enumerate() {
+            task_offsets.push(envs.len());
+            for _ in 0..spec.num {
+                envs.push(Box::new(TaskIdWrapper::new(
+                    make(&spec.env, length)?,
+                    task_id as i32,
+                )));
             }
         }
-
-        // The grouping tells the wrapper which instances share a task id.
-        // A VectorWrapper child would run a second par_iter_mut inside this
-        // wrapper's own loop, so the instances stay flat.
-        let mut tasks: Vec<Vec<Box<dyn Environment>>> = Vec::new();
-        for (i, spec) in specs.iter().enumerate() {
-            let instances = (0..spec.num)
-                .map(|_| {
-                    Ok(
-                        Box::new(TaskIdWrapper::new(make(&spec.env, length)?, i as i32))
-                            as Box<dyn Environment>,
-                    )
-                })
-                .collect::<Result<Vec<Box<dyn Environment>>, String>>()?;
-            tasks.push(instances);
-        }
-
-        // Every agent's obs is served from one shared (width, height) shape
-        // taken from the first env (see the TODO on `observation_spec`), so
-        // mismatched view sizes must be rejected here instead of panicking
-        // deep in buffer indexing.
-        let first = tasks[0][0].observation_spec();
-        for (i, task) in tasks.iter().enumerate().skip(1) {
-            let spec = task[0].observation_spec();
-            if (spec.width, spec.height) != (first.width, first.height) {
-                return Err(format!(
-                    "multitask env {i} '{}' has view {}x{}, but env 0 has view {}x{}; all envs must share one view size",
-                    specs[i].name, spec.width, spec.height, first.width, first.height
-                ));
-            }
-        }
-
-        Ok(Self::from_tasks(tasks))
-    }
-
-    /// Assemble from already-built instances: one inner `Vec` per task,
-    /// each group listing that task's instances. All instances become flat
-    /// children, but the task count is the number of groups, so `num`
-    /// copies of one task stay one task — matching the python
-    /// `MultiTaskWrapper`, which nests copies inside per-task envs.
-    fn from_tasks(tasks: Vec<Vec<Box<dyn Environment>>>) -> Self {
-        let num_tasks = tasks.len();
-        let envs: Vec<Box<dyn Environment>> = tasks.into_iter().flatten().collect();
 
         let mut obs_vocab = Vocabulary::new();
         let mut action_vocab = Vocabulary::new();
@@ -104,7 +52,7 @@ impl MultitaskWrapper {
         }
 
         let lens: Vec<usize> = envs.iter().map(|env| env.num_agents()).collect();
-        let num_agents = envs.iter().map(|env| env.num_agents()).sum();
+        let num_agents = lens.iter().sum();
 
         let wrappers = envs
             .into_iter()
@@ -119,28 +67,26 @@ impl MultitaskWrapper {
             })
             .collect();
 
-        Self {
+        Ok(Self {
             envs: wrappers,
             lens,
             num_agents,
             num_tasks,
             obs_vocab,
             action_vocab,
-        }
-    }
-}
-
-/// Whether `config` builds a `MultitaskWrapper` anywhere in its subtree.
-fn contains_multi(config: &EnvConfig) -> bool {
-    match config {
-        EnvConfig::RustMulti { .. } => true,
-        EnvConfig::RustVec { env, .. } => contains_multi(env),
-        _ => false,
+            task_offsets,
+            enjoy_mode: None,
+        })
     }
 }
 
 impl Environment for MultitaskWrapper {
     fn reset(&mut self, seed: u64, timestep: &mut TimeStepMut) {
+        if let Some(env_idx) = self.enjoy_mode {
+            self.envs[env_idx].env.reset(seed, timestep);
+            return;
+        }
+
         self.envs
             .par_iter_mut()
             .zip(timestep.partition_mut(&self.lens))
@@ -153,6 +99,11 @@ impl Environment for MultitaskWrapper {
     }
 
     fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
+        if let Some(env_idx) = self.enjoy_mode {
+            self.envs[env_idx].env.step(actions, timestep);
+            return;
+        }
+
         self.envs
             .par_iter_mut()
             .zip(timestep.partition_mut(&self.lens).par_iter_mut())
@@ -192,15 +143,21 @@ impl Environment for MultitaskWrapper {
     }
 
     fn get_render_settings(&self) -> GridRenderSettings {
-        self.envs[0].env.get_render_settings()
+        let idx = self.enjoy_mode.unwrap_or(0);
+        self.envs[idx].env.get_render_settings()
     }
 
     fn render_state_into(&self, grid_render_state: &mut GridRenderState) {
-        self.envs[0].env.render_state_into(grid_render_state);
+        let idx = self.enjoy_mode.unwrap_or(0);
+        self.envs[idx].env.render_state_into(grid_render_state);
     }
 
     fn num_tasks(&self) -> usize {
         self.num_tasks
+    }
+
+    fn set_enjoy_mode(&mut self, task_num: Option<usize>) {
+        self.enjoy_mode = task_num.map(|tm| self.task_offsets[tm]);
     }
 }
 

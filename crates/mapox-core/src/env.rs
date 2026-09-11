@@ -18,4 +18,5 @@ pub trait Environment: Send + Sync {
     fn render_state_into(&self, grid_render_state: &mut GridRenderState);
 
     fn num_tasks(&self) -> usize;
+    fn set_enjoy_mode(&mut self, task_num: Option<usize>) {}
 }
