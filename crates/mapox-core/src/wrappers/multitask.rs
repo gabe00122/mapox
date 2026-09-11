@@ -11,19 +11,15 @@ use crate::vocab::{VocabId, Vocabulary};
 use crate::wrappers::task_id_wrapper::TaskIdWrapper;
 use crate::wrappers::vocab_wrapper::VocabWrapper;
 
-struct EnvironmentInfo {
-    offset: usize,
-    env: VocabWrapper,
-}
-
 pub struct MultitaskWrapper {
     lens: Vec<usize>,
-    envs: Vec<EnvironmentInfo>,
+    offsets: Vec<usize>, // offsets agents by env group
+    envs: Vec<VocabWrapper>,
     obs_vocab: Vocabulary,
     action_vocab: Vocabulary,
     num_agents: usize,
     num_tasks: usize,
-    task_offsets: Vec<usize>,
+    task_offsets: Vec<usize>, // offsets of envs by task group
     enjoy_mode: Option<usize>,
 }
 
@@ -52,24 +48,23 @@ impl MultitaskWrapper {
         }
 
         let lens: Vec<usize> = envs.iter().map(|env| env.num_agents()).collect();
+        let mut offsets: Vec<usize> = Vec::with_capacity(lens.len());
+        let mut s = 0;
+        for len in &lens {
+            offsets.push(s);
+            s += len;
+        }
         let num_agents = lens.iter().sum();
 
         let wrappers = envs
             .into_iter()
-            .scan(0, |offset, env| {
-                let num_agents = env.num_agents();
-                let info = EnvironmentInfo {
-                    offset: *offset,
-                    env: VocabWrapper::new(env, &action_vocab, &obs_vocab),
-                };
-                *offset += num_agents;
-                Some(info)
-            })
+            .map(|env| VocabWrapper::new(env, &action_vocab, &obs_vocab))
             .collect();
 
         Ok(Self {
             envs: wrappers,
             lens,
+            offsets,
             num_agents,
             num_tasks,
             obs_vocab,
@@ -83,7 +78,7 @@ impl MultitaskWrapper {
 impl Environment for MultitaskWrapper {
     fn reset(&mut self, seed: u64, timestep: &mut TimeStepMut) {
         if let Some(env_idx) = self.enjoy_mode {
-            self.envs[env_idx].env.reset(seed, timestep);
+            self.envs[env_idx].reset(seed, timestep);
             return;
         }
 
@@ -94,28 +89,30 @@ impl Environment for MultitaskWrapper {
             .for_each(|(i, (env, mut timestep))| {
                 let mut rng = SmallRng::seed_from_u64(seed.wrapping_add(i as u64));
                 let seed = rng.next_u64();
-                env.env.reset(seed, &mut timestep);
+                env.reset(seed, &mut timestep);
             });
     }
 
     fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
         if let Some(env_idx) = self.enjoy_mode {
-            self.envs[env_idx].env.step(actions, timestep);
+            self.envs[env_idx].step(actions, timestep);
             return;
         }
 
-        self.envs
-            .par_iter_mut()
+        let (envs, offsets) = (&mut self.envs, &self.offsets);
+
+        envs.par_iter_mut()
+            .zip(offsets)
             .zip(timestep.partition_mut(&self.lens).par_iter_mut())
-            .for_each(|(env, timestep)| {
-                let actions = &actions[env.offset..env.offset + env.env.num_agents()];
-                env.env.step(actions, timestep);
+            .for_each(|((env, &offset), timestep)| {
+                let actions = &actions[offset..offset + env.num_agents()];
+                env.step(actions, timestep);
             });
     }
 
     fn observation_spec(&self) -> ObservationSpec {
         // TODO: We need to assert the width and height are the same for all envs
-        let ObservationSpec { width, height, .. } = self.envs[0].env.observation_spec();
+        let ObservationSpec { width, height, .. } = self.envs[0].observation_spec();
 
         ObservationSpec {
             width,
@@ -131,7 +128,11 @@ impl Environment for MultitaskWrapper {
     }
 
     fn num_agents(&self) -> usize {
-        self.num_agents
+        if let Some(idx) = self.enjoy_mode {
+            self.envs[idx].num_agents()
+        } else {
+            self.num_agents
+        }
     }
 
     fn obs_vocab(&self) -> &Vocabulary {
@@ -144,12 +145,12 @@ impl Environment for MultitaskWrapper {
 
     fn get_render_settings(&self) -> GridRenderSettings {
         let idx = self.enjoy_mode.unwrap_or(0);
-        self.envs[idx].env.get_render_settings()
+        self.envs[idx].get_render_settings()
     }
 
     fn render_state_into(&self, grid_render_state: &mut GridRenderState) {
         let idx = self.enjoy_mode.unwrap_or(0);
-        self.envs[idx].env.render_state_into(grid_render_state);
+        self.envs[idx].render_state_into(grid_render_state);
     }
 
     fn num_tasks(&self) -> usize {
@@ -158,12 +159,12 @@ impl Environment for MultitaskWrapper {
 
     fn set_enjoy_mode(&mut self, task_num: Option<usize>) {
         if let Some(idx) = self.enjoy_mode {
-            self.envs[idx].env.set_enjoy_mode(None);
+            self.envs[idx].set_enjoy_mode(None);
         }
         self.enjoy_mode = task_num.map(|tm| self.task_offsets[tm]);
         if let Some(idx) = self.enjoy_mode {
             // The multitask wrapper currently assumes it's child tasks have no child tasks of their own, this could change in the future
-            self.envs[idx].env.set_enjoy_mode(Some(0));
+            self.envs[idx].set_enjoy_mode(Some(0));
         }
     }
 }
