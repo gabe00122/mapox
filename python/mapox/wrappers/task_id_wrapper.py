@@ -41,6 +41,9 @@ class TaskIdWrapper(Environment):
         # delegates it; forward explicitly.
         return self._env.teams
 
+    def set_enjoy_mode(self, task_id: int | None) -> None:
+        self._env.set_enjoy_mode(task_id)
+
     @cached_property
     def observation_spec(self):
         return self._env.observation_spec

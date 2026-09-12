@@ -16,8 +16,16 @@ class VectorWrapper(Environment[EnvState]):
     def __init__(self, env: Environment[EnvState], vec_count: int):
         self._env = env
         self._vec_count = vec_count
+        self._enjoy_mode = False
+
+    def set_enjoy_mode(self, task_id: int | None) -> None:
+        self._enjoy_mode = task_id is not None
+        self._env.set_enjoy_mode(task_id)
 
     def reset(self, rng_key: jax.Array) -> tuple[EnvState, TimeStep]:
+        if self._enjoy_mode:
+            return self._env.reset(rng_key)
+
         rng_keys = jax.random.split(rng_key, self._vec_count)
         state, timestep = jax.vmap(self._env.reset)(rng_keys)
         return state, self._flatten_timestep(timestep)
@@ -25,6 +33,9 @@ class VectorWrapper(Environment[EnvState]):
     def step(
         self, state: EnvState, action: jax.Array, rng_key: jax.Array
     ) -> tuple[EnvState, TimeStep]:
+        if self._enjoy_mode:
+            return self._env.step(state, action, rng_key)
+
         rng_keys = jax.random.split(rng_key, self._vec_count)
 
         action = action.reshape(self._vec_count, self._env.num_agents)
@@ -35,6 +46,8 @@ class VectorWrapper(Environment[EnvState]):
 
     @property
     def num_agents(self) -> int:
+        if self._enjoy_mode:
+            return self._env.num_agents
         return self._vec_count * self._env.num_agents
 
     @property
@@ -44,6 +57,8 @@ class VectorWrapper(Environment[EnvState]):
 
     @property
     def teams(self) -> jax.Array | None:
+        if self._enjoy_mode:
+            return self._env.teams
         if self._env.teams is None:
             return None
         else:

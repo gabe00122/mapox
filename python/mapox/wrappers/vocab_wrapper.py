@@ -103,6 +103,9 @@ class VocabWrapper(Environment):
         # delegates it; forward explicitly.
         return self._env.teams
 
+    def set_enjoy_mode(self, task_id: int | None) -> None:
+        self._env.set_enjoy_mode(task_id)
+
     def create_placeholder_logs(self) -> dict[str, Any]:
         return self._env.create_placeholder_logs()
 
