@@ -14,6 +14,8 @@ class Env:
     obs_symbols: list[str]
     action_symbols: list[str]
 
+    def set_enjoy_mode(self, task_num: int | None) -> None: ...
+
     def reset(
         self,
         seed: int,

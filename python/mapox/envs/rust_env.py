@@ -134,15 +134,15 @@ class RustEnv(Environment[None]):
     def __init__(self, config: BaseModel, length: int):
         config_json = config.model_dump_json()
         self.config_json = config_json
-        self.inner = _CoreEnv(config_json, length)
+        self._inner = _CoreEnv(config_json, length)
 
-        num_agents, view_width, view_height, channels = self.inner.observation_shape
-        num_actions = self.inner.num_actions
+        num_agents, view_width, view_height, channels = self._inner.observation_shape
+        num_actions = self._inner.num_actions
         self._view_width = view_width
         self._view_height = view_height
 
-        self._obs_vocab = Vocabulary(self.inner.obs_symbols).freeze()
-        self._action_vocab = Vocabulary(self.inner.action_symbols).freeze()
+        self._obs_vocab = Vocabulary(self._inner.obs_symbols).freeze()
+        self._action_vocab = Vocabulary(self._inner.action_symbols).freeze()
 
         self._obs = np.zeros((num_agents, view_width, view_height, channels), np.uint16)
         self._time = np.zeros((num_agents,), np.int32)
@@ -183,7 +183,7 @@ class RustEnv(Environment[None]):
         )
 
     def _reset_callback(self, seed: np.ndarray) -> TimeStep:
-        self.inner.reset(
+        self._inner.reset(
             int(seed),
             self._obs,
             self._time,
@@ -198,7 +198,7 @@ class RustEnv(Environment[None]):
     def _step_callback(self, action: np.ndarray) -> TimeStep:
         if np.any(action < 0) or np.any(action > np.iinfo(np.uint16).max):
             raise ValueError("action id outside the Rust VocabId range")
-        self.inner.step(
+        self._inner.step(
             np.ascontiguousarray(action, dtype=np.uint16),
             self._obs,
             self._time,
@@ -252,15 +252,15 @@ class RustEnv(Environment[None]):
 
     @cached_property
     def action_spec(self) -> DiscreteActionSpec:
-        return DiscreteActionSpec(n=self.inner.num_actions)
+        return DiscreteActionSpec(n=self._inner.num_actions)
 
     @property
     def num_agents(self) -> int:
-        return self.inner.num_agents
+        return self._inner.num_agents
 
     @property
     def num_tasks(self) -> int:
-        return self.inner.num_tasks
+        return self._inner.num_tasks
 
     def get_render_settings(self) -> GridRenderSettings:
         raise NotImplementedError(
@@ -281,3 +281,6 @@ class RustEnv(Environment[None]):
     @property
     def action_vocab(self) -> Vocabulary:
         return self._action_vocab
+
+    def set_enjoy_mode(self, task_num: int | None) -> None:
+        self._inner.set_enjoy_mode(task_num)

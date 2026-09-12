@@ -61,3 +61,6 @@ class Environment[EnvState](ABC):
     @property
     @abstractmethod
     def action_vocab(self) -> Vocabulary: ...
+
+    def set_enjoy_mode(self, task_id: int | None) -> None:
+        pass

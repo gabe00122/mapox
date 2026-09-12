@@ -76,8 +76,23 @@ class EnvironmentFactory:
         self.register_env("rust_find_return", RustEnv, RustFindReturnConfig)
         self.register_env("rust_scouts", RustEnv, RustScoutsConfig)
         self.register_env("rust_snake", RustEnv, RustSnakeConfig)
+
+        self.register_env("vec", self._make_vec, VecConfig)
+        self.register_env("multi", self._make_multi, MultiTaskConfig)
         self.register_env("rust_vec", RustEnv, RustVecConfig)
         self.register_env("rust_multi", RustEnv, RustMultiConfig)
+
+    def _make_vec(self, config: VecConfig, length: int) -> VectorWrapper:
+        inner = self.create_env(config.env, length)
+        return VectorWrapper(inner, config.num)
+
+    def _make_multi(self, config: MultiTaskConfig, length: int) -> MultiTaskWrapper:
+        env_names = tuple(env_def.name for env_def in config.envs)
+        out_envs = tuple(
+            self.create_env(env_def.env, length) for env_def in config.envs
+        )
+
+        return MultiTaskWrapper(out_envs, env_names)
 
     def register_env(
         self,
@@ -91,37 +106,7 @@ class EnvironmentFactory:
         self,
         env_config: EnvironmentConfig,
         length: int,
-        env_name: str | None = None,
     ) -> Environment:
-        if env_config.env_type == "vec":
-            config = VecConfig.model_validate(env_config.model_dump())
-            inner = self.create_env(config.env, length)
-            return VectorWrapper(inner, config.num)
-
-        if env_config.env_type == "multi":
-            config = MultiTaskConfig.model_validate(env_config.model_dump())
-            env_names = tuple(env_def.name for env_def in config.envs)
-
-            if env_name is not None:
-                if env_name not in env_names:
-                    raise ValueError("Could not find environment matching env_name")
-                task_id = env_names.index(env_name)
-
-                # Every sub-env is built so the union vocab matches training;
-                # only the selected one is kept, so the rest stay unvectorized.
-                out_envs = tuple(
-                    self.create_env(env_def.env, length) for env_def in config.envs
-                )
-                wrapper = MultiTaskWrapper(out_envs, env_names)
-
-                return wrapper.task_envs[task_id]
-
-            out_envs = tuple(
-                self.create_env(env_def.env, length) for env_def in config.envs
-            )
-
-            return MultiTaskWrapper(out_envs, env_names)
-
         entry = self._registry.get(env_config.env_type)
         if entry is None:
             raise ValueError(f"Could not find env type matching that name: {env_config.env_type}")

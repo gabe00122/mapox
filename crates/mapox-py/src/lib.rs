@@ -137,6 +137,10 @@ mod _core {
             self.env().num_tasks()
         }
 
+        fn set_enjoy_mode(&mut self, task_num: Option<usize>) {
+            self.env_mut().set_enjoy_mode(task_num);
+        }
+
         #[getter]
         fn num_actions(&self) -> usize {
             self.env().action_spec().num_actions
