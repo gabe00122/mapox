@@ -113,4 +113,8 @@ impl Environment for VocabWrapper {
     fn num_tasks(&self) -> usize {
         self.inner.num_tasks()
     }
+
+    fn set_enjoy_mode(&mut self, task_num: Option<usize>) {
+        self.inner.set_enjoy_mode(task_num);
+    }
 }
