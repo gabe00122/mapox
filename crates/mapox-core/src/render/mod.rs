@@ -63,6 +63,11 @@ mod tests {
     use crate::envs::find_return::{FindReturn, FindReturnConfig};
     use crate::envs::scouts::{Scouts, ScoutsConfig};
     use crate::envs::snake::{Snake, SnakeConfig};
+    use crate::make::{EnvConfig, MultiEnvSpec};
+    use crate::render::env::GridRenderState;
+    use crate::symbols::AGENT_SNAKE_RED;
+    use crate::timestep::TimeStepBuffers;
+    use crate::wrappers::multitask::MultitaskWrapper;
     use tileset::{TILESET_COLS, TILESET_ROWS};
 
     /// One of each env, at its defaults, to check the tables against.
@@ -99,5 +104,75 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The art table is indexed by the ids the renderer reads back, which a
+    /// multitask wrapper remaps into its union vocab. Reporting the inner
+    /// env's vocab instead sizes the table for pre-remap ids: snake's colours
+    /// start at union id 16 (find_return contributes 15 symbols first), which
+    /// runs off the end of snake's 14-entry table on the first POV frame.
+    #[test]
+    fn wrapped_env_render_ids_index_the_settings_vocab() {
+        let snake = EnvConfig::RustSnake(Box::new(SnakeConfig {
+            num_agents: 1,
+            width: 16,
+            height: 16,
+            view_width: 15,
+            view_height: 15,
+            ..Default::default()
+        }));
+        let find_return = EnvConfig::RustFindReturn(Box::new(FindReturnConfig {
+            width: 16,
+            height: 16,
+            view_width: 15,
+            view_height: 15,
+            ..Default::default()
+        }));
+        let specs = [
+            MultiEnvSpec {
+                name: "find_return".to_owned(),
+                num: 1,
+                env: Box::new(find_return),
+            },
+            MultiEnvSpec {
+                name: "snake".to_owned(),
+                num: 1,
+                env: Box::new(snake),
+            },
+        ];
+
+        let mut env = MultitaskWrapper::new(&specs, 64).expect("multi env builds");
+        env.set_enjoy_mode(Some(1));
+
+        let mut buffers = TimeStepBuffers::new(&env);
+        env.reset(0, &mut buffers.view_mut());
+        let mut render_state = GridRenderState::default();
+        env.render_state_into(&mut render_state);
+
+        let settings = env.get_render_settings();
+        let art = resolve_art(&settings.obs_vocab);
+        for &id in buffers.obs.iter().chain(render_state.tilemap.iter()) {
+            assert!(
+                usize::from(id) < art.len(),
+                "id {id} does not index the {} art tiles of {:?}",
+                art.len(),
+                settings.obs_vocab.symbols(),
+            );
+        }
+
+        // The ids are the union ones, not the inner env's: the snake sitting
+        // on the focused tile draws as a red snake, and sees its own head.
+        let tile = render_state.tilemap[render_state.agent_positions[0].idx()];
+        assert_eq!(
+            settings.obs_vocab.symbols()[usize::from(tile)],
+            AGENT_SNAKE_RED
+        );
+        assert!(
+            buffers
+                .obs
+                .iter()
+                .any(|&id| id == settings.obs_vocab.get(AGENT_SNAKE_RED).unwrap()),
+            "the agent's own head is in its observation"
+        );
     }
 }

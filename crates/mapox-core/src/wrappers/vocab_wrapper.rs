@@ -103,11 +103,17 @@ impl Environment for VocabWrapper {
     }
 
     fn get_render_settings(&self) -> GridRenderSettings {
-        self.inner.get_render_settings()
+        let mut settings = self.inner.get_render_settings();
+        settings.obs_vocab = self.observation_vocab.clone();
+        settings
     }
 
     fn render_state_into(&self, grid_render_state: &mut GridRenderState) {
-        self.inner.render_state_into(grid_render_state)
+        self.inner.render_state_into(grid_render_state);
+        let lut = &self.local_to_global_obs;
+        grid_render_state
+            .tilemap
+            .map_inplace(|tile| *tile = lut[usize::from(*tile)]);
     }
 
     fn num_tasks(&self) -> usize {

@@ -13,6 +13,9 @@ pub struct GridRenderState {
 
 #[derive(Debug, Default, Clone)]
 pub struct GridRenderSettings {
+    /// Vocabulary the ids handed to the renderer index, both the obs and the
+    /// tilemap. A wrapper that remaps ids must report its own, not the inner
+    /// env's.
     pub obs_vocab: Vocabulary,
     pub tile_width: usize,
     pub tile_height: usize,
