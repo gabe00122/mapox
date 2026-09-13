@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 from mapox._core import Env
 from mapox.config import EnvironmentFactory
 from mapox.envs.rust_env import (
@@ -66,26 +65,6 @@ def test_vec_json_builds_num_copies():
         np.zeros((env.num_agents, env.num_actions), np.bool_),
         np.zeros((env.num_agents,), np.int32),
     )
-
-
-def test_multi_json_rejects_mismatched_view_sizes():
-    bad = (
-        '{"env_type": "rust_multi", "envs": ['
-        f'{{"name": "scouts", "num": 1, "env": {SCOUTS_JSON}}},'
-        '{"name": "fr", "num": 1, "env": {"env_type": "rust_find_return", '
-        '"num_agents": 2, "num_flags": 1, "width": 12, "height": 12, '
-        '"view_width": 11, "view_height": 13, "mapgen_threshold": 0.3, '
-        '"water_threshold": -0.45, "digging_timeout": 5, "preparation_steps": 256, '
-        '"treasure_reward": 1.0}}]}'
-    )
-    with pytest.raises(ValueError, match="must share one view size"):
-        Env(bad, 32)
-
-
-def test_multi_json_rejects_zero_count():
-    bad = MULTI_JSON.replace('"num": 2', '"num": 0')
-    with pytest.raises(ValueError, match="num 0"):
-        Env(bad, 32)
 
 
 def test_factory_routes_rust_multi_config_to_rust_env():

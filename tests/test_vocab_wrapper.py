@@ -1,8 +1,8 @@
 """VocabWrapper — a single task env lifted into the multitask global vocab.
 
-Extracting one env from a multitask config (create_env with env_name) must
-present the same interface the policy saw in training: global specs and
-global ids at the boundary, so checkpoints restore without shape mismatches.
+A multitask wrapper's sub-envs (MultiTaskWrapper.task_envs) each present the
+interface the policy saw in training: global specs and global ids at the
+boundary, so single-task checkpoints restore without shape mismatches.
 """
 
 import jax
@@ -25,9 +25,13 @@ CONFIG = MultiTaskConfig(
 )
 
 
+ENV_NAMES = tuple(env_def.name for env_def in CONFIG.envs)
+
+
 def _make(env_name):
-    factory = EnvironmentFactory()
-    return factory.create_env(CONFIG, LENGTH, env_name=env_name)
+    # the wrapper builds every sub-env; each already speaks the global vocab
+    wrapper = EnvironmentFactory().create_env(CONFIG, LENGTH)
+    return wrapper.task_envs[ENV_NAMES.index(env_name)]
 
 
 def test_single_env_matches_multitask_interface():

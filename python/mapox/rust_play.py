@@ -29,7 +29,7 @@ class RustAgentWrapper:
 
 def rust_enjoy(env: RustEnv, length: int, seed: int, agent: Agent):
     rust_agent = RustAgentWrapper(agent)
-    enjoy(env.inner, length, seed, rust_agent)
+    enjoy(env._inner, length, seed, rust_agent)
 
 
 CONFIGS = {

@@ -193,6 +193,7 @@ def test_teams_forwarded_through_task_id_wrapper():
     assert jnp.array_equal(teams[:2], jnp.zeros(2, teams.dtype))
     assert teams.max() == 1
 
-    single = factory.create_env(config, LENGTH, env_name="kh")
+    # kh is the wrapper's second sub-env; sub-envs present global ids
+    single = wrapper.task_envs[1]
     assert single.teams is not None
     assert jnp.array_equal(single.teams, wrapper.teams[2:])

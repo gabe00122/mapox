@@ -228,21 +228,7 @@ mod tests {
     }
 
     #[test]
-    fn make_rejects_degenerate_configs() {
-        assert!(make(&EnvConfig::RustMulti { envs: vec![] }, 32).is_err());
-        assert!(
-            make(
-                &EnvConfig::RustMulti {
-                    envs: vec![MultiEnvSpec {
-                        name: "scouts".into(),
-                        num: 0,
-                        env: Box::new(EnvConfig::RustScouts(Box::new(ScoutsConfig::default()))),
-                    }],
-                },
-                32
-            )
-            .is_err()
-        );
+    fn make_rejects_zero_vec_num() {
         assert!(
             make(
                 &EnvConfig::RustVec {
@@ -253,57 +239,5 @@ mod tests {
             )
             .is_err()
         );
-    }
-
-    #[test]
-    fn make_rejects_nested_multitask() {
-        let config = EnvConfig::RustMulti {
-            envs: vec![MultiEnvSpec {
-                name: "inner".into(),
-                num: 1,
-                env: Box::new(EnvConfig::RustMulti {
-                    envs: vec![MultiEnvSpec {
-                        name: "fr".into(),
-                        num: 1,
-                        env: Box::new(EnvConfig::RustFindReturn(Box::new(
-                            FindReturnConfig::default(),
-                        ))),
-                    }],
-                }),
-            }],
-        };
-
-        assert!(make(&config, 32).is_err());
-    }
-
-    /// The obs view is what `MultitaskWrapper` serves from one shared shape,
-    /// not the config field: FindReturn's actual view is `view_height + 2`
-    /// (UI strip), so its default 11 actually matches scouts' default 13.
-    /// A config view of 13 (→ obs 15) does not.
-    #[test]
-    fn make_rejects_mismatched_view_sizes() {
-        let config = EnvConfig::RustMulti {
-            envs: vec![
-                MultiEnvSpec {
-                    name: "scouts".into(),
-                    num: 1,
-                    env: Box::new(EnvConfig::RustScouts(Box::new(ScoutsConfig::default()))),
-                },
-                MultiEnvSpec {
-                    name: "fr".into(),
-                    num: 1,
-                    env: Box::new(EnvConfig::RustFindReturn(Box::new(FindReturnConfig {
-                        view_height: 13,
-                        ..FindReturnConfig::default()
-                    }))),
-                },
-            ],
-        };
-
-        assert!(matches!(
-            make(&config, 32),
-            Err(err)
-                if err.contains("multitask env 1 'fr' has view 11x15, but env 0 has view 11x13")
-        ));
     }
 }

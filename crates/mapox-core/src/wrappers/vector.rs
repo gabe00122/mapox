@@ -113,9 +113,9 @@ impl Environment for VectorWrapper {
 
     fn num_agents(&self) -> usize {
         if self.enjoy_mode {
-            self.envs.len() * self.envs[0].num_agents()
-        } else {
             self.envs[0].num_agents()
+        } else {
+            self.envs.len() * self.envs[0].num_agents()
         }
     }
 
