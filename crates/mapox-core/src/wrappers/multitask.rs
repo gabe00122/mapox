@@ -20,6 +20,7 @@ pub struct MultitaskWrapper {
     num_agents: usize,
     num_tasks: usize,
     task_offsets: Vec<usize>, // offsets of envs by task group
+    task_names: Vec<String>,
     enjoy_mode: Option<usize>,
 }
 
@@ -28,6 +29,23 @@ impl MultitaskWrapper {
         let num_tasks = specs.len(); // this assumes each task has only one sub task, to support arbitrarily nested subtasks we need to gather the num_tasks from actual child task instances
         let mut task_offsets: Vec<usize> = Vec::new();
         let mut envs: Vec<Box<dyn Environment>> = Vec::new();
+        let mut task_names = Vec::with_capacity(num_tasks);
+
+        if specs.is_empty() {
+            return Err("multitask env must contain at least one task".into());
+        }
+        for spec in specs {
+            if spec.num == 0 {
+                return Err(format!(
+                    "task {:?} must contain at least one env",
+                    spec.name
+                ));
+            }
+            if task_names.contains(&spec.name) {
+                return Err(format!("duplicate task name {:?}", spec.name));
+            }
+            task_names.push(spec.name.clone());
+        }
 
         for (task_id, spec) in specs.iter().enumerate() {
             task_offsets.push(envs.len());
@@ -70,6 +88,7 @@ impl MultitaskWrapper {
             obs_vocab,
             action_vocab,
             task_offsets,
+            task_names,
             enjoy_mode: None,
         })
     }
@@ -151,6 +170,25 @@ impl Environment for MultitaskWrapper {
     fn render_state_into(&self, grid_render_state: &mut GridRenderState) {
         let idx = self.enjoy_mode.unwrap_or(0);
         self.envs[idx].render_state_into(grid_render_state);
+    }
+
+    fn consume_metrics(&mut self) -> serde_json::Value {
+        let mut metrics = serde_json::Map::new();
+        for (task, name) in self.task_names.iter().enumerate() {
+            let start = self.task_offsets[task];
+            let end = self
+                .task_offsets
+                .get(task + 1)
+                .copied()
+                .unwrap_or(self.envs.len());
+            let mean = crate::env::mean_metrics(
+                self.envs[start..end]
+                    .iter_mut()
+                    .map(|env| env.consume_metrics()),
+            );
+            metrics.insert(name.clone(), mean);
+        }
+        serde_json::Value::Object(metrics)
     }
 
     fn num_tasks(&self) -> usize {

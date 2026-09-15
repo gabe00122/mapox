@@ -135,6 +135,10 @@ impl Environment for VectorWrapper {
         self.envs[0].render_state_into(grid_render_state);
     }
 
+    fn consume_metrics(&mut self) -> serde_json::Value {
+        crate::env::mean_metrics(self.envs.iter_mut().map(|env| env.consume_metrics()))
+    }
+
     fn num_tasks(&self) -> usize {
         self.envs[0].num_tasks()
     }

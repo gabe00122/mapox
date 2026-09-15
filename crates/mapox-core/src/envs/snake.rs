@@ -217,6 +217,13 @@ impl SnakeState {
     }
 }
 
+#[derive(Debug, Clone, Default)]
+struct SnakeMetrics {
+    reward: f64,
+    food_eaten: f64,
+    deaths: f64,
+}
+
 /// Multiplayer snake on an empty walled board.
 ///
 /// Every snake paints one tile type in one of ten colours — agent `i` wears
@@ -240,6 +247,7 @@ impl SnakeState {
 pub struct Snake {
     pub config: SnakeConfig,
     state: SnakeState,
+    metrics: SnakeMetrics,
     rngs: SmallRng,
 
     // max steps for a single episode
@@ -311,6 +319,7 @@ impl Snake {
                 head_first: HashMap::with_capacity(config.num_agents),
                 target_first: HashMap::with_capacity(config.num_agents),
             },
+            metrics: SnakeMetrics::default(),
             rngs: SmallRng::seed_from_u64(0),
             length,
 
@@ -677,6 +686,9 @@ impl Environment for Snake {
             } else {
                 0.0
             };
+            self.metrics.reward += f64::from(timestep.reward[i]);
+            self.metrics.food_eaten += if plan.eats { 1.0 } else { 0.0 };
+            self.metrics.deaths += if plan.died { 1.0 } else { 0.0 };
         }
 
         self.encode_observations(timestep);
@@ -684,6 +696,16 @@ impl Environment for Snake {
             timestep.terminated[i] |= self.state.plans[i].died;
         }
         self.encode_action_mask(timestep);
+    }
+
+    fn consume_metrics(&mut self) -> serde_json::Value {
+        let metrics = std::mem::take(&mut self.metrics);
+        let agents = self.config.num_agents.max(1) as f64;
+        serde_json::json!({
+            "reward": metrics.reward / agents,
+            "food_eaten": metrics.food_eaten / agents,
+            "deaths": metrics.deaths / agents,
+        })
     }
 
     fn observation_spec(&self) -> ObservationSpec {
@@ -956,6 +978,73 @@ mod tests {
         assert_eq!(buffers.reward[0], env.config.food_reward);
         assert!(!env.state.food[pos(10, 8).idx()]);
         check_consistency(&env);
+    }
+
+    #[test]
+    fn metrics_accumulate_resolved_events_across_resets_and_drain() {
+        let config = SnakeConfig {
+            food_reward: -2.5,
+            death_reward: 0.0,
+            ..test_config()
+        };
+        let mut env = Snake::new(&config, 2);
+        let empty = serde_json::json!({"reward": 0.0, "food_eaten": 0.0, "deaths": 0.0});
+        let initial = env.consume_metrics();
+        assert_eq!(initial, empty);
+        assert!(initial.as_object().unwrap().values().all(|v| v.is_f64()));
+
+        setup(
+            &mut env,
+            &[(&[pos(9, 8)], RIGHT), (&[pos(16, 15)], UP)],
+            &[pos(10, 8), pos(11, 8)],
+        );
+        let mut buffers = TimeStepBuffers::new(&env);
+        step(&mut env, &mut buffers, &[RIGHT, UP]);
+        step(&mut env, &mut buffers, &[RIGHT, UP]);
+        // The time limit terminates both agents, but only the second died.
+        assert!(buffers.terminated.iter().all(|&terminated| terminated));
+        assert_eq!(buffers.reward.to_vec(), vec![-2.5, 0.0]);
+
+        env.reset(7, &mut buffers.view_mut());
+        env.config.death_reward = -3.5;
+        // Both heads target food, but the resolved collision prevents eating.
+        setup(
+            &mut env,
+            &[(&[pos(9, 8)], RIGHT), (&[pos(11, 8)], LEFT)],
+            &[pos(10, 8)],
+        );
+        step(&mut env, &mut buffers, &[RIGHT, LEFT]);
+        assert_eq!(buffers.reward.to_vec(), vec![-3.5, -3.5]);
+        let metrics = env.consume_metrics();
+        assert_eq!(
+            metrics,
+            serde_json::json!({"reward": -6.0, "food_eaten": 1.0, "deaths": 1.5})
+        );
+        assert!(metrics.as_object().unwrap().values().all(|v| v.is_f64()));
+        let drained = env.consume_metrics();
+        assert_eq!(drained, empty);
+        assert!(drained.as_object().unwrap().values().all(|v| v.is_f64()));
+
+        env.config.food_reward = 0.0;
+        setup(
+            &mut env,
+            &[(&[pos(9, 8)], RIGHT), (&[pos(15, 15)], UP)],
+            &[pos(10, 8)],
+        );
+        step(&mut env, &mut buffers, &[RIGHT, UP]);
+        assert_eq!(
+            env.consume_metrics(),
+            serde_json::json!({"reward": 0.0, "food_eaten": 0.5, "deaths": 0.0})
+        );
+
+        let mut no_agents = Snake::new(
+            &SnakeConfig {
+                num_agents: 0,
+                ..test_config()
+            },
+            1,
+        );
+        assert_eq!(no_agents.consume_metrics(), empty);
     }
 
     #[test]
@@ -1360,5 +1449,4 @@ mod tests {
             assert_eq!(buffers.terminated[0], time == 3);
         }
     }
-
 }

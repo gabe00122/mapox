@@ -164,10 +164,17 @@ impl FindReturnAction {
     }
 }
 
+#[derive(Debug, Default, Clone)]
+struct FindReturnMetrics {
+    reward: f64,
+    flags_collected: f64,
+}
+
 #[derive(Debug, Clone)]
 pub struct FindReturn {
     pub config: FindReturnConfig,
     state: FindReturnState,
+    metrics: FindReturnMetrics,
 
     // max steps for a single episode
     length: usize,
@@ -218,6 +225,7 @@ impl FindReturn {
                 rngs: SmallRng::seed_from_u64(0),
                 time: 0,
             },
+            metrics: FindReturnMetrics::default(),
             length,
 
             pad_width,
@@ -450,6 +458,8 @@ impl Environment for FindReturn {
                         if found_flag {
                             agent_respawn_ids.push(agent_id);
                             timestep.reward[agent_id] = self.config.treasure_reward;
+                            self.metrics.reward += f64::from(self.config.treasure_reward);
+                            self.metrics.flags_collected += 1.0;
                         } else {
                             map[agent.position.idx()] = FindReturnObs::AgentGeneric;
                         }
@@ -492,6 +502,15 @@ impl Environment for FindReturn {
         self.state.time += 1;
         self.encode_observations(timestep);
         self.encode_action_mask(timestep);
+    }
+
+    fn consume_metrics(&mut self) -> serde_json::Value {
+        let metrics = std::mem::take(&mut self.metrics);
+        let agents = self.num_agents().max(1) as f64;
+        serde_json::json!({
+            "reward": metrics.reward / agents,
+            "flags_collected": metrics.flags_collected / agents,
+        })
     }
 
     fn observation_spec(&self) -> ObservationSpec {
@@ -781,6 +800,91 @@ mod tests {
             AgentGeneric
         );
         assert_eq!(env.state.base_map[flag.idx()], TileFlagUnlocked);
+    }
+
+    #[test]
+    fn metrics_accumulate_paid_rewards_and_flags_across_steps_and_reset() {
+        let mut env = empty_env_with(FindReturnConfig {
+            num_agents: 3,
+            num_flags: 0,
+            width: 21,
+            height: 21,
+            treasure_reward: 3.0,
+            ..Default::default()
+        });
+        let first = center(&env);
+        let second = first + Position::new(0, 3);
+        place_flag(&mut env, first + Position::new(1, 0), TileFlagUnlocked);
+        place_flag(&mut env, second + Position::new(1, 0), TileFlagUnlocked);
+        spawn_agents(&mut env, &[first, second, first + Position::new(0, -3)]);
+        let mut buffers = TimeStepBuffers::new(&env);
+
+        step(&mut env, &mut buffers, &[MoveRight, Noop, Noop]);
+        assert_eq!(buffers.reward[0], 3.0);
+        env.config.treasure_reward = 0.0;
+        step(&mut env, &mut buffers, &[Noop, MoveRight, Noop]);
+        assert_eq!(buffers.reward[1], 0.0);
+        step(&mut env, &mut buffers, &[Noop, Noop, Noop]);
+        env.reset(42, &mut buffers.view_mut());
+
+        let metrics = env.consume_metrics();
+        assert_eq!(
+            metrics,
+            serde_json::json!({
+                "reward": 1.0,
+                "flags_collected": 2.0 / 3.0,
+            })
+        );
+        assert!(
+            metrics
+                .as_object()
+                .unwrap()
+                .values()
+                .all(|value| value.is_f64())
+        );
+        let drained = env.consume_metrics();
+        assert_eq!(
+            drained,
+            serde_json::json!({
+                "reward": 0.0,
+                "flags_collected": 0.0,
+            })
+        );
+        assert!(
+            drained
+                .as_object()
+                .unwrap()
+                .values()
+                .all(|value| value.is_f64())
+        );
+    }
+
+    #[test]
+    fn metrics_before_steps_have_float_schema_even_without_agents() {
+        for num_agents in [0, 2] {
+            let mut env = FindReturn::new(
+                &FindReturnConfig {
+                    num_agents,
+                    ..Default::default()
+                },
+                512,
+            );
+            let metrics = env.consume_metrics();
+            assert_eq!(
+                metrics,
+                serde_json::json!({
+                    "reward": 0.0,
+                    "flags_collected": 0.0,
+                })
+            );
+            assert!(
+                metrics
+                    .as_object()
+                    .unwrap()
+                    .values()
+                    .all(|value| value.is_f64())
+            );
+        }
     }
 
     /// Digging clears the wall in front of the agent for good, and costs

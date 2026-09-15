@@ -56,6 +56,10 @@ impl Environment for TaskIdWrapper {
         self.inner.render_state_into(grid_render_state)
     }
 
+    fn consume_metrics(&mut self) -> serde_json::Value {
+        self.inner.consume_metrics()
+    }
+
     fn num_tasks(&self) -> usize {
         self.inner.num_tasks()
     }

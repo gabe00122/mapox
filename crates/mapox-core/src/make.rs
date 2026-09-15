@@ -195,6 +195,69 @@ mod tests {
     }
 
     #[test]
+    fn metrics_average_nested_copies_and_drain_every_task() {
+        // A one-cell board makes every step a death, independently of the seed
+        // or chosen action. Unequal copy counts expose incorrect group bounds.
+        let task = |name: &str, num, death_reward| MultiEnvSpec {
+            name: name.into(),
+            num,
+            env: Box::new(EnvConfig::RustSnake(Box::new(SnakeConfig {
+                num_agents: 1,
+                width: 1,
+                height: 1,
+                food_spawn_prob: 0.0,
+                death_reward,
+                ..SnakeConfig::default()
+            }))),
+        };
+        let config = EnvConfig::RustVec {
+            num: 2,
+            env: Box::new(EnvConfig::RustMulti {
+                envs: vec![task("snake", 2, -4.0), task("other", 3, -6.0)],
+            }),
+        };
+        let mut env = make(&config, 32).unwrap();
+        let zeros = serde_json::json!({
+            "snake": {"reward": 0.0, "food_eaten": 0.0, "deaths": 0.0},
+            "other": {"reward": 0.0, "food_eaten": 0.0, "deaths": 0.0},
+        });
+        assert_eq!(env.consume_metrics(), zeros);
+
+        // Enjoy mode steps one copy only, but consume must drain and average
+        // every configured copy, retaining inactive task keys as well.
+        for (task, steps) in [(0, 1), (1, 3)] {
+            env.set_enjoy_mode(Some(task));
+            let mut buffers = TimeStepBuffers::new(&*env);
+            env.reset(42, &mut buffers.view_mut());
+            for _ in 0..steps {
+                env.step(&[0], &mut buffers.view_mut());
+            }
+            env.reset(43, &mut buffers.view_mut());
+        }
+        assert_eq!(
+            env.consume_metrics(),
+            serde_json::json!({
+                "snake": {"reward": -1.0, "food_eaten": 0.0, "deaths": 0.25},
+                "other": {"reward": -3.0, "food_eaten": 0.0, "deaths": 0.5},
+            }),
+        );
+        assert_eq!(env.consume_metrics(), zeros);
+
+        env.set_enjoy_mode(None);
+        let mut buffers = TimeStepBuffers::new(&*env);
+        env.reset(44, &mut buffers.view_mut());
+        env.step(&vec![0; env.num_agents()], &mut buffers.view_mut());
+        assert_eq!(
+            env.consume_metrics(),
+            serde_json::json!({
+                "snake": {"reward": -4.0, "food_eaten": 0.0, "deaths": 1.0},
+                "other": {"reward": -6.0, "food_eaten": 0.0, "deaths": 1.0},
+            }),
+        );
+        assert_eq!(env.consume_metrics(), zeros);
+    }
+
+    #[test]
     fn make_vec_builds_num_copies() {
         let scouts = Box::new(EnvConfig::RustScouts(Box::new(ScoutsConfig {
             num_scouts: 1,

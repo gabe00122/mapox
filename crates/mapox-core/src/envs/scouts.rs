@@ -149,10 +149,18 @@ impl ScoutsAction {
     }
 }
 
+#[derive(Debug, Default, Clone)]
+struct ScoutsMetrics {
+    reward: f64,
+    treasures_unlocked: f64,
+    treasures_collected: f64,
+}
+
 #[derive(Debug, Clone)]
 pub struct Scouts {
     pub config: ScoutsConfig,
     state: ScoutsState,
+    metrics: ScoutsMetrics,
 
     length: usize,
 
@@ -209,6 +217,7 @@ impl Scouts {
                 rngs: SmallRng::seed_from_u64(0),
                 time: 0,
             },
+            metrics: ScoutsMetrics::default(),
             length,
 
             pad_width,
@@ -427,6 +436,11 @@ impl Environment for Scouts {
             if let Some((reward, claimed)) = self.claim(role, self.state.base_map[target.idx()]) {
                 self.state.base_map[target.idx()] = claimed;
                 timestep.reward[agent_id] = reward;
+                self.metrics.reward += f64::from(reward);
+                match role {
+                    Role::Harvester => self.metrics.treasures_unlocked += 1.0,
+                    Role::Scout => self.metrics.treasures_collected += 1.0,
+                }
             }
 
             self.state.agents[agent_id].position = target;
@@ -436,6 +450,16 @@ impl Environment for Scouts {
         self.state.time += 1;
         self.encode_observations(timestep);
         self.encode_action_mask(timestep);
+    }
+
+    fn consume_metrics(&mut self) -> serde_json::Value {
+        let metrics = std::mem::take(&mut self.metrics);
+        let agents = self.num_agents().max(1) as f64;
+        serde_json::json!({
+            "reward": metrics.reward / agents,
+            "treasures_unlocked": metrics.treasures_unlocked / agents,
+            "treasures_collected": metrics.treasures_collected / agents,
+        })
     }
 
     fn observation_spec(&self) -> ObservationSpec {
@@ -592,6 +616,107 @@ mod tests {
         assert_eq!(buffers.reward[1], env.config.harvester_reward);
         assert_eq!(env.state.base_map[treasure.idx()], TileFlagUnlocked);
         assert_eq!(env.state.agents[1].position.idx(), treasure.idx());
+    }
+
+    #[test]
+    fn metrics_accumulate_paid_rewards_and_claims_across_steps_and_reset() {
+        let mut env = empty_env_with(ScoutsConfig {
+            num_scouts: 2,
+            num_harvesters: 1,
+            num_treasures: 0,
+            width: 21,
+            height: 21,
+            harvesters_move_every: 1,
+            harvester_reward: 3.0,
+            scout_reward: 1.5,
+            ..Default::default()
+        });
+        let harvester = center(&env);
+        let treasure = harvester + Position::new(1, 0);
+        place_treasure(&mut env, treasure, TileFlag);
+        place_treasure(&mut env, treasure + Position::new(1, 0), TileFlag);
+        spawn_agents(
+            &mut env,
+            &[
+                treasure + Position::new(0, -1),
+                harvester + Position::new(0, 4),
+                harvester,
+            ],
+        );
+        let mut buffers = TimeStepBuffers::new(&env);
+
+        use ScoutsAction::*;
+        step(&mut env, &mut buffers, &[Noop, Noop, MoveRight]);
+        assert_eq!(buffers.reward[2], 3.0);
+        env.config.harvester_reward = 0.0;
+        step(&mut env, &mut buffers, &[MoveUp, Noop, MoveRight]);
+        assert_eq!(buffers.reward[0], 1.5);
+        assert_eq!(buffers.reward[2], 0.0);
+        step(&mut env, &mut buffers, &[Noop, Noop, Noop]);
+        env.reset(42, &mut buffers.view_mut());
+
+        let metrics = env.consume_metrics();
+        assert_eq!(
+            metrics,
+            serde_json::json!({
+                "reward": 1.5,
+                "treasures_unlocked": 2.0 / 3.0,
+                "treasures_collected": 1.0 / 3.0,
+            })
+        );
+        assert!(
+            metrics
+                .as_object()
+                .unwrap()
+                .values()
+                .all(|value| value.is_f64())
+        );
+        let drained = env.consume_metrics();
+        assert_eq!(
+            drained,
+            serde_json::json!({
+                "reward": 0.0,
+                "treasures_unlocked": 0.0,
+                "treasures_collected": 0.0,
+            })
+        );
+        assert!(
+            drained
+                .as_object()
+                .unwrap()
+                .values()
+                .all(|value| value.is_f64())
+        );
+    }
+
+    #[test]
+    fn metrics_before_steps_have_float_schema_even_without_agents() {
+        for (num_scouts, num_harvesters) in [(0, 0), (1, 1)] {
+            let mut env = Scouts::new(
+                &ScoutsConfig {
+                    num_scouts,
+                    num_harvesters,
+                    ..Default::default()
+                },
+                512,
+            );
+            let metrics = env.consume_metrics();
+            assert_eq!(
+                metrics,
+                serde_json::json!({
+                    "reward": 0.0,
+                    "treasures_unlocked": 0.0,
+                    "treasures_collected": 0.0,
+                })
+            );
+            assert!(
+                metrics
+                    .as_object()
+                    .unwrap()
+                    .values()
+                    .all(|value| value.is_f64())
+            );
+        }
     }
 
     /// The other half of the trade: a scout is paid only for a treasure a

@@ -116,6 +116,10 @@ impl Environment for VocabWrapper {
             .map_inplace(|tile| *tile = lut[usize::from(*tile)]);
     }
 
+    fn consume_metrics(&mut self) -> serde_json::Value {
+        self.inner.consume_metrics()
+    }
+
     fn num_tasks(&self) -> usize {
         self.inner.num_tasks()
     }
