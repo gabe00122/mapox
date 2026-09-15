@@ -28,6 +28,9 @@ class Environment[EnvState](ABC):
     @abstractmethod
     def create_logs(self, state) -> dict[str, Any]: ...
 
+    def consume_metrics(self) -> dict[str, Any]:
+        return {}
+
     @cached_property
     @abstractmethod
     def observation_spec(self) -> ObservationSpec: ...

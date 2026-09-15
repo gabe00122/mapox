@@ -1,3 +1,4 @@
+import json
 from functools import cached_property
 from typing import Any, Literal, cast
 
@@ -282,5 +283,8 @@ class RustEnv(Environment[None]):
     def action_vocab(self) -> Vocabulary:
         return self._action_vocab
 
-    def set_enjoy_mode(self, task_num: int | None) -> None:
-        self._inner.set_enjoy_mode(task_num)
+    def set_enjoy_mode(self, task_id: int | None) -> None:
+        self._inner.set_enjoy_mode(task_id)
+
+    def consume_metrics(self) -> dict[str, Any]:
+        return json.loads(self._inner.consume_metrics())

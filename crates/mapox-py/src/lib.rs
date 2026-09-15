@@ -226,5 +226,9 @@ mod _core {
             });
             Ok(())
         }
+
+        fn consume_metrics(&mut self) -> String {
+            self.env_mut().consume_metrics().to_string()
+        }
     }
 }

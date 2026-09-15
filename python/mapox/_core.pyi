@@ -16,6 +16,8 @@ class Env:
 
     def set_enjoy_mode(self, task_num: int | None) -> None: ...
 
+    def consume_metrics(self) -> str: ...
+
     def reset(
         self,
         seed: int,
