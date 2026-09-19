@@ -2,6 +2,8 @@ pub mod app;
 pub mod env;
 mod grid;
 pub mod keys;
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) mod rgb;
 pub mod tileset;
 
 #[cfg(not(target_arch = "wasm32"))]

@@ -33,9 +33,7 @@ impl Tileset {
     /// backend delivers input, the context still reports a placeholder max
     /// texture side of 2048 and debug builds assert the 2679px sheet against it.
     pub fn embedded(ctx: &egui::Context) -> Self {
-        let rgba = image::load_from_memory_with_format(TILESET_PNG, image::ImageFormat::Png)
-            .expect("embedded tileset is a valid png")
-            .into_rgba8();
+        let rgba = Self::decode();
         let size = [rgba.width() as usize, rgba.height() as usize];
         let pixels = ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
         // Pixel art, and neighbouring tiles sit one pixel away: interpolating
@@ -53,8 +51,14 @@ impl Tileset {
         self.texture.size_vec2()
     }
 
+    pub(crate) fn decode() -> image::RgbaImage {
+        image::load_from_memory_with_format(TILESET_PNG, image::ImageFormat::Png)
+            .expect("embedded tileset is a valid png")
+            .into_rgba8()
+    }
+
     /// Source rect of tile `(col, row)` in sheet pixels.
-    fn source(col: u32, row: u32) -> Rect {
+    pub(crate) fn source(col: u32, row: u32) -> Rect {
         Rect::from_min_size(
             pos2(
                 col as f32 * (TILE_SIZE + TILE_PAD) + TILE_PAD,
