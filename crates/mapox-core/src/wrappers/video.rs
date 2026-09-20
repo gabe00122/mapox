@@ -3,11 +3,9 @@
 use std::{
     fs::{self, OpenOptions},
     io::{self, Write},
-    path::{Path, PathBuf},
+    path::PathBuf,
     process::{Child, ChildStdin, Command, Stdio},
 };
-
-use serde::{Deserialize, Serialize};
 
 use crate::{
     env::Environment,
@@ -21,8 +19,7 @@ use crate::{
 };
 
 /// One post-step frame per recorded step. FPS controls playback, not training speed.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[serde(default)]
+#[derive(Clone, Debug)]
 pub struct VideoConfig {
     /// Use a separate directory for each run/worker; existing videos are never overwritten.
     pub output_dir: PathBuf,
@@ -36,6 +33,8 @@ pub struct VideoConfig {
     /// Output pixels; both dimensions must be positive and even for H.264/yuv420p.
     pub width: u32,
     pub height: u32,
+    /// x264 CRF quality: 0 (lossless) to 51; higher compresses more. 23 is the default.
+    pub crf: u8,
     /// ffmpeg executable, resolved through PATH unless an explicit path is given.
     pub ffmpeg: PathBuf,
 }
@@ -50,6 +49,7 @@ impl Default for VideoConfig {
             fps: 30,
             width: 640,
             height: 480,
+            crf: 23,
             ffmpeg: PathBuf::from("ffmpeg"),
         }
     }
@@ -69,6 +69,7 @@ impl VideoConfig {
             || self.height % 2 != 0
             || self.width > i32::MAX as u32
             || self.height > i32::MAX as u32
+            || self.crf > 51
             || (self.width as usize)
                 .checked_mul(self.height as usize)
                 .and_then(|n| n.checked_mul(3))
@@ -76,7 +77,7 @@ impl VideoConfig {
         {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "video requires nonzero record_steps/fps, an interval >= record_steps, and positive even dimensions within ffmpeg's limits",
+                "video requires nonzero record_steps/fps, an interval >= record_steps, crf <= 51, and positive even dimensions within ffmpeg's limits",
             ));
         }
         Ok(())
@@ -89,19 +90,15 @@ impl VideoConfig {
 ///
 /// Each active step synchronously pipes one RGB frame to ffmpeg (bounded memory and
 /// backpressure). Encoding/finalization can slow recorded steps, never inactive ones.
-/// A recording failure disables future recording, logs the error and retains it in
-/// [`Self::take_error`]; the environment continues stepping normally.
-///
-/// Call [`Self::finish`] at training shutdown to flush a partial clip and observe
-/// errors. Drop also finalizes best-effort. No display server or GPU is required.
+/// A recording failure disables future recording and is logged; the environment
+/// continues stepping normally. Dropping the wrapper finalizes the current partial
+/// clip best-effort. No display server or GPU is required.
 pub struct VideoWrapper {
     inner: Box<dyn Environment>,
     config: VideoConfig,
     steps: u64,
     next_start: Option<u64>,
     recording: Option<Recording>,
-    last_video: Option<PathBuf>,
-    error: Option<io::Error>,
 }
 
 impl VideoWrapper {
@@ -115,40 +112,14 @@ impl VideoWrapper {
             config,
             steps: 0,
             recording: None,
-            last_video: None,
-            error: None,
         })
     }
 
-    pub fn is_recording(&self) -> bool {
-        self.recording.is_some()
-    }
-
-    /// Most recently finalized clip; partial/failed files are never reported here.
-    pub fn last_video(&self) -> Option<&Path> {
-        self.last_video.as_deref()
-    }
-
-    /// Removes the last recording error. This does not re-enable failed recording.
-    pub fn take_error(&mut self) -> Option<io::Error> {
-        self.error.take()
-    }
-
-    /// Stops all future recording and finalizes the current partial clip, if any.
-    /// Further environment steps remain pass-through. Previously stored step errors
-    /// remain available through `take_error`.
-    pub fn finish(&mut self) -> io::Result<Option<PathBuf>> {
-        self.next_start = None;
-        self.finish_clip()
-    }
-
-    fn finish_clip(&mut self) -> io::Result<Option<PathBuf>> {
-        let Some(recording) = self.recording.take() else {
-            return Ok(None);
-        };
-        let path = recording.finish()?;
-        self.last_video = Some(path.clone());
-        Ok(Some(path))
+    fn finish_clip(&mut self) -> io::Result<()> {
+        match self.recording.take() {
+            Some(recording) => recording.encoder.finish(),
+            None => Ok(()),
+        }
     }
 
     fn record_step(&mut self, step: u64) -> io::Result<()> {
@@ -185,7 +156,6 @@ impl Environment for VideoWrapper {
             log::error!("video recording disabled at step {step}: {error}");
             self.recording = None;
             self.next_start = None;
-            self.error = Some(error);
         }
     }
 
@@ -228,7 +198,7 @@ impl Environment for VideoWrapper {
 
 impl Drop for VideoWrapper {
     fn drop(&mut self) {
-        if let Err(error) = self.finish() {
+        if let Err(error) = self.finish_clip() {
             log::error!("failed to finalize video: {error}");
         }
     }
@@ -238,7 +208,6 @@ struct Recording {
     encoder: Encoder,
     renderer: Option<RgbRenderer>,
     state: GridRenderState,
-    path: PathBuf,
     frames: u64,
 }
 
@@ -271,13 +240,10 @@ impl Recording {
             // No B-frame reordering: even partial fragments start at t=0,
             // without the decoder delay shifting their presentation timestamps.
             .args([
-                "-i",
-                "pipe:0",
-                "-an",
-                "-c:v",
-                "libx264",
-                "-preset",
-                "veryfast",
+                "-i", "pipe:0", "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf",
+            ])
+            .arg(config.crf.to_string())
+            .args([
                 "-bf",
                 "0",
                 "-pix_fmt",
@@ -312,7 +278,6 @@ impl Recording {
             },
             renderer: Some(renderer),
             state: GridRenderState::default(),
-            path,
             frames: 0,
         })
     }
@@ -330,11 +295,6 @@ impl Recording {
         self.encoder.stdin.as_mut().unwrap().write_all(pixels)?;
         self.frames += 1;
         Ok(())
-    }
-
-    fn finish(self) -> io::Result<PathBuf> {
-        self.encoder.finish()?;
-        Ok(self.path)
     }
 }
 

@@ -3,6 +3,7 @@ use crate::{
     envs::snake::{Snake, SnakeConfig},
     timestep::TimeStepBuffers,
 };
+use std::path::Path;
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -140,12 +141,12 @@ fn inactive_and_failed_recording_preserve_training_without_rendering_or_retries(
             assert!(!output_dir.exists());
             assert_eq!(settings.load(Ordering::Relaxed), 0);
         } else {
+            // Recording starts (creating the directory) but the missing ffmpeg
+            // binary fails it; the environment must keep stepping unaffected.
             assert_eq!(settings.load(Ordering::Relaxed), 1);
         }
     }
     assert_eq!(renders.load(Ordering::Relaxed), 0);
-    assert_eq!(video.take_error().unwrap().kind(), io::ErrorKind::NotFound);
-    assert!(video.last_video().is_none());
     assert_eq!(video.consume_metrics(), plain.consume_metrics());
     assert_eq!(fs::read_dir(output_dir).unwrap().count(), 0);
 }
@@ -172,6 +173,10 @@ fn rejects_unencodable_dimensions_and_overlapping_windows_before_io() {
         VideoConfig {
             record_steps: 10,
             interval_steps: Some(9),
+            ..Default::default()
+        },
+        VideoConfig {
+            crf: 52,
             ..Default::default()
         },
     ] {
@@ -223,11 +228,11 @@ fn scheduled_clips_cross_resets_and_flush_partial_video() {
             video.reset(1, &mut ts.view_mut());
         }
         video.step(&[0], &mut ts.view_mut());
-        assert!(video.take_error().is_none());
-        assert_eq!(video.is_recording(), matches!(step, 2 | 3 | 7 | 8));
     }
+    // Recording windows: steps 2..5 and 7..9, one render each.
     assert_eq!(renders.load(Ordering::Relaxed), 5);
-    let partial = video.finish().unwrap().unwrap();
+    // Dropping finalizes both partial clips before probing.
+    drop(video);
     for (start, frames) in [(2, 3), (7, 2)] {
         let path = dir.0.join(format!("video-{start:012}.mp4"));
         let stream = probe(&path);
@@ -241,11 +246,6 @@ fn scheduled_clips_cross_resets_and_flush_partial_video() {
         let duration: f64 = stream["duration"].as_str().unwrap().parse().unwrap();
         assert!((duration - f64::from(frames) / 12.0).abs() < 0.001);
     }
-    assert_eq!(video.last_video(), Some(partial.as_path()));
-    for _ in 0..10 {
-        video.step(&[0], &mut ts.view_mut());
-    }
-    assert_eq!(renders.load(Ordering::Relaxed), 5);
 }
 
 #[test]
@@ -264,7 +264,6 @@ fn drop_flushes_and_existing_videos_are_not_overwritten() {
     let mut ts = TimeStepBuffers::new(&video);
     video.reset(0, &mut ts.view_mut());
     video.step(&[0], &mut ts.view_mut());
-    assert!(video.take_error().is_none());
     drop(video);
     let path = dir.0.join("video-000000000000.mp4");
     assert_eq!(probe(&path)["nb_read_frames"], "1");
@@ -272,9 +271,6 @@ fn drop_flushes_and_existing_videos_are_not_overwritten() {
     let (mut collision, _, _) = observed(config);
     collision.reset(0, &mut ts.view_mut());
     collision.step(&[0], &mut ts.view_mut());
-    assert_eq!(
-        collision.take_error().unwrap().kind(),
-        io::ErrorKind::AlreadyExists
-    );
+    // The failed launch disables recording; the pre-existing video is intact.
     assert_eq!(fs::read(path).unwrap(), original);
 }
