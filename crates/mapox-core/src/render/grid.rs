@@ -1,12 +1,9 @@
-//! Grid-to-screen layout and the one tile-drawing loop both view modes
-//! share. The env's y axis points up and screen y points down; `cell_rect`
-//! is the single place that flip lives, and `pos_to_cell` is its inverse.
+//! Grid-to-screen layout shared by both view modes. The env's y axis
+//! points up and screen y points down; `cell_rect` applies that flip to
+//! overlays, and `pos_to_cell` is its inverse.
 
-use crate::{
-    render::tileset::{TILE_SIZE, Tileset},
-    vocab::VocabId,
-};
-use egui::{Color32, Pos2, Rect, pos2, vec2};
+use crate::render::tileset::TILE_SIZE;
+use egui::{Pos2, Rect, pos2, vec2};
 
 /// Maps a `cols x rows` grid (env coords: x right, y up) onto a screen
 /// rect at the largest whole-number scale that fits, centred.
@@ -30,6 +27,14 @@ impl GridLayout {
     /// at 1×) an integer scale cannot fit at all; the grid then takes the
     /// fractional fit and accepts the wobble over overflowing the window.
     pub fn fit(area: Rect, cols: usize, rows: usize, pixels_per_point: f32) -> Self {
+        if cols == 0 || rows == 0 {
+            return Self {
+                origin: area.center(),
+                tile: 0.0,
+                cols,
+                rows,
+            };
+        }
         let tile_px =
             (area.width() / cols as f32).min(area.height() / rows as f32) * pixels_per_point;
         let tile = if tile_px >= TILE_SIZE {
@@ -64,6 +69,9 @@ impl GridLayout {
 
     /// Grid cell under a screen position, `None` outside the grid.
     pub fn pos_to_cell(&self, pos: Pos2) -> Option<(usize, usize)> {
+        if self.cols == 0 || self.rows == 0 || self.tile <= 0.0 {
+            return None;
+        }
         let col = ((pos.x - self.origin.x) / self.tile).floor();
         let row = ((pos.y - self.origin.y) / self.tile).floor();
         if col < 0.0 || row < 0.0 || col >= self.cols as f32 || row >= self.rows as f32 {
@@ -74,29 +82,6 @@ impl GridLayout {
 
     pub fn grid_rect(&self) -> Rect {
         self.cell_rect(0.0, 0.0, self.cols as f32, self.rows as f32)
-    }
-}
-
-/// Draws every cell of the grid; `id_at(x, y)` returns the obs-vocab id of
-/// the cell and `art` maps that id to sheet coordinates.
-pub(crate) fn draw_tile_grid(
-    painter: &egui::Painter,
-    tileset: &Tileset,
-    art: &[(u32, u32)],
-    layout: &GridLayout,
-    mut id_at: impl FnMut(usize, usize) -> VocabId,
-) {
-    for x in 0..layout.cols {
-        for y in 0..layout.rows {
-            let (col, row) = art[usize::from(id_at(x, y))];
-            tileset.draw(
-                painter,
-                col,
-                row,
-                layout.cell_rect(x as f32, y as f32, 1.0, 1.0),
-                Color32::WHITE,
-            );
-        }
     }
 }
 

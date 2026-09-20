@@ -1,5 +1,6 @@
 pub mod app;
 pub mod env;
+mod gpu;
 mod grid;
 pub mod keys;
 #[cfg(not(target_arch = "wasm32"))]

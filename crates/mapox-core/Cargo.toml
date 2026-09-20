@@ -22,6 +22,7 @@ serde_json.workspace = true
 # eframe compiles for native (winit + wgpu) and wasm (web runner + wgpu)
 # alike, so the demo app lives here once and each shell crate just runs it.
 eframe.workspace = true
-wgpu.workspace = true
+# Egui callbacks require Send + Sync; the wasm shell runs without atomics on one thread.
+wgpu = { workspace = true, features = ["fragile-send-sync-non-atomic-wasm"] }
 egui.workspace = true
 image.workspace = true

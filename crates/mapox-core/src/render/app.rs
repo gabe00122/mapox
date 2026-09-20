@@ -8,10 +8,10 @@ use crate::{
     policy::Policy,
     render::{
         env::{GridRenderSettings, GridRenderState, visible_tiles},
-        grid::{GridLayout, draw_tile_grid},
+        gpu::TilemapRenderer,
+        grid::GridLayout,
         keys::{self, Command, Input},
         resolve_art,
-        tileset::Tileset,
     },
     symbols,
     timestep::TimeStepBuffers,
@@ -24,12 +24,6 @@ use rand::{RngExt, SeedableRng, rngs::SmallRng};
 /// How many steps the clock may replay in one frame to catch up after a
 /// stall; the rest of the debt is forgiven.
 const MAX_CATCH_UP_STEPS: usize = 4;
-
-/// Fog over the tiles no agent can currently see: strong enough to read as
-/// "not observed", faint enough that the map underneath stays legible. A
-/// ~43% grey, premultiplied by hand because the unpremultiplied constructor
-/// is not const.
-const UNSEEN_TILE_OVERLAY: Color32 = Color32::from_rgba_premultiplied(41, 41, 41, 110);
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ViewMode {
@@ -50,11 +44,8 @@ pub enum PacingMode {
 }
 
 pub struct RenderApp {
-    /// Uploaded on the first frame, not in [`RenderApp::new`]: until the
-    /// backend delivers input, the context reports a placeholder 2048 max
-    /// texture side and `load_texture` debug-asserts the 2679px sheet against
-    /// it. The real wgpu device allows 8192.
-    tileset: Option<Tileset>,
+    /// Created on the first frame, when the backend's wgpu device is available.
+    tilemap_renderer: Option<TilemapRenderer>,
 
     env: Box<dyn Environment>,
     policy: Box<dyn Policy>,
@@ -74,6 +65,10 @@ pub struct RenderApp {
 
     settings: GridRenderSettings,
     render_state: GridRenderState,
+    /// The env changed since the last render-state snapshot.
+    render_state_dirty: bool,
+    /// The displayed map changed since the last GPU upload.
+    tilemap_dirty: bool,
     /// Sheet coordinates indexed by obs vocab id.
     art: Vec<(u32, u32)>,
 
@@ -116,7 +111,7 @@ impl RenderApp {
 
         let num_agents = env.num_agents();
         Self {
-            tileset: None,
+            tilemap_renderer: None,
             actions: vec![0; num_agents],
             actions_ready: false,
             env,
@@ -126,6 +121,8 @@ impl RenderApp {
             buffers,
             settings,
             render_state: GridRenderState::default(),
+            render_state_dirty: true,
+            tilemap_dirty: true,
             art,
             returns: vec![0.0; num_agents],
             view_mode: ViewMode::BirdsEye,
@@ -156,6 +153,8 @@ impl RenderApp {
         self.returns.fill(0.0);
         // any precomputed actions were for the old episode's observations
         self.actions_ready = false;
+        self.render_state_dirty = true;
+        self.tilemap_dirty = true;
     }
 
     fn compute_actions(&mut self) {
@@ -197,6 +196,8 @@ impl RenderApp {
         }
         self.step_count += 1;
         self.actions_ready = false;
+        self.render_state_dirty = true;
+        self.tilemap_dirty = true;
     }
 
     fn run_command(&mut self, command: Command, ui: &egui::Ui) {
@@ -205,7 +206,8 @@ impl RenderApp {
                 self.view_mode = match self.view_mode {
                     ViewMode::BirdsEye => ViewMode::AgentPov,
                     ViewMode::AgentPov => ViewMode::BirdsEye,
-                }
+                };
+                self.tilemap_dirty = true;
             }
             Command::TogglePacing => {
                 self.pacing = match self.pacing {
@@ -215,8 +217,11 @@ impl RenderApp {
                 self.next_step_time = None;
             }
             Command::NextAgent => {
-                if self.env.num_agents() > 0 {
+                if self.env.num_agents() > 1 {
                     self.focused_agent = (self.focused_agent + 1) % self.env.num_agents();
+                    if self.view_mode == ViewMode::AgentPov {
+                        self.tilemap_dirty = true;
+                    }
                 }
             }
             Command::Reset => self.reset(),
@@ -359,33 +364,28 @@ impl RenderApp {
 
         // clip so the focused view rect can't overhang into the letterbox
         let painter = ui.painter_at(layout.grid_rect());
-        let tileset = self.tileset.as_ref().expect("uploaded at the top of ui()");
-        let tilemap = &self.render_state.tilemap;
-        draw_tile_grid(&painter, tileset, &self.art, &layout, |x, y| {
-            tilemap[[x, y]]
-        });
-
-        // grey out the tiles no agent's observation sees through, leaving
-        // the union of everyone's line of sight at full brightness; the obs
-        // vocab having no mask tile means nothing is ever hidden
-        let mask = self.settings.obs_vocab.get(symbols::TILE_MASK);
-        let seen = visible_tiles(
-            &self.settings,
-            &self.render_state.agent_positions,
-            self.buffers.obs.slice(s![.., .., .., 0]),
-            mask,
-        );
-        for x in 0..self.settings.tile_width {
-            for y in 0..self.settings.tile_height {
-                if !seen[[x, y]] {
-                    painter.rect_filled(
-                        layout.cell_rect(x as f32, y as f32, 1.0, 1.0),
-                        0.0,
-                        UNSEEN_TILE_OVERLAY,
-                    );
-                }
-            }
+        let renderer = self
+            .tilemap_renderer
+            .as_mut()
+            .expect("initialized at the top of ui()");
+        if self.tilemap_dirty {
+            // Keep the union of every agent's encoded line of sight bright;
+            // a vocabulary without a mask makes the whole window visible.
+            let mask = self.settings.obs_vocab.get(symbols::TILE_MASK);
+            let seen = visible_tiles(
+                &self.settings,
+                &self.render_state.agent_positions,
+                self.buffers.obs.slice(s![.., .., .., 0]),
+                mask,
+            );
+            let tilemap = &self.render_state.tilemap;
+            let art = &self.art;
+            renderer.update(layout.cols, layout.rows, |x, y| {
+                (art[usize::from(tilemap[[x, y]])], seen[[x, y]])
+            });
+            self.tilemap_dirty = false;
         }
+        renderer.paint(&painter, layout.grid_rect());
 
         // outline the focused agent and its field of view, so the partial
         // observability the env exposes is visible.
@@ -412,19 +412,30 @@ impl RenderApp {
             self.settings.view_height,
             ui.ctx().pixels_per_point(),
         );
-        let tileset = self.tileset.as_ref().expect("uploaded at the top of ui()");
-        let obs = &self.buffers.obs;
-        let focused = self.focused_agent;
-        draw_tile_grid(ui.painter(), tileset, &self.art, &layout, |x, y| {
-            obs[[focused, x, y, 0]]
-        });
+        let renderer = self
+            .tilemap_renderer
+            .as_mut()
+            .expect("initialized at the top of ui()");
+        if self.tilemap_dirty {
+            let obs = &self.buffers.obs;
+            let focused = self.focused_agent;
+            let art = &self.art;
+            renderer.update(layout.cols, layout.rows, |x, y| {
+                (art[usize::from(obs[[focused, x, y, 0]])], true)
+            });
+            self.tilemap_dirty = false;
+        }
+        renderer.paint(ui.painter(), layout.grid_rect());
     }
 }
 
 impl eframe::App for RenderApp {
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
-        if self.tileset.is_none() {
-            self.tileset = Some(Tileset::embedded(ui.ctx()));
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        if self.tilemap_renderer.is_none() {
+            let state = frame
+                .wgpu_render_state()
+                .expect("the tilemap renderer requires the wgpu backend");
+            self.tilemap_renderer = Some(TilemapRenderer::new(state));
         }
 
         // run the policy ahead of input, so a keypress finds its step's
@@ -444,7 +455,10 @@ impl eframe::App for RenderApp {
 
         self.run_clock(ui);
 
-        self.env.render_state_into(&mut self.render_state);
+        if self.render_state_dirty {
+            self.env.render_state_into(&mut self.render_state);
+            self.render_state_dirty = false;
+        }
 
         egui::Panel::bottom("hint").show(ui, |ui| ui.label(RichText::new(self.hint_text()).weak()));
         egui::CentralPanel::default()
