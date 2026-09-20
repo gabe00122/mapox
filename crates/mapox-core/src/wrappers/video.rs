@@ -7,9 +7,12 @@ use std::{
     process::{Child, ChildStdin, Command, Stdio},
 };
 
+use serde::{Deserialize, Serialize};
+
 use crate::{
     env::Environment,
     error::{MapoxError, MapoxResult},
+    make::{EnvConfig, make},
     render::{
         env::{GridRenderSettings, GridRenderState},
         rgb::RgbRenderer,
@@ -20,8 +23,9 @@ use crate::{
 };
 
 /// One post-step frame per recorded step. FPS controls playback, not training speed.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct VideoConfig {
+    pub env: EnvConfig,
     /// Use a separate directory for each run/worker; existing videos are never overwritten.
     pub output_dir: PathBuf,
     /// Number of step calls (frames) in each clip.
@@ -38,22 +42,6 @@ pub struct VideoConfig {
     pub crf: u8,
     /// ffmpeg executable, resolved through PATH unless an explicit path is given.
     pub ffmpeg: PathBuf,
-}
-
-impl Default for VideoConfig {
-    fn default() -> Self {
-        Self {
-            output_dir: PathBuf::from("videos"),
-            record_steps: 256,
-            interval_steps: Some(10_000),
-            start_step: 0,
-            fps: 30,
-            width: 640,
-            height: 480,
-            crf: 23,
-            ffmpeg: PathBuf::from("ffmpeg"),
-        }
-    }
 }
 
 impl VideoConfig {
@@ -104,12 +92,15 @@ pub struct VideoWrapper {
 impl VideoWrapper {
     /// Validates configuration only. No rendering, filesystem access or process
     /// creation happens until the first scheduled recording step.
-    pub fn new(inner: Box<dyn Environment>, config: VideoConfig) -> MapoxResult<Self> {
+    pub fn new(config: &VideoConfig, length: usize) -> MapoxResult<Self> {
         config.validate()?;
+
+        let inner = make(&config.env, length)?;
+
         Ok(Self {
             inner,
             next_start: Some(config.start_step),
-            config,
+            config: config.clone(),
             steps: 0,
             recording: None,
         })

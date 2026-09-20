@@ -7,8 +7,12 @@ use crate::{
         scouts::{Scouts, ScoutsConfig},
         snake::{Snake, SnakeConfig},
     },
-    error::{MapoxError, MapoxResult},
-    wrappers::{multitask::MultitaskWrapper, vector::VectorWrapper},
+    error::MapoxResult,
+    wrappers::{
+        multitask::MultitaskWrapper,
+        vector::VectorWrapper,
+        video::{VideoConfig, VideoWrapper},
+    },
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -17,6 +21,7 @@ pub enum EnvConfig {
     RustFindReturn(Box<FindReturnConfig>),
     RustScouts(Box<ScoutsConfig>),
     RustSnake(Box<SnakeConfig>),
+    RustVideo(Box<VideoConfig>),
     RustVec { num: usize, env: Box<EnvConfig> },
     RustMulti { envs: Vec<MultiEnvSpec> },
 }
@@ -33,6 +38,8 @@ pub fn make(config: &EnvConfig, length: usize) -> MapoxResult<Box<dyn Environmen
         EnvConfig::RustFindReturn(config) => Ok(Box::new(FindReturn::new(config, length))),
         EnvConfig::RustScouts(config) => Ok(Box::new(Scouts::new(config, length))),
         EnvConfig::RustSnake(config) => Ok(Box::new(Snake::new(config, length))),
+        #[cfg(not(target_arch = "wasm32"))]
+        EnvConfig::RustVideo(config) => Ok(Box::new(VideoWrapper::new(config, length)?)),
         EnvConfig::RustVec { num, env } => Ok(Box::new(VectorWrapper::new(*num, env, length)?)),
         EnvConfig::RustMulti { envs } => Ok(Box::new(MultitaskWrapper::new(envs, length)?)),
     }
