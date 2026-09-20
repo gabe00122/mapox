@@ -3,6 +3,7 @@ use rand::{Rng, SeedableRng};
 use rayon::prelude::*;
 
 use crate::env::Environment;
+use crate::error::MapoxError;
 use crate::make::{MultiEnvSpec, make};
 use crate::render::env::{GridRenderSettings, GridRenderState};
 use crate::spec::{ActionSpec, ObservationSpec};
@@ -25,24 +26,27 @@ pub struct MultitaskWrapper {
 }
 
 impl MultitaskWrapper {
-    pub fn new(specs: &[MultiEnvSpec], length: usize) -> Result<Self, String> {
+    pub fn new(specs: &[MultiEnvSpec], length: usize) -> Result<Self, MapoxError> {
         let num_tasks = specs.len(); // this assumes each task has only one sub task, to support arbitrarily nested subtasks we need to gather the num_tasks from actual child task instances
         let mut task_offsets: Vec<usize> = Vec::new();
         let mut envs: Vec<Box<dyn Environment>> = Vec::new();
         let mut task_names = Vec::with_capacity(num_tasks);
 
         if specs.is_empty() {
-            return Err("multitask env must contain at least one task".into());
+            return Err(MapoxError::InvalidConfig {
+                reason: "multitask env requires at least one task".into(),
+            });
         }
         for spec in specs {
             if spec.num == 0 {
-                return Err(format!(
-                    "task {:?} must contain at least one env",
-                    spec.name
-                ));
+                return Err(MapoxError::InvalidConfig {
+                    reason: format!("task {:?} must contain at least one env", spec.name),
+                });
             }
             if task_names.contains(&spec.name) {
-                return Err(format!("duplicate task name {:?}", spec.name));
+                return Err(MapoxError::InvalidConfig {
+                    reason: format!("duplicate task name {:?}", spec.name),
+                });
             }
             task_names.push(spec.name.clone());
         }

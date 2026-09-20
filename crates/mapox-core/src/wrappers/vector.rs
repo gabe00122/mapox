@@ -3,6 +3,7 @@ use rand::{RngExt, SeedableRng, rngs::SmallRng};
 use rayon::prelude::*;
 
 use crate::env::Environment;
+use crate::error::MapoxError;
 use crate::make::{EnvConfig, make};
 use crate::render::env::{GridRenderSettings, GridRenderState};
 use crate::spec::{ActionSpec, ObservationSpec};
@@ -17,9 +18,11 @@ pub struct VectorWrapper {
 impl VectorWrapper {
     /// `num` copies of `config`, each built through `make` and stepped in
     /// parallel by this wrapper's own reset/step loop.
-    pub fn new(num: usize, config: &EnvConfig, length: usize) -> Result<Self, String> {
+    pub fn new(num: usize, config: &EnvConfig, length: usize) -> Result<Self, MapoxError> {
         if num == 0 {
-            return Err("vec env num must be at least 1".into());
+            return Err(MapoxError::InvalidConfig {
+                reason: "vectorized env requires num >= 1".into(),
+            });
         }
         let envs = (0..num)
             .map(|_| make(config, length))

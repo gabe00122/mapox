@@ -7,6 +7,7 @@ use crate::{
         scouts::{Scouts, ScoutsConfig},
         snake::{Snake, SnakeConfig},
     },
+    error::{MapoxError, MapoxResult},
     wrappers::{multitask::MultitaskWrapper, vector::VectorWrapper},
 };
 
@@ -27,7 +28,7 @@ pub struct MultiEnvSpec {
     pub env: Box<EnvConfig>,
 }
 
-pub fn make(config: &EnvConfig, length: usize) -> Result<Box<dyn Environment>, String> {
+pub fn make(config: &EnvConfig, length: usize) -> MapoxResult<Box<dyn Environment>> {
     match config {
         EnvConfig::RustFindReturn(config) => Ok(Box::new(FindReturn::new(config, length))),
         EnvConfig::RustScouts(config) => Ok(Box::new(Scouts::new(config, length))),

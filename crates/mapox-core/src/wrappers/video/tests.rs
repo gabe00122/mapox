@@ -181,7 +181,7 @@ fn rejects_unencodable_dimensions_and_overlapping_windows_before_io() {
         },
     ] {
         assert!(
-            matches!(VideoWrapper::new(Box::new(snake()), config), Err(error) if error.kind() == io::ErrorKind::InvalidInput)
+            matches!(VideoWrapper::new(Box::new(snake()), config), Err(MapoxError::InvalidConfig { .. }))
         );
     }
 }

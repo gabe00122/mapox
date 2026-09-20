@@ -1,8 +1,6 @@
-//! Headless full-map rendering using the interactive renderer's art and layout.
-
-use std::io;
-
 use egui::{Pos2, Rect, vec2};
+
+use crate::error::{MapoxError, MapoxResult};
 
 use super::{
     env::{GridRenderSettings, GridRenderState},
@@ -24,19 +22,18 @@ pub(crate) struct RgbRenderer {
 }
 
 impl RgbRenderer {
-    pub(crate) fn new(settings: &GridRenderSettings, width: u32, height: u32) -> io::Result<Self> {
+    pub(crate) fn new(settings: &GridRenderSettings, width: u32, height: u32) -> MapoxResult<Self> {
         if settings.tile_width == 0 || settings.tile_height == 0 || width == 0 || height == 0 {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "empty video or map dimensions",
-            ));
+            return Err(MapoxError::InvalidConfig {
+                reason: "empty video or map dimensions".into(),
+            });
         }
         let len = (width as usize)
             .checked_mul(height as usize)
             .and_then(|n| n.checked_mul(3))
             .filter(|&n| n <= isize::MAX as usize)
-            .ok_or_else(|| {
-                io::Error::new(io::ErrorKind::InvalidInput, "video dimensions overflow")
+            .ok_or_else(|| MapoxError::InvalidConfig {
+                reason: "video dimensions overflow".into(),
             })?;
         let layout = GridLayout::fit(
             Rect::from_min_size(Pos2::ZERO, vec2(width as f32, height as f32)),
@@ -81,17 +78,14 @@ impl RgbRenderer {
         })
     }
 
-    pub(crate) fn render(&mut self, state: &GridRenderState) -> io::Result<&[u8]> {
+    pub(crate) fn render(&mut self, state: &GridRenderState) -> MapoxResult<&[u8]> {
         if state.tilemap.dim() != (self.cols, self.rows)
             || state
                 .tilemap
                 .iter()
                 .any(|&id| usize::from(id) >= self.sprites.len())
         {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "render state does not match render settings",
-            ));
+            return Err(MapoxError::RenderSettingsMismatch);
         }
         let stride = self.xs.len() * 3;
         for (row, y) in self.pixels.chunks_exact_mut(stride).zip(&self.ys) {
@@ -152,9 +146,9 @@ mod tests {
             assert_eq!(&row[18..54], &expected[(y % 12) * 36..(y % 12 + 1) * 36]);
         }
         state.tilemap.fill(2);
-        assert_eq!(
-            renderer.render(&state).unwrap_err().kind(),
-            io::ErrorKind::InvalidData
-        );
+        assert!(matches!(
+            renderer.render(&state).unwrap_err(),
+            MapoxError::RenderSettingsMismatch
+        ));
     }
 }

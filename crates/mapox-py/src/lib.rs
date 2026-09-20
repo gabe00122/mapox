@@ -122,7 +122,7 @@ mod _core {
                 .map_err(|err| PyValueError::new_err(err.to_string()))?;
 
             let inner: Box<dyn Environment + Send + Sync> =
-                make(&config, length).map_err(PyValueError::new_err)?;
+                make(&config, length).map_err(|err| PyValueError::new_err(err.to_string()))?;
 
             Ok(Self { inner: Some(inner) })
         }

@@ -2,13 +2,14 @@
 
 use std::{
     fs::{self, OpenOptions},
-    io::{self, Write},
+    io::Write,
     path::PathBuf,
     process::{Child, ChildStdin, Command, Stdio},
 };
 
 use crate::{
     env::Environment,
+    error::{MapoxError, MapoxResult},
     render::{
         env::{GridRenderSettings, GridRenderState},
         rgb::RgbRenderer,
@@ -56,7 +57,7 @@ impl Default for VideoConfig {
 }
 
 impl VideoConfig {
-    fn validate(&self) -> io::Result<()> {
+    fn validate(&self) -> MapoxResult<()> {
         if self.record_steps == 0
             || self
                 .interval_steps
@@ -75,10 +76,9 @@ impl VideoConfig {
                 .and_then(|n| n.checked_mul(3))
                 .is_none_or(|n| n > isize::MAX as usize)
         {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "video requires nonzero record_steps/fps, an interval >= record_steps, crf <= 51, and positive even dimensions within ffmpeg's limits",
-            ));
+            return Err(MapoxError::InvalidConfig {
+                reason: "video requires nonzero record_steps/fps, an interval >= record_steps, crf <= 51, and positive even dimensions within ffmpeg's limits".into()
+            });
         }
         Ok(())
     }
@@ -104,7 +104,7 @@ pub struct VideoWrapper {
 impl VideoWrapper {
     /// Validates configuration only. No rendering, filesystem access or process
     /// creation happens until the first scheduled recording step.
-    pub fn new(inner: Box<dyn Environment>, config: VideoConfig) -> io::Result<Self> {
+    pub fn new(inner: Box<dyn Environment>, config: VideoConfig) -> MapoxResult<Self> {
         config.validate()?;
         Ok(Self {
             inner,
@@ -115,14 +115,14 @@ impl VideoWrapper {
         })
     }
 
-    fn finish_clip(&mut self) -> io::Result<()> {
+    fn finish_clip(&mut self) -> MapoxResult<()> {
         match self.recording.take() {
             Some(recording) => recording.encoder.finish(),
             None => Ok(()),
         }
     }
 
-    fn record_step(&mut self, step: u64) -> io::Result<()> {
+    fn record_step(&mut self, step: u64) -> MapoxResult<()> {
         if self.next_start == Some(step) {
             self.next_start = self
                 .config
@@ -212,7 +212,7 @@ struct Recording {
 }
 
 impl Recording {
-    fn new(env: &dyn Environment, config: &VideoConfig, step: u64) -> io::Result<Self> {
+    fn new(env: &dyn Environment, config: &VideoConfig, step: u64) -> MapoxResult<Self> {
         let renderer = RgbRenderer::new(&env.get_render_settings(), config.width, config.height)?;
         fs::create_dir_all(&config.output_dir)?;
         let path = config.output_dir.join(format!("video-{step:012}.mp4"));
@@ -261,12 +261,12 @@ impl Recording {
             .spawn();
         let mut child = match child {
             Ok(child) => child,
-            Err(error) => {
+            Err(source) => {
                 let _ = fs::remove_file(&path);
-                return Err(io::Error::new(
-                    error.kind(),
-                    format!("cannot launch {}: {error}", config.ffmpeg.display()),
-                ));
+                return Err(MapoxError::FfmpegSpawn {
+                    exe: config.ffmpeg.clone(),
+                    source,
+                });
             }
         };
         let stdin = child.stdin.take();
@@ -282,7 +282,7 @@ impl Recording {
         })
     }
 
-    fn capture(&mut self, env: &dyn Environment, config: &VideoConfig) -> io::Result<()> {
+    fn capture(&mut self, env: &dyn Environment, config: &VideoConfig) -> MapoxResult<()> {
         if self.renderer.is_none() {
             self.renderer = Some(RgbRenderer::new(
                 &env.get_render_settings(),
@@ -308,15 +308,15 @@ struct Encoder {
 }
 
 impl Encoder {
-    fn finish(mut self) -> io::Result<()> {
+    fn finish(mut self) -> MapoxResult<()> {
         // EOF flushes delayed frames and the container trailer before waiting.
         self.stdin.take();
         let status = self.child.wait()?;
         self.reaped = true;
         if !status.success() {
-            return Err(io::Error::other(format!(
-                "ffmpeg exited with {status}; see stderr for details"
-            )));
+            return Err(MapoxError::FfmpegExited {
+                status: status.to_string(),
+            });
         }
         Ok(())
     }
