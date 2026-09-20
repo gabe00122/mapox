@@ -62,6 +62,38 @@ class RustScoutsConfig(BaseModel):
     harvester_reward: float = 1.0
 
 
+class RustVideoConfig(BaseModel):
+    """Records the wrapped env's render view to mp4 clips with ffmpeg.
+
+    Wraps outside a vector/multi env so there is one encoder per training run,
+    not per instance. One post-step frame per recorded step; fps controls
+    playback, not training speed.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    env_type: Literal["rust_video"] = "rust_video"
+
+    env: RustEnvConfig = Field(discriminator="env_type")
+    # a separate directory per run/worker; existing videos are never overwritten
+    output_dir: str = "videos"
+    # number of step calls (frames) in each clip
+    record_steps: int = 256
+    # start-to-start spacing, at least record_steps; None records only one clip
+    interval_steps: int | None = 10_000
+    # zero-based step index of the first frame: 0 records immediately after
+    # the first step
+    start_step: int = 0
+    fps: int = 30
+    # output pixels; both dimensions must be positive and even for
+    # H.264/yuv420p
+    width: int = 640
+    height: int = 480
+    # x264 CRF quality: 0 (lossless) to 51; higher compresses more
+    crf: int = 23
+    # ffmpeg executable, resolved through PATH unless an explicit path is given
+    ffmpeg: str = "ffmpeg"
+
+
 class RustSnakeConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
     env_type: Literal["rust_snake"] = "rust_snake"
@@ -113,6 +145,7 @@ type RustEnvConfig = (
     RustFindReturnConfig
     | RustScoutsConfig
     | RustSnakeConfig
+    | RustVideoConfig
     | RustVecConfig
     | RustMultiConfig
 )

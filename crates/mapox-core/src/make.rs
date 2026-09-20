@@ -8,12 +8,10 @@ use crate::{
         snake::{Snake, SnakeConfig},
     },
     error::MapoxResult,
-    wrappers::{
-        multitask::MultitaskWrapper,
-        vector::VectorWrapper,
-        video::{VideoConfig, VideoWrapper},
-    },
+    wrappers::{multitask::MultitaskWrapper, vector::VectorWrapper},
 };
+#[cfg(not(target_arch = "wasm32"))]
+use crate::wrappers::video::{VideoConfig, VideoWrapper};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "env_type", rename_all = "snake_case")]
@@ -21,6 +19,7 @@ pub enum EnvConfig {
     RustFindReturn(Box<FindReturnConfig>),
     RustScouts(Box<ScoutsConfig>),
     RustSnake(Box<SnakeConfig>),
+    #[cfg(not(target_arch = "wasm32"))]
     RustVideo(Box<VideoConfig>),
     RustVec { num: usize, env: Box<EnvConfig> },
     RustMulti { envs: Vec<MultiEnvSpec> },

@@ -14,6 +14,7 @@ from mapox.envs.rust_env import (
     RustScoutsConfig,
     RustSnakeConfig,
     RustVecConfig,
+    RustVideoConfig,
 )
 from mapox.envs.scouts import ScoutsConfig, ScoutsEnv
 from mapox.envs.snake import SnakeConfig, SnakeEnv
@@ -76,6 +77,7 @@ class EnvironmentFactory:
         self.register_env("rust_find_return", RustEnv, RustFindReturnConfig)
         self.register_env("rust_scouts", RustEnv, RustScoutsConfig)
         self.register_env("rust_snake", RustEnv, RustSnakeConfig)
+        self.register_env("rust_video", RustEnv, RustVideoConfig)
 
         self.register_env("vec", self._make_vec, VecConfig)
         self.register_env("multi", self._make_multi, MultiTaskConfig)
