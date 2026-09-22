@@ -7,8 +7,8 @@ from mapox.environment import Environment
 from mapox.envs.find_return import FindReturnConfig, FindReturnEnv
 from mapox.envs.king_hill import KingHillConfig, KingHillEnv
 from mapox.envs.prey import PreyConfig, PreyEnv
-from mapox.envs.rust_env import (
-    RustEnv,
+from mapox.envs.rust_env_jax import RustEnvJax
+from mapox.envs.rust_env_numpy import (
     RustFindReturnConfig,
     RustMultiConfig,
     RustScoutsConfig,
@@ -75,15 +75,15 @@ class EnvironmentFactory:
         self.register_env("king_hill", KingHillEnv, KingHillConfig)
         self.register_env("prey", PreyEnv, PreyConfig)
         self.register_env("snake", SnakeEnv, SnakeConfig)
-        self.register_env("rust_find_return", RustEnv, RustFindReturnConfig)
-        self.register_env("rust_scouts", RustEnv, RustScoutsConfig)
-        self.register_env("rust_snake", RustEnv, RustSnakeConfig)
-        self.register_env("rust_video", RustEnv, RustVideoConfig)
+        self.register_env("rust_find_return", RustEnvJax, RustFindReturnConfig)
+        self.register_env("rust_scouts", RustEnvJax, RustScoutsConfig)
+        self.register_env("rust_snake", RustEnvJax, RustSnakeConfig)
+        self.register_env("rust_video", RustEnvJax, RustVideoConfig)
 
         self.register_env("vec", self._make_vec, VecConfig)
         self.register_env("multi", self._make_multi, MultiTaskConfig)
-        self.register_env("rust_vec", RustEnv, RustVecConfig)
-        self.register_env("rust_multi", RustEnv, RustMultiConfig)
+        self.register_env("rust_vec", RustEnvJax, RustVecConfig)
+        self.register_env("rust_multi", RustEnvJax, RustMultiConfig)
 
     def _make_vec(self, config: VecConfig, length: int) -> VectorWrapper:
         inner = self.create_env(config.env, length)

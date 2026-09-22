@@ -1,18 +1,19 @@
+"""The rust env behind numpy buffers.
+
+Owns the pyo3 env and the host buffers it fills in place: reset/step are plain
+host calls that mutate those buffers and hand them back as a TimeStep, no JAX
+involved. `rust_env_jax.RustEnvJax` wraps this with io_callbacks for jit.
+"""
+
 import json
 from functools import cached_property
-from typing import Any, Literal, cast
+from typing import Any, Literal
 
-import jax
 import numpy as np
-from jax import Array
-from jax import numpy as jnp
-from jax.experimental import io_callback
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from mapox._core import Env as _CoreEnv
-from mapox.environment import Environment
 from mapox.envs.common import make_obs_spec
-from mapox.renderer import GridRenderSettings, GridRenderState
 from mapox.specs import DiscreteActionSpec, ObservationSpec
 from mapox.timestep import TimeStep
 from mapox.vocab import Vocabulary
@@ -155,18 +156,9 @@ RustMultiEnvSpec.model_rebuild()
 RustMultiConfig.model_rebuild()
 
 
-def _shape_placeholder(buffer: np.ndarray, dtype) -> jax.Array:
-    # io_callback result-spec leaf: a shape/dtype placeholder standing in for
-    # a shared buffer. The machinery only reads .shape/.dtype, never the value,
-    # but the spec must be a TimeStep for io_callback to return one.
-    return cast(jax.Array, jax.ShapeDtypeStruct(buffer.shape, dtype))
-
-
-class RustEnv(Environment[None]):
+class RustEnvNumpy:
     def __init__(self, config: BaseModel, length: int):
-        config_json = config.model_dump_json()
-        self.config_json = config_json
-        self._inner = _CoreEnv(config_json, length)
+        self._inner = _CoreEnv(config.model_dump_json(), length)
 
         num_agents, view_width, view_height, channels = self._inner.observation_shape
         num_actions = self._inner.num_actions
@@ -184,26 +176,9 @@ class RustEnv(Environment[None]):
         self._action_mask = np.zeros((num_agents, num_actions), np.bool_)
         self._task_ids = np.zeros((num_agents,), np.int32)
 
-        self._result_shapes = TimeStep(
-            obs=_shape_placeholder(self._obs, jnp.uint16),
-            time=_shape_placeholder(self._time, jnp.int32),
-            terminated=_shape_placeholder(self._terminated, jnp.bool_),
-            last_action=_shape_placeholder(self._last_action, jnp.uint16),
-            reward=_shape_placeholder(self._reward, jnp.float32),
-            action_mask=_shape_placeholder(self._action_mask, jnp.bool_),
-            task_ids=_shape_placeholder(self._task_ids, jnp.int32),
-        )
-
-    # jit static-arg caching keys on (hash, eq); identity semantics so two
-    # wrappers never share a cache entry — each owns a distinct rust env
-    def __eq__(self, other: object) -> bool:
-        return self is other
-
-    def __hash__(self) -> int:
-        return id(self)
-
-    def _timestep(self) -> TimeStep:
-        return TimeStep(
+        # rust writes into these buffers in place and they never change
+        # identity, so the timestep viewing them is built once
+        self._timestep = TimeStep(
             # Rust and JAX share uint16 buffers for observations and actions.
             obs=self._obs,
             time=self._time,
@@ -214,7 +189,17 @@ class RustEnv(Environment[None]):
             task_ids=self._task_ids,
         )
 
-    def _reset_callback(self, seed: np.ndarray) -> TimeStep:
+    @property
+    def inner(self) -> _CoreEnv:
+        """The raw pyo3 env, for host-side drivers like `mapox._core.enjoy`."""
+        return self._inner
+
+    @property
+    def buffers(self) -> TimeStep:
+        """The shared numpy buffers: the same arrays on every call."""
+        return self._timestep
+
+    def reset(self, seed: int) -> TimeStep:
         self._inner.reset(
             int(seed),
             self._obs,
@@ -225,9 +210,9 @@ class RustEnv(Environment[None]):
             self._action_mask,
             self._task_ids,
         )
-        return self._timestep()
+        return self._timestep
 
-    def _step_callback(self, action: np.ndarray) -> TimeStep:
+    def step(self, action: np.ndarray) -> TimeStep:
         if np.any(action < 0) or np.any(action > np.iinfo(np.uint16).max):
             raise ValueError("action id outside the Rust VocabId range")
         self._inner.step(
@@ -240,29 +225,7 @@ class RustEnv(Environment[None]):
             self._action_mask,
             self._task_ids,
         )
-        return self._timestep()
-
-    def reset(self, rng_key: Array) -> tuple[None, TimeStep]:
-        seed = jax.random.bits(rng_key, dtype=jnp.uint32)
-        timestep = io_callback(
-            self._reset_callback, self._result_shapes, seed, ordered=True
-        )
-        return None, timestep
-
-    def step(self, state: None, action: Array, rng_key: Array) -> tuple[None, TimeStep]:
-        # the rust env owns its rng (seeded at reset), so rng_key is unused
-        del state, rng_key
-        timestep = io_callback(
-            self._step_callback, self._result_shapes, action, ordered=True
-        )
-        return None, timestep
-
-    def create_placeholder_logs(self) -> dict[str, Any]:
-        # TODO: logging isn't wired through the rust env yet
-        return {}
-
-    def create_logs(self, state: None) -> dict[str, Any]:
-        return {}
+        return self._timestep
 
     @cached_property
     def observation_spec(self) -> ObservationSpec:
@@ -293,18 +256,6 @@ class RustEnv(Environment[None]):
     @property
     def num_tasks(self) -> int:
         return self._inner.num_tasks
-
-    def get_render_settings(self) -> GridRenderSettings:
-        raise NotImplementedError(
-            "RustEnv does not expose render state; use mapox.run_demo for the "
-            "native viewer"
-        )
-
-    def get_render_state(self, state: None) -> GridRenderState:
-        raise NotImplementedError(
-            "RustEnv does not expose render state; use mapox.run_demo for the "
-            "native viewer"
-        )
 
     @property
     def obs_vocab(self) -> Vocabulary:

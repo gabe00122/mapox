@@ -4,11 +4,13 @@ import numpy as np
 
 from mapox._core import enjoy
 from mapox.agent import Agent, RandomAgent
-from mapox.envs.rust_env import (
-    RustEnv,
+from mapox.envs.rust_env_numpy import (
+    RustEnvConfig,
+    RustEnvNumpy,
     RustFindReturnConfig,
     RustScoutsConfig,
-    RustSnakeConfig, RustEnvConfig, RustVideoConfig,
+    RustSnakeConfig,
+    RustVideoConfig,
 )
 from mapox.timestep import TimeStep
 
@@ -27,9 +29,9 @@ class RustAgentWrapper:
         self._agent.reset(num_agents, seed)
 
 
-def rust_enjoy(env: RustEnv, length: int, seed: int, agent: Agent):
+def rust_enjoy(env: RustEnvNumpy, length: int, seed: int, agent: Agent):
     rust_agent = RustAgentWrapper(agent)
-    enjoy(env._inner, length, seed, rust_agent)
+    enjoy(env.inner, length, seed, rust_agent)
 
 
 CONFIGS = {
@@ -72,7 +74,7 @@ if __name__ == "__main__":
 
     config = wrap_video(CONFIGS[args.env], length)
 
-    env = RustEnv(config, length)
+    env = RustEnvNumpy(config, length)
     rng_agent = RandomAgent(env.action_spec)
 
     rust_enjoy(env, length, 0, rng_agent)

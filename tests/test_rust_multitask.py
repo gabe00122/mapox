@@ -1,8 +1,8 @@
 import numpy as np
 from mapox._core import Env
 from mapox.config import EnvironmentFactory
-from mapox.envs.rust_env import (
-    RustEnv,
+from mapox.envs.rust_env_jax import RustEnvJax
+from mapox.envs.rust_env_numpy import (
     RustFindReturnConfig,
     RustMultiConfig,
     RustMultiEnvSpec,
@@ -83,7 +83,7 @@ def test_factory_routes_rust_multi_config_to_rust_env():
         )
     )
     env = EnvironmentFactory().create_env(config, 32)
-    assert isinstance(env, RustEnv)
+    assert isinstance(env, RustEnvJax)
     assert env.num_tasks == 2
     assert env.num_agents == 6
 
@@ -94,7 +94,7 @@ def test_factory_routes_rust_vec_config_to_rust_env():
         env=RustScoutsConfig(num_scouts=1, num_harvesters=1),
     )
     env = EnvironmentFactory().create_env(config, 32)
-    assert isinstance(env, RustEnv)
+    assert isinstance(env, RustEnvJax)
     assert env.num_agents == 4
 
 

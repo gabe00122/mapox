@@ -14,7 +14,7 @@ import time
 
 import numpy as np
 from mapox._core import Env
-from mapox.envs.rust_env import (
+from mapox.envs.rust_env_numpy import (
     RustFindReturnConfig,
     RustScoutsConfig,
     RustSnakeConfig,
