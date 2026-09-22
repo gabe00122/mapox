@@ -90,8 +90,6 @@ class RustVideoConfig(BaseModel):
     height: int = 480
     # x264 CRF quality: 0 (lossless) to 51; higher compresses more
     crf: int = 23
-    # ffmpeg executable, resolved through PATH unless an explicit path is given
-    ffmpeg: str = "ffmpeg"
 
 
 class RustSnakeConfig(BaseModel):

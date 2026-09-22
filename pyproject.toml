@@ -29,6 +29,13 @@ dependencies = [
     "python-ffmpeg>=2.0.12",
 ]
 
+[project.optional-dependencies]
+server = [
+    "fastapi>=0.141.1",
+    "uvicorn[standard]>=0.53.0",
+    "httpx>=0.28",
+]
+
 [project.urls]
 Homepage = "https://github.com/gabe00122/mapox"
 Repository = "https://github.com/gabe00122/mapox"

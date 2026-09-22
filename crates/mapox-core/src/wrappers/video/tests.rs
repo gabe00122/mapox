@@ -32,16 +32,17 @@ impl Drop for TestDir {
     }
 }
 
+fn snake_config() -> SnakeConfig {
+    SnakeConfig {
+        num_agents: 1,
+        width: 8,
+        height: 8,
+        ..Default::default()
+    }
+}
+
 fn snake() -> Snake {
-    Snake::new(
-        &SnakeConfig {
-            num_agents: 1,
-            width: 8,
-            height: 8,
-            ..Default::default()
-        },
-        64,
-    )
+    Snake::new(&snake_config(), 64)
 }
 
 struct ObservedEnv {
@@ -87,6 +88,21 @@ impl Environment for ObservedEnv {
     }
 }
 
+/// The python `RustVideoConfig` defaults, wrapping the same snake board [`snake`] builds.
+fn video_config() -> VideoConfig {
+    VideoConfig {
+        env: EnvConfig::RustSnake(Box::new(snake_config())),
+        output_dir: PathBuf::from("videos"),
+        record_steps: 256,
+        interval_steps: Some(10_000),
+        start_step: 0,
+        fps: 30,
+        width: 640,
+        height: 480,
+        crf: 23,
+    }
+}
+
 fn observed(config: VideoConfig) -> (VideoWrapper, Arc<AtomicUsize>, Arc<AtomicUsize>) {
     let settings = Arc::new(AtomicUsize::new(0));
     let renders = Arc::new(AtomicUsize::new(0));
@@ -96,7 +112,7 @@ fn observed(config: VideoConfig) -> (VideoWrapper, Arc<AtomicUsize>, Arc<AtomicU
         render_calls: renders.clone(),
     };
     (
-        VideoWrapper::new(Box::new(env), config).unwrap(),
+        VideoWrapper::with_inner(&config, Box::new(env)),
         settings,
         renders,
     )
@@ -105,16 +121,19 @@ fn observed(config: VideoConfig) -> (VideoWrapper, Arc<AtomicUsize>, Arc<AtomicU
 #[test]
 fn inactive_and_failed_recording_preserve_training_without_rendering_or_retries() {
     let dir = TestDir::new();
-    let output_dir = dir.0.join("clips");
+    // a file sitting where the clip directory belongs: creating the directory
+    // fails deterministically, without depending on ffmpeg missing from PATH
+    let blocker = dir.0.join("blocker");
+    fs::write(&blocker, b"").unwrap();
+    let output_dir = blocker.join("clips");
     let (mut video, settings, renders) = observed(VideoConfig {
         output_dir: output_dir.clone(),
-        ffmpeg: dir.0.join("missing-ffmpeg"),
         start_step: 3,
         record_steps: 2,
         interval_steps: Some(5),
         width: 96,
         height: 96,
-        ..Default::default()
+        ..video_config()
     });
     let mut plain = snake();
     let mut actual = TimeStepBuffers::new(&video);
@@ -141,14 +160,15 @@ fn inactive_and_failed_recording_preserve_training_without_rendering_or_retries(
             assert!(!output_dir.exists());
             assert_eq!(settings.load(Ordering::Relaxed), 0);
         } else {
-            // Recording starts (creating the directory) but the missing ffmpeg
-            // binary fails it; the environment must keep stepping unaffected.
+            // recording is scheduled and the renderer is set up once, but the
+            // clip directory cannot be created; the env must keep stepping
+            // unaffected, and recording must not be retried
             assert_eq!(settings.load(Ordering::Relaxed), 1);
         }
     }
     assert_eq!(renders.load(Ordering::Relaxed), 0);
     assert_eq!(video.consume_metrics(), plain.consume_metrics());
-    assert_eq!(fs::read_dir(output_dir).unwrap().count(), 0);
+    assert!(!output_dir.exists());
 }
 
 #[test]
@@ -156,32 +176,32 @@ fn rejects_unencodable_dimensions_and_overlapping_windows_before_io() {
     for config in [
         VideoConfig {
             width: 0,
-            ..Default::default()
+            ..video_config()
         },
         VideoConfig {
             height: 15,
-            ..Default::default()
+            ..video_config()
         },
         VideoConfig {
             fps: 0,
-            ..Default::default()
+            ..video_config()
         },
         VideoConfig {
             record_steps: 0,
-            ..Default::default()
+            ..video_config()
         },
         VideoConfig {
             record_steps: 10,
             interval_steps: Some(9),
-            ..Default::default()
+            ..video_config()
         },
         VideoConfig {
             crf: 52,
-            ..Default::default()
+            ..video_config()
         },
     ] {
         assert!(
-            matches!(VideoWrapper::new(Box::new(snake()), config), Err(MapoxError::InvalidConfig { .. }))
+            matches!(VideoWrapper::new(&config, 64), Err(MapoxError::InvalidConfig { .. }))
         );
     }
 }
@@ -219,7 +239,7 @@ fn scheduled_clips_cross_resets_and_flush_partial_video() {
         fps: 12,
         width: 128,
         height: 96,
-        ..Default::default()
+        ..video_config()
     });
     let mut ts = TimeStepBuffers::new(&video);
     video.reset(0, &mut ts.view_mut());
@@ -258,7 +278,7 @@ fn drop_flushes_and_existing_videos_are_not_overwritten() {
         interval_steps: None,
         width: 96,
         height: 96,
-        ..Default::default()
+        ..video_config()
     };
     let (mut video, _, _) = observed(config.clone());
     let mut ts = TimeStepBuffers::new(&video);
@@ -271,6 +291,7 @@ fn drop_flushes_and_existing_videos_are_not_overwritten() {
     let (mut collision, _, _) = observed(config);
     collision.reset(0, &mut ts.view_mut());
     collision.step(&[0], &mut ts.view_mut());
-    // The failed launch disables recording; the pre-existing video is intact.
+    // The already-taken file name refuses the new recording (create_new), so
+    // the pre-existing video stays intact.
     assert_eq!(fs::read(path).unwrap(), original);
 }

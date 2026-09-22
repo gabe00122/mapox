@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from mapox.environment import Environment
 from mapox.envs.find_return import FindReturnConfig, FindReturnEnv
@@ -46,7 +46,8 @@ class VecConfig(BaseModel):
 
 class MultiTaskEnvConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-    num: int = 1
+    # independent vectorized copies of the env; all copies share one task
+    num: int = Field(default=1, ge=1)
     name: str
     env: EnvironmentConfig
 
@@ -90,11 +91,15 @@ class EnvironmentFactory:
 
     def _make_multi(self, config: MultiTaskConfig, length: int) -> MultiTaskWrapper:
         env_names = tuple(env_def.name for env_def in config.envs)
-        out_envs = tuple(
-            self.create_env(env_def.env, length) for env_def in config.envs
-        )
+        out_envs = []
+        for env_def in config.envs:
+            env = self.create_env(env_def.env, length)
+            if env_def.num > 1:
+                env = VectorWrapper(env, env_def.num)
 
-        return MultiTaskWrapper(out_envs, env_names)
+            out_envs.append(env)
+
+        return MultiTaskWrapper(tuple(out_envs), env_names)
 
     def register_env(
         self,

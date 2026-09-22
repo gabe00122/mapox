@@ -109,6 +109,8 @@ Each agent receives a local crop centered on itself:
 
 All environment configs are Pydantic models and can be created through `EnvironmentFactory`.
 
+> **WIP:** Rust-native versions of the environments (`rust_*` configs) are actively being added — the list below is still growing.
+
 - **Find & Return** (`FindReturnEnv`, `FindReturnConfig`)  
   Search for goal tiles in a procedurally-generated map. When an agent finds a flag it is rewarded and respawned elsewhere.
 
@@ -141,74 +143,6 @@ https://github.com/user-attachments/assets/3483745f-7c53-46e9-b838-3cc76b9e3ee4
   Combines multiple environments into one by concatenating their agents. Adds a per-agent `task_ids` field to the `TimeStep` via `TaskIdWrapper`.
 
 The `EnvironmentFactory` also supports a `MultiTaskConfig` that builds a multitask environment (optionally vectorizing each task) and a `VecConfig` that builds `num` copies of a single environment. Configs that reference only rust environments (`rust_*`) run entirely on the rust side: a `MultiTaskConfig` becomes the rust `MultitaskWrapper` — which is itself the vectorizer — and a `VecConfig` becomes the rust `VectorWrapper`.
-
-### Rust training video wrapper
-
-`mapox_core::wrappers::video::{VideoWrapper, VideoConfig}` wraps any Rust
-`Environment` on native platforms. It renders the full map on the CPU using the
-same tileset as the interactive renderer and pipes RGB frames directly to ffmpeg.
-No window, display server, GPU, Python video package, or clip-sized frame buffer
-is needed. Install an `ffmpeg` binary with the `libx264` encoder on PATH.
-
-```rust
-use mapox_core::{
-    env::Environment,
-    envs::snake::{Snake, SnakeConfig},
-    timestep::TimeStepBuffers,
-    wrappers::video::{VideoConfig, VideoWrapper},
-};
-
-fn main() -> std::io::Result<()> {
-    let inner = Box::new(Snake::new(&SnakeConfig::default(), 512));
-    let mut env = VideoWrapper::new(inner, VideoConfig {
-        output_dir: "videos/run-001".into(),
-        record_steps: 120,              // 120 frames: 4 seconds at 30 FPS
-        interval_steps: Some(10_000),   // start-to-start spacing
-        start_step: 1_000,              // skip the first 1,000 step calls
-        fps: 30,
-        width: 640,
-        height: 480,
-        ..Default::default()
-    })?;
-    let mut ts = TimeStepBuffers::new(&env);
-    env.reset(42, &mut ts.view_mut());
-    let actions = vec![0; env.num_agents()]; // replace with policy actions
-    for _ in 0..20_000 {
-        env.step(&actions, &mut ts.view_mut());
-        if let Some(error) = env.take_error() {
-            eprintln!("video recording stopped; training continues: {error}");
-        }
-    }
-    env.finish()?; // flush a partial clip and disable further recording
-    Ok(())
-}
-```
-
-- Step indices are zero-based: `start_step: 0` captures immediately after the
-  first `step`. Each recorded step adds exactly one frame. Resets add no frames
-  and do not restart the schedule, so a clip can span episode boundaries.
-- `interval_steps: None` records one clip. Otherwise the interval must be at
-  least `record_steps`; clips never overlap. The counter measures wrapper calls,
-  not agent transitions. Place the wrapper **outside** vector/multitask wrappers
-  to record their selected map rather than launch one encoder per instance.
-- FPS controls playback only. Width and height must be positive and even;
-  aspect ratio is preserved with black letterboxing and nearest-neighbour art.
-- Outside recording windows, only the inner step, counter and schedule checks
-  run: no rendering, filesystem access, frame allocation, or ffmpeg process.
-  Recorded steps use synchronous pipe backpressure and may be slower; clip
-  completion waits for ffmpeg. Frame memory is bounded independently of clip length.
-- Videos are H.264/yuv420p fragmented MP4 files named `video-000000001000.mp4`
-  by starting step. Use separate output directories per run/worker: existing
-  files are never overwritten. `last_video()` reports the last finalized file.
-- Recording errors are logged, available via `take_error()`, and disable future
-  recording without changing timesteps or stopping training. ffmpeg diagnostics
-  go to stderr. Failed encodes may leave partial files, not reported as completed.
-  `finish()` returns finalization errors; dropping the wrapper also flushes a
-  partial clip best-effort. The `ffmpeg` config field accepts a custom executable.
-
-The ffmpeg-dependent Rust regression tests are opt-in:
-`cargo test -p mapox-core wrappers::video::tests -- --include-ignored` (also requires
-`ffprobe`).
 
 ## Acknowledgements
 

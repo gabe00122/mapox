@@ -22,6 +22,9 @@ use crate::{
     vocab::{VocabId, Vocabulary},
 };
 
+/// ffmpeg is spawned from PATH: the executable is deliberately not configurable.
+const FFMPEG: &str = "ffmpeg";
+
 /// One post-step frame per recorded step. FPS controls playback, not training speed.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct VideoConfig {
@@ -40,8 +43,6 @@ pub struct VideoConfig {
     pub height: u32,
     /// x264 CRF quality: 0 (lossless) to 51; higher compresses more. 23 is the default.
     pub crf: u8,
-    /// ffmpeg executable, resolved through PATH unless an explicit path is given.
-    pub ffmpeg: PathBuf,
 }
 
 impl VideoConfig {
@@ -97,13 +98,19 @@ impl VideoWrapper {
 
         let inner = make(&config.env, length)?;
 
-        Ok(Self {
+        Ok(Self::with_inner(config, inner))
+    }
+
+    /// Wraps an already-built env. `new` is the supported entry point; tests use
+    /// this to observe the wrapped env's render calls.
+    fn with_inner(config: &VideoConfig, inner: Box<dyn Environment>) -> Self {
+        Self {
             inner,
             next_start: Some(config.start_step),
             config: config.clone(),
             steps: 0,
             recording: None,
-        })
+        }
     }
 
     fn finish_clip(&mut self) -> MapoxResult<()> {
@@ -213,7 +220,7 @@ impl Recording {
             .write(true)
             .create_new(true)
             .open(&path)?;
-        let child = Command::new(&config.ffmpeg)
+        let child = Command::new(FFMPEG)
             .args([
                 "-hide_banner",
                 "-loglevel",
@@ -254,10 +261,7 @@ impl Recording {
             Ok(child) => child,
             Err(source) => {
                 let _ = fs::remove_file(&path);
-                return Err(MapoxError::FfmpegSpawn {
-                    exe: config.ffmpeg.clone(),
-                    source,
-                });
+                return Err(MapoxError::FfmpegSpawn { source });
             }
         };
         let stdin = child.stdin.take();

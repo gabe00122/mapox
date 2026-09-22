@@ -1,4 +1,4 @@
-use std::{io, path::PathBuf};
+use std::io;
 
 use thiserror::Error;
 
@@ -12,9 +12,8 @@ pub enum MapoxError {
     FfmpegExited { status: String },
     #[error(transparent)]
     Io(#[from] std::io::Error),
-    #[error("cannot launch ffmpeg {exe:?}: {source}")]
+    #[error("cannot launch ffmpeg: {source}")]
     FfmpegSpawn {
-        exe: PathBuf,
         #[source]
         source: io::Error,
     },
