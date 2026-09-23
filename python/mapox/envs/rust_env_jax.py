@@ -107,3 +107,8 @@ class RustEnvJax(Environment[None]):
 
     def consume_metrics(self) -> dict[str, Any]:
         return self._env.consume_metrics()
+
+    @property
+    def inner(self):
+        """The raw pyo3 env, for host-side drivers like `mapox._core.enjoy`."""
+        return self._env.inner
