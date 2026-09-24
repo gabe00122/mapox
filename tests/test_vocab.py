@@ -3,9 +3,7 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 import pytest
-
 from mapox.vocab import FrozenVocabularyError, Vocabulary
-
 
 # --- construction / serialization ---
 
@@ -129,7 +127,7 @@ def test_add_block_fresh_appends_contiguously():
 
 def test_add_block_single_symbol():
     v = Vocabulary()
-    assert v.add_block(["a"]) == range(0, 1)
+    assert v.add_block(["a"]) == range(1)
 
 
 def test_add_block_is_idempotent():
@@ -176,7 +174,7 @@ def test_add_block_fresh_on_frozen_raises():
 def test_add_block_existing_on_frozen_is_allowed():
     # An env re-resolving its block against a frozen (e.g. loaded) vocab.
     v = Vocabulary(["a", "b"]).freeze()
-    assert v.add_block(["a", "b"]) == range(0, 2)
+    assert v.add_block(["a", "b"]) == range(2)
 
 
 # --- equality ---

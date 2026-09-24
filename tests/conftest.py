@@ -1,14 +1,13 @@
 from pathlib import Path
 
-import pytest
 import jax
-
+import pytest
 from mapox.envs.find_return import FindReturnConfig, FindReturnEnv
-from mapox.envs.traveling_salesman import TravelingSalesmanConfig, TravelingSalesmanEnv
-from mapox.envs.scouts import ScoutsConfig, ScoutsEnv
 from mapox.envs.king_hill import KingHillConfig, KingHillEnv
 from mapox.envs.prey import PreyConfig, PreyEnv
+from mapox.envs.scouts import ScoutsConfig, ScoutsEnv
 from mapox.envs.snake import SnakeConfig, SnakeEnv
+from mapox.envs.traveling_salesman import TravelingSalesmanConfig, TravelingSalesmanEnv
 
 LENGTH = 32
 TEST_MAP_PATH = str(Path(__file__).parent / "fixtures" / "test_map.json")

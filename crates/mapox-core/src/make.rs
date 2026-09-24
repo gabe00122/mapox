@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+#[cfg(not(target_arch = "wasm32"))]
+use crate::wrappers::video::{VideoConfig, VideoWrapper};
 use crate::{
     env::Environment,
     envs::{
@@ -10,8 +12,6 @@ use crate::{
     error::MapoxResult,
     wrappers::{multitask::MultitaskWrapper, vector::VectorWrapper},
 };
-#[cfg(not(target_arch = "wasm32"))]
-use crate::wrappers::video::{VideoConfig, VideoWrapper};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "env_type", rename_all = "snake_case")]
@@ -21,8 +21,13 @@ pub enum EnvConfig {
     RustSnake(Box<SnakeConfig>),
     #[cfg(not(target_arch = "wasm32"))]
     RustVideo(Box<VideoConfig>),
-    RustVec { num: usize, env: Box<EnvConfig> },
-    RustMulti { envs: Vec<MultiEnvSpec> },
+    RustVec {
+        num: usize,
+        env: Box<EnvConfig>,
+    },
+    RustMulti {
+        envs: Vec<MultiEnvSpec>,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]

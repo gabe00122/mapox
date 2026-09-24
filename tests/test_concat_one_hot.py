@@ -1,7 +1,6 @@
 """concat_one_hot — core observation encoding utility."""
 
 from jax import numpy as jnp
-
 from mapox.utils.encode_one_hot import concat_one_hot
 
 

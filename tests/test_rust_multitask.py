@@ -181,7 +181,9 @@ def test_enjoy_mode_shows_the_task_the_single_env_shows(task_id):
     assert np.array_equal(obs_chars[one.obs[..., 0]], union_chars[many.obs[..., 0]])
     assert np.array_equal(one.action_mask, many.action_mask[:, action_ids])
 
-    legal = np.asarray([np.flatnonzero(mask)[0] for mask in one.action_mask])
+    legal = np.asarray(
+        [np.flatnonzero(mask)[0] for mask in one.action_mask], dtype=np.intp
+    )
     one = single.step(legal.astype(np.uint16))
     many = multi.step(action_ids[legal])
     assert np.array_equal(obs_chars[one.obs[..., 0]], union_chars[many.obs[..., 0]])

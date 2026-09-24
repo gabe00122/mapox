@@ -38,8 +38,8 @@ class SpriteSheet:
 
 
 class GridRenderState(NamedTuple):
-    tilemap: jax.Array  # padded tile map with unified tile ids
-    agent_positions: jax.Array  # (N, 2)
+    tilemap: jax.Array | np.ndarray  # padded tile map with unified tile ids
+    agent_positions: jax.Array | np.ndarray  # (N, 2)
 
 
 class GridRenderSettings(NamedTuple):

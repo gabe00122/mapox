@@ -103,7 +103,7 @@ def run_ascii(
 
             if step == length:
                 break
-            timestep = env.step(agent.act(timestep))
+            timestep = env.step(np.asarray(agent.act(timestep)))
 
 
 CONFIGS = {

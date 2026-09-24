@@ -34,7 +34,7 @@ EPISODES = 2
 STEPS = 16
 
 
-@pytest.fixture(params=CONFIGS.values(), ids=CONFIGS)
+@pytest.fixture(params=CONFIGS.values(), ids=list(CONFIGS))
 def env(request):
     return RustEnvNumpy(request.param, STEPS)
 

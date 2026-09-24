@@ -73,7 +73,7 @@ impl Environment for VocabWrapper {
             *target = self.global_to_local_action[local as usize];
         }
 
-        self.inner.step(&mut self.temp_actions, timestep);
+        self.inner.step(&self.temp_actions, timestep);
         self.encode_timestep(timestep);
     }
 

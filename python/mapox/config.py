@@ -30,6 +30,7 @@ class EnvironmentConfig(BaseModel):
     """Top-level environment config. The env type is resolved through the
     EnvironmentFactory registry at make time, where the config is validated
     against the model the env registered with (if any)."""
+
     model_config = ConfigDict(extra="allow", frozen=True)
     env_type: str
 
@@ -37,6 +38,7 @@ class EnvironmentConfig(BaseModel):
 class VecConfig(BaseModel):
     """Vectorized copies of one env; rust envs are stepped in parallel,
     JAX envs are vmapped."""
+
     model_config = ConfigDict(extra="forbid", frozen=True)
     env_type: Literal["vec"] = "vec"
 
@@ -64,6 +66,25 @@ class MultiTaskConfig(BaseModel):
         return tuple(v) if isinstance(v, list) else v
 
 
+type EnvConfig = (
+    EnvironmentConfig
+    | VecConfig
+    | MultiTaskConfig
+    | FindReturnConfig
+    | ScoutsConfig
+    | TravelingSalesmanConfig
+    | KingHillConfig
+    | PreyConfig
+    | SnakeConfig
+    | RustFindReturnConfig
+    | RustScoutsConfig
+    | RustSnakeConfig
+    | RustVideoConfig
+    | RustVecConfig
+    | RustMultiConfig
+)
+
+
 class EnvironmentFactory:
     def __init__(self):
         self._registry: dict[
@@ -71,7 +92,9 @@ class EnvironmentFactory:
         ] = {}
         self.register_env("find_return", FindReturnEnv, FindReturnConfig)
         self.register_env("scouts", ScoutsEnv, ScoutsConfig)
-        self.register_env("traveling_salesman", TravelingSalesmanEnv, TravelingSalesmanConfig)
+        self.register_env(
+            "traveling_salesman", TravelingSalesmanEnv, TravelingSalesmanConfig
+        )
         self.register_env("king_hill", KingHillEnv, KingHillConfig)
         self.register_env("prey", PreyEnv, PreyConfig)
         self.register_env("snake", SnakeEnv, SnakeConfig)
@@ -111,12 +134,14 @@ class EnvironmentFactory:
 
     def create_env(
         self,
-        env_config: EnvironmentConfig,
+        env_config: EnvConfig,
         length: int,
     ) -> Environment:
         entry = self._registry.get(env_config.env_type)
         if entry is None:
-            raise ValueError(f"Could not find env type matching that name: {env_config.env_type}")
+            raise ValueError(
+                f"Could not find env type matching that name: {env_config.env_type}"
+            )
         fn, config_model = entry
         validated_config = config_model.model_validate(env_config.model_dump())
         return fn(validated_config, length)

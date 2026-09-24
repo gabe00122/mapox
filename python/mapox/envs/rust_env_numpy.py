@@ -113,6 +113,7 @@ class RustSnakeConfig(BaseModel):
 
 class RustVecConfig(BaseModel):
     """Vectorized copies of one rust env; the rust side steps them in parallel."""
+
     model_config = ConfigDict(extra="forbid", frozen=True)
     env_type: Literal["rust_vec"] = "rust_vec"
 
@@ -129,6 +130,7 @@ class RustMultiEnvSpec(BaseModel):
 
 class RustMultiConfig(BaseModel):
     """A batch of rust envs; the rust MultitaskWrapper is the vectorizer."""
+
     model_config = ConfigDict(extra="forbid", frozen=True)
     env_type: Literal["rust_multi"] = "rust_multi"
 

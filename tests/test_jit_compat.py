@@ -1,13 +1,12 @@
 """JIT compatibility — all envs must work under jax.jit."""
 
 import jax
-from jax import numpy as jnp
-
 import mapox.symbols as SB
+from jax import numpy as jnp
 
 
 def test_jit_reset(env, rng_key):
-    state, ts = jax.jit(env.reset)(rng_key)
+    _, ts = jax.jit(env.reset)(rng_key)
     assert ts.obs.shape == (env.num_agents, *env.observation_spec.shape)
     assert ts.reward.shape == (env.num_agents,)
 

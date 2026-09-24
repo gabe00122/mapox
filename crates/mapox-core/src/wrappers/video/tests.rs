@@ -203,9 +203,10 @@ fn rejects_unencodable_dimensions_and_overlapping_windows_before_io() {
             ..video_config()
         },
     ] {
-        assert!(
-            matches!(VideoWrapper::new(&config, 64), Err(MapoxError::InvalidConfig { .. }))
-        );
+        assert!(matches!(
+            VideoWrapper::new(&config, 64),
+            Err(MapoxError::InvalidConfig { .. })
+        ));
     }
 }
 

@@ -35,4 +35,4 @@ def test_moves_block_registration():
     # The intended env idiom: moves land at local ids 0..3 so
     # DIRECTIONS[action] indexing stays valid.
     v = Vocabulary()
-    assert v.add_block(sym.MOVES) == range(0, 4)
+    assert v.add_block(sym.MOVES) == range(4)

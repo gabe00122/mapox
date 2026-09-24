@@ -5,11 +5,12 @@ deterministic. Coordinates are in padded space: with a 12x12 board and an 11x11
 view the pad is 5, so playable cells span 5..16 on both axes.
 """
 
-import jax
-from jax import numpy as jnp
-import pytest
+from itertools import pairwise
 
+import jax
 import mapox.symbols as SB
+import pytest
+from jax import numpy as jnp
 from mapox.envs.snake import SnakeConfig, SnakeEnv
 
 # Local action ids: snake registers SB.MOVES via add_block, so the moves are
@@ -383,7 +384,7 @@ def test_rollout_invariants(rng_key):
             max_length = env._config.max_length
             slots = (state.head_slot[a] - jnp.arange(state.length[a])) % max_length
             segments = state.body[a, slots].tolist()
-            for (x0, y0), (x1, y1) in zip(segments, segments[1:]):
+            for (x0, y0), (x1, y1) in pairwise(segments):
                 assert abs(x0 - x1) + abs(y0 - y1) <= 1
             # No two snakes overlap.
             for b in range(a + 1, env.num_agents):

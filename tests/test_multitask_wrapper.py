@@ -4,19 +4,25 @@ The wrapper presents heterogeneous local-vocab envs as one global-vocab env:
 global ids in, global ids out, per-env translation at the boundary.
 """
 
-import jax
-from jax import numpy as jnp
+from typing import Any
 
+import jax
 import mapox.symbols as SB
+from jax import numpy as jnp
 from mapox.config import EnvironmentFactory, MultiTaskConfig, MultiTaskEnvConfig
 from mapox.envs.find_return import FindReturnConfig, FindReturnEnv
 from mapox.envs.traveling_salesman import TravelingSalesmanConfig, TravelingSalesmanEnv
+from mapox.wrappers.multitask import MultiTaskWrapper
 from mapox.wrappers.vector import VectorWrapper
 
 LENGTH = 32
 
-FR_CONFIG = {"env_type": "find_return", "num_agents": 2, "num_flags": 2}
-TS_CONFIG = {"env_type": "traveling_salesman", "num_agents": 2, "num_flags": 3}
+FR_CONFIG: dict[str, Any] = {"env_type": "find_return", "num_agents": 2, "num_flags": 2}
+TS_CONFIG: dict[str, Any] = {
+    "env_type": "traveling_salesman",
+    "num_agents": 2,
+    "num_flags": 3,
+}
 
 
 def _make_wrapper():
@@ -195,6 +201,7 @@ def test_teams_forwarded_through_task_id_wrapper():
     )
     factory = EnvironmentFactory()
     wrapper = factory.create_env(config, LENGTH)
+    assert isinstance(wrapper, MultiTaskWrapper)
 
     teams = wrapper.teams
     assert teams is not None
@@ -206,4 +213,4 @@ def test_teams_forwarded_through_task_id_wrapper():
     # kh is the wrapper's second sub-env; sub-envs present global ids
     single = wrapper.task_envs[1]
     assert single.teams is not None
-    assert jnp.array_equal(single.teams, wrapper.teams[2:])
+    assert jnp.array_equal(single.teams, teams[2:])

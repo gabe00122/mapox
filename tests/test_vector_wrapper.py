@@ -54,6 +54,7 @@ def test_teams_none():
     venv = VectorWrapper(inner, VEC_COUNT)
     assert venv.teams is None
 
+
 def test_factory_vec_of_jax_env_uses_vector_wrapper():
     config = VecConfig(
         num=VEC_COUNT,

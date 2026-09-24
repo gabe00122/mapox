@@ -9,6 +9,7 @@ import jax
 import mapox.symbols as SB
 from jax import numpy as jnp
 from mapox.config import EnvironmentFactory, MultiTaskConfig, MultiTaskEnvConfig
+from mapox.wrappers.multitask import MultiTaskWrapper
 
 LENGTH = 32
 
@@ -31,6 +32,7 @@ ENV_NAMES = tuple(env_def.name for env_def in CONFIG.envs)
 def _make(env_name):
     # the wrapper builds every sub-env; each already speaks the global vocab
     wrapper = EnvironmentFactory().create_env(CONFIG, LENGTH)
+    assert isinstance(wrapper, MultiTaskWrapper)
     return wrapper.task_envs[ENV_NAMES.index(env_name)]
 
 
@@ -88,5 +90,3 @@ def test_obs_uses_global_ids():
     # emits exists there, and fr-only symbols keep their global slot.
     assert ts.obs[..., 0].max() < len(single.obs_vocab)
     assert SB.TILE_DESTRUCTIBLE_WALL in single.obs_vocab
-
-

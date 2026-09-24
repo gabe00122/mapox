@@ -55,8 +55,8 @@ impl VideoConfig {
             || self.fps > i32::MAX as u32
             || self.width == 0
             || self.height == 0
-            || self.width % 2 != 0
-            || self.height % 2 != 0
+            || !self.width.is_multiple_of(2)
+            || !self.height.is_multiple_of(2)
             || self.width > i32::MAX as u32
             || self.height > i32::MAX as u32
             || self.crf > 51

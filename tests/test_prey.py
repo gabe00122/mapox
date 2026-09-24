@@ -11,9 +11,8 @@ invalidate the scenarios.
 """
 
 import jax
-from jax import numpy as jnp
 import pytest
-
+from jax import numpy as jnp
 from mapox.envs.prey import PreyConfig, PreyEnv
 
 # Local action ids: prey registers SB.MOVES via add_block (asserted to be
@@ -338,7 +337,7 @@ def test_rollout_invariants(env):
         actions = jax.random.randint(
             akey, (env.num_agents,), 0, env.action_spec.n, dtype=jnp.uint16
         )
-        state, ts = step(state, actions, skey)
+        state, _ = step(state, actions, skey)
 
         all_pos = jnp.concatenate([state.sneaker_pos, state.chaser_pos], axis=0)
         agent_tiles = state.tiles[all_pos[:, 0], all_pos[:, 1]]

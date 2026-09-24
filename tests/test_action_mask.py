@@ -1,7 +1,6 @@
 """make_action_mask — shape, values, and dtype."""
 
 from jax import numpy as jnp
-
 from mapox.envs.common import make_action_mask
 
 NUM_ACTIONS = 6

@@ -46,9 +46,7 @@ class RustEnvJax(Environment[None]):
 
     def reset(self, rng_key: Array) -> tuple[None, TimeStep]:
         seed = jax.random.bits(rng_key, dtype=jnp.uint32)
-        timestep = io_callback(
-            self._env.reset, self._result_shapes, seed, ordered=True
-        )
+        timestep = io_callback(self._env.reset, self._result_shapes, seed, ordered=True)
         return None, timestep
 
     def step(self, state: None, action: Array, rng_key: Array) -> tuple[None, TimeStep]:

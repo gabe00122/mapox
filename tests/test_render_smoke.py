@@ -12,7 +12,6 @@ import os
 os.environ.setdefault("SDL_VIDEODRIVER", "dummy")
 
 import pytest
-
 from mapox.renderer import GridworldRenderer, tilemap
 
 

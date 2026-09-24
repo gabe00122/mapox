@@ -151,7 +151,7 @@ impl Environment for VectorWrapper {
     }
 
     fn set_enjoy_mode(&mut self, task_num: Option<usize>) {
-        self.enjoy_mode = task_num != None;
+        self.enjoy_mode = task_num.is_some();
         self.envs[0].set_enjoy_mode(task_num);
     }
 }

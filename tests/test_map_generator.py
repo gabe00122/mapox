@@ -2,7 +2,6 @@
 
 import jax
 from jax import numpy as jnp
-
 from mapox.map_generator import choose_positions
 
 # choose_positions takes the empty id explicitly; these are arbitrary local ids.

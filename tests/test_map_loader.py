@@ -2,20 +2,18 @@ import json
 import tempfile
 from pathlib import Path
 
-from jax import numpy as jnp
-import pytest
-
 import mapox.symbols as SB
+import pytest
+from jax import numpy as jnp
 from mapox.map_loader import load_map
-from mapox.vocab import Vocabulary
+from mapox.vocab import FrozenVocabularyError, Vocabulary
 
 FIXTURE_PATH = str(Path(__file__).parent / "fixtures" / "test_map.json")
 
 
 def _write_map(data) -> str:
-    f = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
-    json.dump(data, f)
-    f.flush()
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
+        json.dump(data, f)
     return f.name
 
 
@@ -47,7 +45,7 @@ class TestLoadMap:
 
     def test_frozen_vocab_rejects_new_legend_symbols(self):
         vocab = Vocabulary([SB.TILE_EMPTY]).freeze()
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenVocabularyError):
             load_map(FIXTURE_PATH, vocab)
 
     def test_invalid_version(self):

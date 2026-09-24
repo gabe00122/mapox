@@ -13,11 +13,12 @@ class Env:
     observation_shape: tuple[int, int, int, int]
     obs_symbols: list[str]
     action_symbols: list[str]
+    task_names: list[str]
+    render_settings: tuple[int, int, int, int, int]
 
     def set_enjoy_mode(self, task_num: int | None) -> None: ...
-
     def consume_metrics(self) -> str: ...
-
+    def render_state(self) -> tuple[np.ndarray, np.ndarray]: ...
     def reset(
         self,
         seed: int,
@@ -29,7 +30,6 @@ class Env:
         action_mask: np.ndarray,
         task_ids: np.ndarray,
     ) -> None: ...
-
     def step(
         self,
         actions: np.ndarray,
@@ -41,7 +41,6 @@ class Env:
         action_mask: np.ndarray,
         task_ids: np.ndarray,
     ) -> None: ...
-
 
 def enjoy(
     env: Env,

@@ -1,6 +1,5 @@
 import pytest
 from jax import numpy as jnp
-
 from mapox.envs.common import make_action_mask, make_obs_spec
 
 
@@ -8,6 +7,7 @@ def test_make_obs_spec():
     spec = make_obs_spec(5, 7, 21)
     assert spec.shape == (5, 7, 4)
     assert spec.dtype == jnp.uint16
+    assert isinstance(spec.max_value, tuple)
     assert spec.max_value[0] == 21
 
 

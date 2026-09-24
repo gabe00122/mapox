@@ -1,4 +1,3 @@
-
 import pygame
 
 from mapox.environment import Environment, EnvState
