@@ -146,6 +146,10 @@ impl Environment for VectorWrapper {
         self.envs[0].num_tasks()
     }
 
+    fn task_names(&self) -> Vec<String> {
+        self.envs[0].task_names()
+    }
+
     fn set_enjoy_mode(&mut self, task_num: Option<usize>) {
         self.enjoy_mode = task_num != None;
         self.envs[0].set_enjoy_mode(task_num);

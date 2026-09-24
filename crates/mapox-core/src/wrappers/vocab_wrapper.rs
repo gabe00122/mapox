@@ -124,7 +124,14 @@ impl Environment for VocabWrapper {
         self.inner.num_tasks()
     }
 
+    fn task_names(&self) -> Vec<String> {
+        self.inner.task_names()
+    }
+
     fn set_enjoy_mode(&mut self, task_num: Option<usize>) {
         self.inner.set_enjoy_mode(task_num);
+        let num_agents = self.inner.num_agents();
+        self.temp_actions = vec![0; num_agents];
+        self.temp_action_mask = Array2::from_elem((num_agents, self.action_vocab.len()), false);
     }
 }

@@ -64,6 +64,10 @@ impl Environment for TaskIdWrapper {
         self.inner.num_tasks()
     }
 
+    fn task_names(&self) -> Vec<String> {
+        self.inner.task_names()
+    }
+
     fn set_enjoy_mode(&mut self, task_num: Option<usize>) {
         self.inner.set_enjoy_mode(task_num);
     }

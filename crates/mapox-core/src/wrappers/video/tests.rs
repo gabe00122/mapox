@@ -83,6 +83,9 @@ impl Environment for ObservedEnv {
     fn num_tasks(&self) -> usize {
         self.inner.num_tasks()
     }
+    fn task_names(&self) -> Vec<String> {
+        self.inner.task_names()
+    }
     fn consume_metrics(&mut self) -> serde_json::Value {
         self.inner.consume_metrics()
     }

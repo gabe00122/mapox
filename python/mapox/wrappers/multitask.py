@@ -118,6 +118,10 @@ class MultiTaskWrapper(Environment):
         return len(self._envs)
 
     @property
+    def task_names(self) -> list[str]:
+        return list(self._env_names)
+
+    @property
     def teams(self) -> jax.Array | None:
         if self._enjoy_mode is not None:
             return self._envs[self._enjoy_mode].teams

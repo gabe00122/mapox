@@ -47,6 +47,7 @@ pub fn make(config: &EnvConfig, length: usize) -> MapoxResult<Box<dyn Environmen
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::MapoxError;
     use crate::timestep::TimeStepBuffers;
 
     /// The python side builds these configs with pydantic and hands them over
@@ -189,6 +190,7 @@ mod tests {
         let mut env = make(&config, 32).unwrap();
         assert_eq!(env.num_agents(), 12); // 2 * (2 + 2) + 4
         assert_eq!(env.num_tasks(), 2); // copies of an entry are one task
+        assert_eq!(env.task_names(), vec!["scouts", "fr"]);
 
         let mut buffers = TimeStepBuffers::new(&*env);
         env.reset(1, &mut buffers.view_mut());
@@ -199,6 +201,47 @@ mod tests {
                 .chain((0..4).map(|_| 1))
                 .collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn make_multi_rejects_mismatched_observation_shapes() {
+        let config = EnvConfig::RustMulti {
+            envs: vec![
+                MultiEnvSpec {
+                    name: "scouts".into(),
+                    num: 1,
+                    env: Box::new(EnvConfig::RustScouts(Box::new(ScoutsConfig {
+                        num_scouts: 1,
+                        num_harvesters: 1,
+                        view_width: 11,
+                        view_height: 11,
+                        ..ScoutsConfig::default()
+                    }))),
+                },
+                MultiEnvSpec {
+                    name: "fr".into(),
+                    num: 1,
+                    env: Box::new(EnvConfig::RustFindReturn(Box::new(FindReturnConfig {
+                        num_agents: 2,
+                        view_width: 11,
+                        view_height: 11, // + the 2-row UI strip => 13
+                        ..FindReturnConfig::default()
+                    }))),
+                },
+            ],
+        };
+
+        assert!(matches!(
+            make(&config, 32),
+            Err(MapoxError::ObservationShapeMismatch {
+                task,
+                expected_task,
+                width: 11,
+                height: 13,
+                expected_width: 11,
+                expected_height: 11,
+            }) if task == "fr" && expected_task == "scouts"
+        ));
     }
 
     #[test]
@@ -285,6 +328,7 @@ mod tests {
         assert_eq!(env.num_agents(), 6);
 
         assert_eq!(env.num_tasks(), 1);
+        assert!(env.task_names().is_empty());
 
         let env = make(
             &EnvConfig::RustVec {

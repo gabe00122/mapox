@@ -11,6 +11,7 @@ import mapox.symbols as SB
 from mapox.config import EnvironmentFactory, MultiTaskConfig, MultiTaskEnvConfig
 from mapox.envs.find_return import FindReturnConfig, FindReturnEnv
 from mapox.envs.traveling_salesman import TravelingSalesmanConfig, TravelingSalesmanEnv
+from mapox.wrappers.vector import VectorWrapper
 
 LENGTH = 32
 
@@ -36,6 +37,10 @@ def test_num_agents():
 
 def test_num_tasks():
     assert _make_wrapper().num_tasks == 2
+
+
+def test_task_names_match_task_ids():
+    assert _make_wrapper().task_names == ["fr", "ts"]
 
 
 def test_merged_vocabs():
@@ -168,6 +173,11 @@ def test_untranslatable_action_is_safe():
 def test_teams_none_when_no_env_has_teams():
     wrapper = _make_wrapper()
     assert wrapper.teams is None
+
+
+def test_task_names_forward_through_vector_wrapper():
+    vec = VectorWrapper(_make_wrapper(), 2)
+    assert vec.task_names == ["fr", "ts"]
 
 
 def test_teams_forwarded_through_task_id_wrapper():

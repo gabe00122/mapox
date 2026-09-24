@@ -48,6 +48,11 @@ class Environment[EnvState](ABC):
     def num_tasks(self) -> int: ...
 
     @property
+    def task_names(self) -> list[str]:
+        """Names of this env's tasks in task-id order; empty for single-task envs."""
+        return []
+
+    @property
     def teams(self) -> jax.Array | None:
         return None
 

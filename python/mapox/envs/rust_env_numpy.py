@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from mapox._core import Env as _CoreEnv
 from mapox.envs.common import make_obs_spec
+from mapox.renderer import GridRenderSettings, GridRenderState
 from mapox.specs import DiscreteActionSpec, ObservationSpec
 from mapox.timestep import TimeStep
 from mapox.vocab import Vocabulary
@@ -160,15 +161,48 @@ class RustEnvNumpy:
     def __init__(self, config: BaseModel, length: int):
         self._inner = _CoreEnv(config.model_dump_json(), length)
 
-        num_agents, view_width, view_height, channels = self._inner.observation_shape
-        num_actions = self._inner.num_actions
+        _, view_width, view_height, channels = self._inner.observation_shape
         self._view_width = view_width
         self._view_height = view_height
+        self._obs_shape = (view_width, view_height, channels)
 
         self._obs_vocab = Vocabulary(self._inner.obs_symbols).freeze()
         self._action_vocab = Vocabulary(self._inner.action_symbols).freeze()
+        self._render_settings = self._read_render_settings()
 
-        self._obs = np.zeros((num_agents, view_width, view_height, channels), np.uint16)
+        self._bind_buffers()
+
+    def _read_render_settings(self) -> GridRenderSettings:
+        """The current env's map and window layout.
+
+        Read on every mode switch: a multitask wrapper lends its selected
+        task's map, not the first task's.
+        """
+        tile_width, tile_height, view_width, view_height, ui_height = (
+            self._inner.render_settings
+        )
+        return GridRenderSettings(
+            obs_vocab=self._obs_vocab,
+            tile_width=tile_width,
+            tile_height=tile_height,
+            view_width=view_width,
+            view_height=view_height,
+            ui_height=ui_height,
+        )
+
+    def _bind_buffers(self) -> None:
+        """Size the shared buffers for the env's current agent count.
+
+        Rust reads and writes exactly `num_agents` rows, and `set_enjoy_mode`
+        narrows that to one copy of one task, so the buffers are rebound along
+        with the mode — the same order the rust `RenderApp` allocates in.
+        Whole-batch buffers under a mode are read past the end of the shorter
+        array (the vocab wrapper's mask fill is where it trips).
+        """
+        num_agents = self._inner.num_agents
+        num_actions = self._inner.num_actions
+
+        self._obs = np.zeros((num_agents, *self._obs_shape), np.uint16)
         self._time = np.zeros((num_agents,), np.int32)
         self._terminated = np.zeros((num_agents,), np.bool_)
         self._last_action = np.zeros((num_agents,), np.uint16)
@@ -249,6 +283,19 @@ class RustEnvNumpy:
     def action_spec(self) -> DiscreteActionSpec:
         return DiscreteActionSpec(n=self._inner.num_actions)
 
+    def get_render_settings(self) -> GridRenderSettings:
+        return self._render_settings
+
+    def get_render_state(self, state: None = None) -> GridRenderState:
+        """The full tile map and agent positions, straight from the rust env.
+
+        The rust env owns its state, so `state` exists for interface symmetry
+        with the Python envs and is ignored. Unlike the Python envs' states,
+        the map is the unpadded interior, and it already includes the agents.
+        """
+        tilemap, agent_positions = self._inner.render_state()
+        return GridRenderState(tilemap=tilemap, agent_positions=agent_positions)
+
     @property
     def num_agents(self) -> int:
         return self._inner.num_agents
@@ -256,6 +303,10 @@ class RustEnvNumpy:
     @property
     def num_tasks(self) -> int:
         return self._inner.num_tasks
+
+    @property
+    def task_names(self) -> list[str]:
+        return self._inner.task_names
 
     @property
     def obs_vocab(self) -> Vocabulary:
@@ -266,7 +317,16 @@ class RustEnvNumpy:
         return self._action_vocab
 
     def set_enjoy_mode(self, task_id: int | None) -> None:
+        """Restrict stepping to one task, rebinding the buffers to its agents.
+
+        Nothing else changes: the vocabularies are the wrapper's union ones
+        either way, and `None` restores the whole batch. Everything the mode
+        selects — agent count, map and window layout — is re-read here rather
+        than kept from construction.
+        """
         self._inner.set_enjoy_mode(task_id)
+        self._bind_buffers()
+        self._render_settings = self._read_render_settings()
 
     def consume_metrics(self) -> dict[str, Any]:
         return json.loads(self._inner.consume_metrics())

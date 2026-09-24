@@ -4,13 +4,13 @@ mod _core {
         env::Environment,
         make::{EnvConfig, make},
         policy::{Policy, PolicyError, RandomPolicy},
-        render::{RenderApp, open_window},
+        render::{RenderApp, env::GridRenderState, open_window},
         timestep::{OBS_CHANNELS, TimeStepMut, TimeStepRef},
         vocab::VocabId,
     };
     use numpy::{
         AllowTypeChange, PyArray1, PyArray2, PyArray4, PyArrayLike1, PyReadonlyArray1,
-        PyReadwriteArray1, PyReadwriteArray2, PyReadwriteArray4,
+        PyReadwriteArray1, PyReadwriteArray2, PyReadwriteArray4, ndarray::Array2,
     };
     use pyo3::prelude::*;
     use pyo3::{
@@ -137,6 +137,12 @@ mod _core {
             self.env().num_tasks()
         }
 
+        /// Task names in task-id order; empty for envs without subtasks.
+        #[getter]
+        fn task_names(&self) -> Vec<String> {
+            self.env().task_names()
+        }
+
         fn set_enjoy_mode(&mut self, task_num: Option<usize>) {
             self.env_mut().set_enjoy_mode(task_num);
         }
@@ -168,6 +174,44 @@ mod _core {
         #[getter]
         fn action_symbols(&self) -> Vec<&'static str> {
             self.env().action_vocab().symbols().to_vec()
+        }
+
+        /// Static layout of the full map and the observation window:
+        /// (tile_width, tile_height, view_width, view_height, ui_height).
+        #[getter]
+        fn render_settings(&self) -> (usize, usize, usize, usize, usize) {
+            let settings = self.env().get_render_settings();
+            (
+                settings.tile_width,
+                settings.tile_height,
+                settings.view_width,
+                settings.view_height,
+                settings.ui_height,
+            )
+        }
+
+        /// Full tile map for birds-eye rendering, plus agent positions.
+        ///
+        /// Returns `(tilemap, agent_positions)`: a `(tile_width,
+        /// tile_height)` uint16 id grid indexing the observation vocabulary
+        /// (agents included), and a `(num_agents, 2)` int32 array of `(x, y)`
+        /// map coordinates. The map is the env's interior, without the wall
+        /// padding the observation windows carry.
+        fn render_state<'py>(
+            &self,
+            py: Python<'py>,
+        ) -> (Bound<'py, PyArray2<VocabId>>, Bound<'py, PyArray2<i32>>) {
+            let mut state = GridRenderState::default();
+            self.env().render_state_into(&mut state);
+
+            let tilemap = PyArray2::from_array(py, &state.tilemap);
+            let positions =
+                Array2::from_shape_fn((state.agent_positions.len(), 2), |(agent, axis)| {
+                    let position = state.agent_positions[agent];
+                    if axis == 0 { position.x } else { position.y }
+                });
+
+            (tilemap, PyArray2::from_array(py, &positions))
         }
 
         #[allow(clippy::too_many_arguments)]

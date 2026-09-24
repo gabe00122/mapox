@@ -19,6 +19,18 @@ pub enum MapoxError {
     },
     #[error("render state does not match render settings")]
     RenderSettingsMismatch,
+
+    #[error(
+        "observation shape mismatch: task {task:?} is {width}x{height}, but task {expected_task:?} is {expected_width}x{expected_height}"
+    )]
+    ObservationShapeMismatch {
+        task: String,
+        expected_task: String,
+        width: i32,
+        height: i32,
+        expected_width: i32,
+        expected_height: i32,
+    },
 }
 
 pub type MapoxResult<T> = Result<T, MapoxError>;

@@ -98,6 +98,12 @@ class VocabWrapper(Environment):
         return self._env.num_tasks
 
     @property
+    def task_names(self) -> list[str]:
+        # Environment.task_names has a concrete default, so __getattr__ never
+        # delegates it; forward explicitly.
+        return self._env.task_names
+
+    @property
     def teams(self) -> jax.Array | None:
         # Environment.teams has a concrete default, so __getattr__ never
         # delegates it; forward explicitly.

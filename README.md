@@ -75,6 +75,50 @@ Controls (depending on the environment):
 
 The renderer can show the full map or the focused agent’s POV (a local crop). See `mapox/play.py` for an example of using `GridworldClient` and recording video.
 
+### ASCII observations
+
+`AsciiRenderer` draws an agent’s observation crop as a roguelike text grid and
+resolves legal actions from an action mask:
+
+```python
+from mapox import AsciiRenderer
+
+renderer = AsciiRenderer(env.obs_vocab, env.action_vocab)
+print(renderer.render(ts.obs[0]))
+print(renderer.available_actions(ts.action_mask[0]))
+```
+
+Rows read top down, matching how the graphical renderer paints the same crop,
+and the UI band the Rust envs encode is included as the `-` rows at the top.
+`render_grid` returns the rows as a list instead of one newline-joined string.
+
+The Rust envs also expose the full map for a birds-eye view:
+
+```python
+render_state = env.get_render_state(None)
+print(renderer.render_grid(render_state.tilemap))
+```
+
+`RustEnvJax` and `RustEnvNumpy` expose `get_render_settings()` with the map and
+window sizes (including `ui_height`), and `get_render_state(...)` with the tile
+map, agents already placed on it, and their `(x, y)` positions.
+
+To run a rust env headless in a terminal:
+
+```bash
+uv run -m mapox.rust_play --ascii --env find_return --episodes 2
+```
+
+`--map` prints the full render state instead of the focused agent’s crop, and
+`--every N` throttles printing.
+
+A complete Find & Return explorer — map building, digging, and respawn
+re-localisation — lives in the examples:
+
+```bash
+uv run python examples/find_return_agent.py
+```
+
 ## Observation & action format
 
 All environments share a unified discrete encoding defined in `mapox/envs/constants.py`.

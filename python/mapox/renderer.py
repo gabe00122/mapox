@@ -48,6 +48,9 @@ class GridRenderSettings(NamedTuple):
     tile_height: int
     view_width: int
     view_height: int
+    # rows of synthetic UI at the top of the observation window; the Rust
+    # envs encode a band, the Python envs do not
+    ui_height: int = 0
 
 
 tilemap = {

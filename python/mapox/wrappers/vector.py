@@ -56,6 +56,10 @@ class VectorWrapper(Environment[EnvState]):
         return self._env.num_tasks
 
     @property
+    def task_names(self) -> list[str]:
+        return self._env.task_names
+
+    @property
     def teams(self) -> jax.Array | None:
         if self._enjoy_mode:
             return self._env.teams

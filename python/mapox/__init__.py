@@ -4,6 +4,7 @@ from importlib.metadata import version
 
 __version__ = version("mapox")
 
+from mapox.ascii import AsciiRenderer
 from mapox.client import GridworldClient
 from mapox.config import (
     EnvironmentConfig,
@@ -27,6 +28,7 @@ from mapox.wrappers.vocab_wrapper import VocabWrapper
 
 __all__ = [
     "ActionSpec",
+    "AsciiRenderer",
     "Environment",
     "EnvironmentConfig",
     "EnvironmentFactory",

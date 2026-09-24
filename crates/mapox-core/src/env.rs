@@ -20,6 +20,11 @@ pub trait Environment: Send + Sync {
     fn render_state_into(&self, grid_render_state: &mut GridRenderState);
 
     fn num_tasks(&self) -> usize;
+    /// Names of this env's tasks in task-id order. Single-task envs have no
+    /// subtasks and return an empty list.
+    fn task_names(&self) -> Vec<String> {
+        Vec::new()
+    }
     fn set_enjoy_mode(&mut self, task_num: Option<usize>) {}
 
     fn consume_metrics(&mut self) -> Value;

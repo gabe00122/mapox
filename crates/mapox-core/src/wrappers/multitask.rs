@@ -61,6 +61,26 @@ impl MultitaskWrapper {
             }
         }
 
+        // The obs vocab is unioned across tasks, but the spatial shape must be
+        // identical: downstream buffers are allocated once from one spec.
+        let expected = envs[0].observation_spec();
+        for (task_id, spec) in specs.iter().enumerate() {
+            let start = task_offsets[task_id];
+            for env in &envs[start..start + spec.num] {
+                let observed = env.observation_spec();
+                if observed.width != expected.width || observed.height != expected.height {
+                    return Err(MapoxError::ObservationShapeMismatch {
+                        task: spec.name.clone(),
+                        expected_task: specs[0].name.clone(),
+                        width: observed.width,
+                        height: observed.height,
+                        expected_width: expected.width,
+                        expected_height: expected.height,
+                    });
+                }
+            }
+        }
+
         let mut obs_vocab = Vocabulary::new();
         let mut action_vocab = Vocabulary::new();
 
@@ -134,7 +154,8 @@ impl Environment for MultitaskWrapper {
     }
 
     fn observation_spec(&self) -> ObservationSpec {
-        // TODO: We need to assert the width and height are the same for all envs
+        // `new` rejects tasks whose width or height differ; `num_types` is the
+        // union of the per-env vocabs already tracked by this wrapper.
         let ObservationSpec { width, height, .. } = self.envs[0].observation_spec();
 
         ObservationSpec {
@@ -197,6 +218,10 @@ impl Environment for MultitaskWrapper {
 
     fn num_tasks(&self) -> usize {
         self.num_tasks
+    }
+
+    fn task_names(&self) -> Vec<String> {
+        self.task_names.clone()
     }
 
     fn set_enjoy_mode(&mut self, task_num: Option<usize>) {

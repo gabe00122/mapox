@@ -82,17 +82,15 @@ class RustEnvJax(Environment[None]):
     def num_tasks(self) -> int:
         return self._env.num_tasks
 
+    @property
+    def task_names(self) -> list[str]:
+        return self._env.task_names
+
     def get_render_settings(self) -> GridRenderSettings:
-        raise NotImplementedError(
-            "the rust env does not expose render state; use mapox.run_demo for "
-            "the native viewer"
-        )
+        return self._env.get_render_settings()
 
     def get_render_state(self, state: None) -> GridRenderState:
-        raise NotImplementedError(
-            "the rust env does not expose render state; use mapox.run_demo for "
-            "the native viewer"
-        )
+        return self._env.get_render_state(state)
 
     @property
     def obs_vocab(self) -> Vocabulary:
@@ -104,6 +102,7 @@ class RustEnvJax(Environment[None]):
 
     def set_enjoy_mode(self, task_id: int | None) -> None:
         self._env.set_enjoy_mode(task_id)
+        self._result_shapes = jax.tree.map(_shape_placeholder, self._env.buffers)
 
     def consume_metrics(self) -> dict[str, Any]:
         return self._env.consume_metrics()
