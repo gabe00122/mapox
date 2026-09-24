@@ -53,7 +53,7 @@ impl TilemapRenderer {
         let mut pixels = image.into_raw();
         // Match ColorImage::from_rgba_unmultiplied, used by Tileset::embedded.
         // Rgba8Unorm deliberately keeps the atlas in egui's gamma space.
-        for pixel in pixels.chunks_exact_mut(4) {
+        for pixel in pixels.as_chunks_mut::<4>().0 {
             if pixel[3] != 255 {
                 let color =
                     egui::Color32::from_rgba_unmultiplied(pixel[0], pixel[1], pixel[2], pixel[3]);
@@ -305,7 +305,12 @@ impl TilemapGrid {
             mapped_at_creation: false,
         });
         let mut atlas_bytes = [0; 16];
-        for (bytes, value) in atlas_bytes.chunks_exact_mut(4).zip(pipeline.atlas_layout) {
+        for (bytes, value) in atlas_bytes
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .zip(pipeline.atlas_layout)
+        {
             bytes.copy_from_slice(&value.to_le_bytes());
         }
         queue.write_buffer(&uniforms, 16, &atlas_bytes);
@@ -356,7 +361,7 @@ impl CallbackTrait for TilemapCallback {
             self.rect.height() * scale,
         ];
         let mut bytes = [0; 16];
-        for (bytes, value) in bytes.chunks_exact_mut(4).zip(rect) {
+        for (bytes, value) in bytes.as_chunks_mut::<4>().0.iter_mut().zip(rect) {
             bytes.copy_from_slice(&value.to_le_bytes());
         }
         let mut previous = self.grid.previous_rect.lock();

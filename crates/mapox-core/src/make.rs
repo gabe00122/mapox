@@ -66,10 +66,7 @@ mod tests {
             "harvesters_move_every":6,"scout_reward":1.0,"harvester_reward":1.0}"#;
 
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();
-        assert_eq!(
-            parsed,
-            EnvConfig::RustScouts(Box::new(ScoutsConfig::default()))
-        );
+        assert_eq!(parsed, EnvConfig::RustScouts(Box::default()));
     }
 
     /// And the same for the env that was here first.
@@ -81,10 +78,7 @@ mod tests {
             "treasure_reward":1.0}"#;
 
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();
-        assert_eq!(
-            parsed,
-            EnvConfig::RustFindReturn(Box::new(FindReturnConfig::default()))
-        );
+        assert_eq!(parsed, EnvConfig::RustFindReturn(Box::default()));
     }
 
     /// Same again for the snake, whose config carries no mapgen keys.
@@ -95,10 +89,7 @@ mod tests {
             "food_reward":1.0,"death_reward":-1.0}"#;
 
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();
-        assert_eq!(
-            parsed,
-            EnvConfig::RustSnake(Box::new(SnakeConfig::default()))
-        );
+        assert_eq!(parsed, EnvConfig::RustSnake(Box::default()));
     }
 
     /// The vectorized shape: `num` copies of a plain env config.
@@ -115,7 +106,7 @@ mod tests {
             parsed,
             EnvConfig::RustVec {
                 num: 32,
-                env: Box::new(EnvConfig::RustScouts(Box::new(ScoutsConfig::default()))),
+                env: Box::new(EnvConfig::RustScouts(Box::default())),
             }
         );
     }
@@ -144,14 +135,12 @@ mod tests {
                     MultiEnvSpec {
                         name: "scouts".into(),
                         num: 2,
-                        env: Box::new(EnvConfig::RustScouts(Box::new(ScoutsConfig::default()))),
+                        env: Box::new(EnvConfig::RustScouts(Box::default())),
                     },
                     MultiEnvSpec {
                         name: "fr".into(),
                         num: 3,
-                        env: Box::new(EnvConfig::RustFindReturn(Box::new(
-                            FindReturnConfig::default(),
-                        ))),
+                        env: Box::new(EnvConfig::RustFindReturn(Box::default())),
                     },
                 ],
             }
@@ -352,7 +341,7 @@ mod tests {
             make(
                 &EnvConfig::RustVec {
                     num: 0,
-                    env: Box::new(EnvConfig::RustScouts(Box::new(ScoutsConfig::default()))),
+                    env: Box::new(EnvConfig::RustScouts(Box::default())),
                 },
                 32
             )

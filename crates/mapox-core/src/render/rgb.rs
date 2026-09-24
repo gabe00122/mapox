@@ -92,7 +92,7 @@ impl RgbRenderer {
             let Some((cell_y, texel_y)) = *y else {
                 continue;
             };
-            for (pixel, x) in row.chunks_exact_mut(3).zip(&self.xs) {
+            for (pixel, x) in row.as_chunks_mut::<3>().0.iter_mut().zip(&self.xs) {
                 let Some((cell_x, texel_x)) = *x else {
                     continue;
                 };

@@ -25,7 +25,7 @@ pub trait Environment: Send + Sync {
     fn task_names(&self) -> Vec<String> {
         Vec::new()
     }
-    fn set_enjoy_mode(&mut self, task_num: Option<usize>) {}
+    fn set_enjoy_mode(&mut self, _task_num: Option<usize>) {}
 
     fn consume_metrics(&mut self) -> Value;
 }
