@@ -58,10 +58,8 @@ def run_ascii(
     length: int,
     seed: int,
     *,
-    name: str = "rust",
     episodes: int = 1,
     focus: int = 0,
-    every: int = 1,
     full_map: bool = False,
     output: Callable[[str], None] = print,
 ) -> None:
@@ -76,8 +74,6 @@ def run_ascii(
 
     if not 0 <= focus < env.num_agents:
         raise ValueError(f"focused agent {focus} outside 0..{env.num_agents - 1}")
-    if every < 1:
-        raise ValueError(f"every must be at least 1, got {every}")
 
     renderer = AsciiRenderer(env.obs_vocab, env.action_vocab)
 
@@ -87,19 +83,18 @@ def run_ascii(
         timestep = env.reset(episode_seed)
 
         for step in range(length + 1):
-            if step % every == 0:
-                if full_map:
-                    tiles = env.get_render_state().tilemap
-                    title = f"{name} episode {episode} step {step} full map"
-                else:
-                    tiles = timestep.obs[focus]
-                    title = f"{name} episode {episode} step {step} agent {focus}"
+            if full_map:
+                tiles = env.get_render_state().tilemap
+                title = f"episode {episode} step {step} full map"
+            else:
+                tiles = timestep.obs[focus]
+                title = f"episode {episode} step {step} agent {focus}"
 
-                output(
-                    ascii_frame(
-                        renderer, tiles, timestep.action_mask[focus], title=title
-                    )
+            output(
+                ascii_frame(
+                    renderer, tiles, timestep.action_mask[focus], title=title
                 )
+            )
 
             if step == length:
                 break
@@ -129,10 +124,10 @@ CONFIGS = {
 }
 
 
-def wrap_video(config: RustEnvConfig, length: int) -> RustEnvConfig:
+def wrap_video(config: RustEnvConfig, length: int, video_path: str) -> RustEnvConfig:
     return RustVideoConfig(
         env=config,
-        output_dir="/home/gabrielk/Projects/mapox-rs/video",
+        output_dir=video_path,
         width=12 * 80,
         height=12 * 70,
         fps=10,
@@ -149,7 +144,7 @@ def main() -> None:
         help="run headless and print the ASCII view instead of the native window",
     )
     parser.add_argument("--episodes", type=int, default=2)
-    parser.add_argument("--steps", type=int, default=32)
+    parser.add_argument("--steps", type=int, default=512)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
         "--agent", type=int, default=0, help="focused agent for the ASCII view"
@@ -162,6 +157,11 @@ def main() -> None:
         action="store_true",
         help="print the full render-state map instead of the agent crop",
     )
+    parser.add_argument(
+        "--video-path",
+        type=str,
+        default=None
+    )
     args = parser.parse_args()
 
     if args.ascii:
@@ -172,20 +172,19 @@ def main() -> None:
             agent,
             args.steps,
             args.seed,
-            name=args.env,
             episodes=args.episodes,
             focus=args.agent,
-            every=args.every,
             full_map=args.map,
         )
         return
 
-    length = 512
-    config = wrap_video(CONFIGS[args.env], length)
-    env = RustEnvNumpy(config, length)
+    config = CONFIGS[args.env]
+    if args.video_path is not None:
+        config = wrap_video(config, args.steps, args.video_path)
+    env = RustEnvNumpy(config, args.steps)
     rng_agent = RandomAgent(env.action_spec)
 
-    rust_enjoy(env, length, 0, rng_agent)
+    rust_enjoy(env, args.steps, args.seed, rng_agent)
 
 
 if __name__ == "__main__":

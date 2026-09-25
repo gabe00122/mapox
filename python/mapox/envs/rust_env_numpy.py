@@ -160,7 +160,7 @@ RustMultiConfig.model_rebuild()
 
 
 class RustEnvNumpy:
-    def __init__(self, config: BaseModel, length: int):
+    def __init__(self, config: RustEnvConfig, length: int):
         self._inner = _CoreEnv(config.model_dump_json(), length)
 
         _, view_width, view_height, channels = self._inner.observation_shape
