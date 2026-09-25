@@ -160,7 +160,7 @@ mod tests {
                         width: 12,
                         height: 12,
                         view_width: 11,
-                        view_height: 13,
+                        view_height: 11,
                         ..ScoutsConfig::default()
                     }))),
                 },
@@ -172,8 +172,6 @@ mod tests {
                         width: 12,
                         height: 12,
                         view_width: 11,
-                        // FindReturn appends a 2-row UI strip, so 11 + 2 = 13
-                        // matches the scouts obs view above.
                         view_height: 11,
                         ..FindReturnConfig::default()
                     }))),
@@ -218,7 +216,7 @@ mod tests {
                     env: Box::new(EnvConfig::RustFindReturn(Box::new(FindReturnConfig {
                         num_agents: 2,
                         view_width: 11,
-                        view_height: 11, // + the 2-row UI strip => 13
+                        view_height: 13,
                         ..FindReturnConfig::default()
                     }))),
                 },
@@ -231,9 +229,10 @@ mod tests {
                 task,
                 expected_task,
                 width: 11,
-                height: 13,
+                // observation heights: view_height + the UI band
+                height: 15,
                 expected_width: 11,
-                expected_height: 11,
+                expected_height: 13,
             }) if task == "fr" && expected_task == "scouts"
         ));
     }

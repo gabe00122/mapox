@@ -14,8 +14,8 @@ from mapox.envs.rust_env_numpy import (
     RustSnakeConfig,
 )
 
-# (config, (view_width, view_height, ui_height)): find_return and snake add
-# their own two-row band to view_height; scouts takes the band inside it.
+# (config, (view_width, view_height, ui_height)): every env adds its two-row
+# UI band to the configured view_height.
 CONFIGS = {
     "find_return": (
         RustFindReturnConfig(
@@ -30,9 +30,9 @@ CONFIGS = {
             width=12,
             height=10,
             view_width=9,
-            view_height=11,
+            view_height=7,
         ),
-        (9, 11, 2),
+        (9, 9, 2),
     ),
     "snake": (
         RustSnakeConfig(num_agents=1, width=12, height=10, view_width=9, view_height=7),
@@ -125,10 +125,7 @@ def test_multitask_render_state_ids_index_the_union_vocab():
                 RustMultiEnvSpec(
                     name="fr",
                     num=1,
-                    # 13 + the 2-row UI band matches the scouts window height
-                    env=RustFindReturnConfig(
-                        num_agents=1, width=12, height=10, view_height=13
-                    ),
+                    env=RustFindReturnConfig(num_agents=1, width=12, height=10),
                 ),
             )
         ),

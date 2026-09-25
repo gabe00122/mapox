@@ -50,8 +50,6 @@ class RustScoutsConfig(BaseModel):
     width: int = 80
     height: int = 70
     view_width: int = 15
-    # the whole observation window; its top two rows are the UI band and what
-    # is left is the field of view
     view_height: int = 15
 
     mapgen_threshold: float = 0.07

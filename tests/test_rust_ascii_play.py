@@ -22,7 +22,7 @@ CONFIGS = {
         width=14,
         height=12,
         view_width=9,
-        view_height=11,
+        view_height=7,
     ),
     "snake": RustSnakeConfig(
         num_agents=2, width=14, height=12, view_width=9, view_height=7

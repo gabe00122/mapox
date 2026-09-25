@@ -20,7 +20,7 @@ from mapox.envs.rust_env_numpy import (
 # produce them: the rust side parses with serde and has no field defaults.
 SCOUTS_JSON = (
     '{"env_type": "rust_scouts", "num_scouts": 1, "num_harvesters": 1, '
-    '"num_treasures": 12, "width": 12, "height": 12, "view_width": 11, "view_height": 13, '
+    '"num_treasures": 12, "width": 12, "height": 12, "view_width": 11, "view_height": 11, '
     '"mapgen_threshold": 0.3, "water_threshold": -0.45, '
     '"harvesters_move_every": 6, "scout_reward": 1.0, "harvester_reward": 1.0}'
 )
@@ -86,8 +86,7 @@ def test_factory_routes_rust_multi_config_to_rust_env():
             RustMultiEnvSpec(
                 name="fr",
                 num=1,
-                # 13 + the 2-row UI band matches the scouts window height
-                env=RustFindReturnConfig(num_agents=2, view_height=13),
+                env=RustFindReturnConfig(num_agents=2),
             ),
         )
     )
@@ -115,8 +114,7 @@ SCOUTS_TASK = RustMultiEnvSpec(
 FR_TASK = RustMultiEnvSpec(
     name="fr",
     num=1,
-    # 13 + the 2-row UI band matches the scouts window height
-    env=RustFindReturnConfig(num_agents=2, width=12, height=12, view_height=13),
+    env=RustFindReturnConfig(num_agents=2, width=12, height=12),
 )
 STANDALONE = {0: SCOUTS_TASK.env, 1: FR_TASK.env}
 

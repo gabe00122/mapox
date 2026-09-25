@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     env::Environment,
     envs::common::{
-        Position, fov,
+        Position, UI_HEIGHT, fov,
         map_gen::{fractal_noise, sprinkle_decor},
         vocab_enum::VocabEnum,
     },
@@ -165,8 +165,6 @@ pub struct Scouts {
     pad_width: i32,
     pad_height: i32,
 
-    fov_height: i32,
-
     width: i32,
     height: i32,
 
@@ -182,21 +180,15 @@ impl Scouts {
         let action_vocab = ScoutsAction::vocab();
         let obs_vocab = ScoutsObs::vocab();
 
-        let ui_height = 2;
-        let fov_height = config.view_height - ui_height;
-        assert!(
-            fov_height > 0,
-            "the two-row UI band leaves no room in a {}-row window",
-            config.view_height
-        );
-
         let pad_width = config.view_width / 2;
-        let pad_height = fov_height / 2;
+        let pad_height = config.view_height / 2;
+
+        let view_height = config.view_height + UI_HEIGHT as i32;
 
         let width = config.width + 2 * pad_width;
         let height = config.height + 2 * pad_height;
 
-        let obs_spec = ObservationSpec::new(config.view_width, config.view_height, obs_vocab.len());
+        let obs_spec = ObservationSpec::new(config.view_width, view_height, obs_vocab.len());
         let action_spec = ActionSpec::new(action_vocab.len());
 
         let num_agents = config.num_scouts + config.num_harvesters;
@@ -220,7 +212,6 @@ impl Scouts {
 
             pad_width,
             pad_height,
-            fov_height,
             width,
             height,
 
@@ -290,7 +281,7 @@ impl Scouts {
     }
 
     fn encode_observations(&self, timestep: &mut TimeStepMut) {
-        let fov_height = self.fov_height as usize;
+        let fov_height = self.config.view_height as usize;
 
         for (agent_id, agent) in self.state.agents.iter().enumerate() {
             let mut view = timestep.obs.slice_mut(s![agent_id, .., ..fov_height, 0]);
@@ -486,8 +477,8 @@ impl Environment for Scouts {
             tile_width: self.config.width as usize,
             tile_height: self.config.height as usize,
             view_width: self.config.view_width as usize,
-            view_height: self.config.view_height as usize,
-            ui_height: 2,
+            view_height: self.config.view_height as usize + UI_HEIGHT,
+            ui_height: UI_HEIGHT,
         }
     }
 
@@ -582,11 +573,11 @@ mod tests {
     }
 
     /// The view-window cell a map offset from the agent lands in. The agent
-    /// sits at the centre of the fov, which is the window minus its UI band.
+    /// sits at the centre of the fov, above the UI band.
     fn cell(env: &Scouts, dx: i32, dy: i32) -> [usize; 2] {
         [
             (env.config.view_width / 2 + dx) as usize,
-            (env.fov_height / 2 + dy) as usize,
+            (env.config.view_height / 2 + dy) as usize,
         ]
     }
 
@@ -994,17 +985,19 @@ mod tests {
         let mut buffers = TimeStepBuffers::new(&env);
         env.encode_observations(&mut buffers.view_mut());
 
-        assert_eq!(env.fov_height, env.config.view_height - 2);
+        let fov_height = env.config.view_height as usize;
+        assert_eq!(buffers.obs.dim().1, env.config.view_width as usize);
+        assert_eq!(buffers.obs.dim().2, fov_height + UI_HEIGHT);
 
         for agent_id in 0..env.num_agents() {
             let window = buffers.obs.slice(s![agent_id, .., .., 0]);
-            for y in 0..env.config.view_height as usize {
+            for y in 0..fov_height + UI_HEIGHT {
                 let row_is_ui =
                     (0..env.config.view_width as usize).all(|x| window[[x, y]] == id(UI));
                 let row_has_ui =
                     (0..env.config.view_width as usize).any(|x| window[[x, y]] == id(UI));
 
-                if y >= env.fov_height as usize {
+                if y >= fov_height {
                     assert!(row_is_ui, "row {y} of agent {agent_id} is not all UI");
                 } else {
                     assert!(!row_has_ui, "UI leaked into fov row {y}");

@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     env::Environment,
-    envs::common::{Position, vocab_enum::VocabEnum},
+    envs::common::{Position, UI_HEIGHT, vocab_enum::VocabEnum},
     render::env::{GridRenderSettings, GridRenderState},
     spec::{ActionSpec, ObservationSpec},
     symbols::{
@@ -279,8 +279,7 @@ impl Snake {
 
         let pad_width = config.view_width / 2;
         let pad_height = config.view_height / 2;
-        let ui_height = 2;
-        let view_height = config.view_height + ui_height;
+        let view_height = config.view_height + UI_HEIGHT as i32;
 
         let width = config.width + 2 * pad_width;
         let height = config.height + 2 * pad_height;
@@ -734,8 +733,8 @@ impl Environment for Snake {
             tile_width: self.config.width as usize,
             tile_height: self.config.height as usize,
             view_width: self.config.view_width as usize,
-            view_height: (self.config.view_height + 2) as usize,
-            ui_height: 2,
+            view_height: self.config.view_height as usize + UI_HEIGHT,
+            ui_height: UI_HEIGHT,
         }
     }
 
@@ -1323,11 +1322,11 @@ mod tests {
 
         let fov_height = env.config.view_height as usize;
         assert_eq!(buffers.obs.dim().1, env.config.view_width as usize);
-        assert_eq!(buffers.obs.dim().2, fov_height + 2);
+        assert_eq!(buffers.obs.dim().2, fov_height + UI_HEIGHT);
 
         for agent_id in 0..env.num_agents() {
             let window = buffers.obs.slice(s![agent_id, .., .., 0]);
-            for y in 0..fov_height + 2 {
+            for y in 0..fov_height + UI_HEIGHT {
                 let row_is_ui =
                     (0..env.config.view_width as usize).all(|x| window[[x, y]] == id(TileUI));
                 let row_has_ui =

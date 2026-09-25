@@ -549,9 +549,9 @@ mod tests {
         assert_eq!(settings.tile_width, 21);
         assert_eq!(settings.tile_height, 21);
         assert_eq!(settings.view_width, 11);
-        assert_eq!(settings.view_height, 11);
+        assert_eq!(settings.view_height, 13);
         assert_eq!(settings.ui_height, 2);
-        assert_eq!(settings.fov_height(), 9);
+        assert_eq!(settings.fov_height(), 11);
 
         let mut render_state = GridRenderState::default();
         env.render_state_into(&mut render_state);
