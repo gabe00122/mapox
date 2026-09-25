@@ -17,7 +17,7 @@ from jax.experimental import io_callback
 from pydantic import BaseModel
 
 from mapox.environment import Environment
-from mapox.envs.rust_env_numpy import RustEnvNumpy
+from mapox.envs.rust_env_numpy import RustEnvNumpy, RustEnvConfig
 from mapox.renderer import GridRenderSettings, GridRenderState
 from mapox.specs import DiscreteActionSpec, ObservationSpec
 from mapox.timestep import TimeStep
@@ -32,7 +32,7 @@ def _shape_placeholder(buffer: np.ndarray) -> jax.Array:
 
 
 class RustEnvJax(Environment[None]):
-    def __init__(self, config: BaseModel, length: int):
+    def __init__(self, config: RustEnvConfig, length: int):
         self._env = RustEnvNumpy(config, length)
         self._result_shapes = jax.tree.map(_shape_placeholder, self._env.buffers)
 

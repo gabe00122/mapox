@@ -1,3 +1,4 @@
+from mapox.envs.rust_env_jax import RustEnvJax
 import argparse
 from collections.abc import Callable
 
@@ -53,7 +54,7 @@ def ascii_frame(
 
 
 def run_ascii(
-    env: RustEnvNumpy,
+    env: RustEnvJax | RustEnvNumpy,
     agent: Agent,
     length: int,
     seed: int,
@@ -71,6 +72,9 @@ def run_ascii(
     of the focused agent's crop. `output` receives one string per printed
     frame, so callers can capture the frames instead of writing to stdout.
     """
+
+    if isinstance(env, RustEnvJax):
+        env = env._env
 
     if not 0 <= focus < env.num_agents:
         raise ValueError(f"focused agent {focus} outside 0..{env.num_agents - 1}")
