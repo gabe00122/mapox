@@ -60,9 +60,9 @@ mod tests {
     /// `RustScoutsConfig.model_dump_json()`, verbatim:
     #[test]
     fn a_scouts_config_dump_parses() {
-        let json = r#"{"env_type":"rust_scouts","num_scouts":4,"num_harvesters":4,
-            "num_treasures":12,"width":40,"height":40,"view_width":11,"view_height":13,
-            "ui_height":2,"mapgen_threshold":0.3,"water_threshold":-0.45,
+        let json = r#"{"env_type":"rust_scouts","num_scouts":1,"num_harvesters":1,
+            "num_treasures":12,"width":80,"height":70,"view_width":15,"view_height":15,
+            "mapgen_threshold":0.07,"water_threshold":-0.45,
             "harvesters_move_every":6,"scout_reward":1.0,"harvester_reward":1.0}"#;
 
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();
@@ -73,7 +73,7 @@ mod tests {
     #[test]
     fn a_find_return_config_dump_parses() {
         let json = r#"{"env_type":"rust_find_return","num_agents":8,"num_flags":1,
-            "width":40,"height":40,"view_width":11,"view_height":11,"mapgen_threshold":0.3,
+            "width":80,"height":70,"view_width":15,"view_height":15,"mapgen_threshold":0.07,
             "water_threshold":-0.45,"digging_timeout":5,"preparation_steps":256,
             "treasure_reward":1.0}"#;
 
@@ -84,9 +84,9 @@ mod tests {
     /// Same again for the snake, whose config carries no mapgen keys.
     #[test]
     fn a_snake_config_dump_parses() {
-        let json = r#"{"env_type":"rust_snake","num_agents":4,"width":24,"height":24,
-            "view_width":11,"view_height":11,"food_spawn_prob":0.002,
-            "food_reward":1.0,"death_reward":-1.0}"#;
+        let json = r#"{"env_type":"rust_snake","num_agents":16,"width":80,"height":70,
+            "view_width":15,"view_height":15,"food_spawn_prob":0.0001,
+            "food_reward":0.01,"death_reward":0.0}"#;
 
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();
         assert_eq!(parsed, EnvConfig::RustSnake(Box::default()));
@@ -96,8 +96,8 @@ mod tests {
     #[test]
     fn a_vec_config_parses() {
         let json = r#"{"env_type":"rust_vec","num":32,"env":{"env_type":"rust_scouts",
-            "num_scouts":4,"num_harvesters":4,"num_treasures":12,"width":40,"height":40,
-            "view_width":11,"view_height":13,"ui_height":2,"mapgen_threshold":0.3,
+            "num_scouts":1,"num_harvesters":1,"num_treasures":12,"width":80,"height":70,
+            "view_width":15,"view_height":15,"mapgen_threshold":0.07,
             "water_threshold":-0.45,"harvesters_move_every":6,
             "scout_reward":1.0,"harvester_reward":1.0}}"#;
 
@@ -116,14 +116,14 @@ mod tests {
     #[test]
     fn a_multi_config_parses() {
         let json = r#"{"env_type":"rust_multi","envs":[
-            {"name":"scouts","num":2,"env":{"env_type":"rust_scouts","num_scouts":4,
-                "num_harvesters":4,"num_treasures":12,"width":40,"height":40,
-                "view_width":11,"view_height":13,"ui_height":2,"mapgen_threshold":0.3,
+            {"name":"scouts","num":2,"env":{"env_type":"rust_scouts","num_scouts":1,
+                "num_harvesters":1,"num_treasures":12,"width":80,"height":70,
+                "view_width":15,"view_height":15,"mapgen_threshold":0.07,
                 "water_threshold":-0.45,"harvesters_move_every":6,
                 "scout_reward":1.0,"harvester_reward":1.0}},
             {"name":"fr","num":3,"env":{"env_type":"rust_find_return","num_agents":8,
-                "num_flags":1,"width":40,"height":40,"view_width":11,"view_height":11,
-                "mapgen_threshold":0.3,"water_threshold":-0.45,"digging_timeout":5,
+                "num_flags":1,"width":80,"height":70,"view_width":15,"view_height":15,
+                "mapgen_threshold":0.07,"water_threshold":-0.45,"digging_timeout":5,
                 "preparation_steps":256,"treasure_reward":1.0}}
         ]}"#;
 

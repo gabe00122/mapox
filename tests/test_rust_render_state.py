@@ -31,7 +31,6 @@ CONFIGS = {
             height=10,
             view_width=9,
             view_height=11,
-            ui_height=2,
         ),
         (9, 11, 2),
     ),
@@ -126,7 +125,10 @@ def test_multitask_render_state_ids_index_the_union_vocab():
                 RustMultiEnvSpec(
                     name="fr",
                     num=1,
-                    env=RustFindReturnConfig(num_agents=1, width=12, height=10),
+                    # 13 + the 2-row UI band matches the scouts window height
+                    env=RustFindReturnConfig(
+                        num_agents=1, width=12, height=10, view_height=13
+                    ),
                 ),
             )
         ),

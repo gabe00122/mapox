@@ -23,7 +23,6 @@ CONFIGS = {
         height=12,
         view_width=9,
         view_height=11,
-        ui_height=2,
     ),
     "snake": RustSnakeConfig(
         num_agents=2, width=14, height=12, view_width=9, view_height=7
@@ -39,17 +38,23 @@ def env(request):
     return RustEnvNumpy(request.param, STEPS)
 
 
+def episode_frames(env, outputs):
+    """The episode frames in `outputs`, after run_ascii's observation legend."""
+
+    return outputs[2 * len(env.obs_vocab.symbols) :]
+
+
 def test_real_episodes_render_ascii_frames(env):
-    frames = []
+    outputs = []
     run_ascii(
         env,
         RandomAgent(env.action_spec),
         STEPS,
         seed=0,
-        name="test",
         episodes=EPISODES,
-        output=frames.append,
+        output=outputs.append,
     )
+    frames = episode_frames(env, outputs)
 
     # the reset frame plus one per step, for every episode
     assert len(frames) == EPISODES * (STEPS + 1)
@@ -59,7 +64,7 @@ def test_real_episodes_render_ascii_frames(env):
 
     for frame in frames:
         lines = frame.splitlines()
-        assert lines[0].startswith("test episode")
+        assert lines[0].startswith("episode")
 
         grid = lines[1 : 1 + height]
         assert len(grid) == height
@@ -73,16 +78,16 @@ def test_real_episodes_render_ascii_frames(env):
 
 
 def test_full_map_frames_use_the_render_state(env):
-    frames = []
+    outputs = []
     run_ascii(
         env,
         RandomAgent(env.action_spec),
         STEPS,
         seed=1,
-        name="test",
         full_map=True,
-        output=frames.append,
+        output=outputs.append,
     )
+    frames = episode_frames(env, outputs)
 
     settings = env.get_render_settings()
     assert len(frames) == STEPS + 1
@@ -99,27 +104,18 @@ def test_full_map_frames_use_the_render_state(env):
         assert "-" not in "\n".join(grid)
 
 
-def test_every_throttles_the_printed_frames(env):
-    frames = []
-    run_ascii(
-        env, RandomAgent(env.action_spec), STEPS, seed=0, every=5, output=frames.append
-    )
-
-    assert len(frames) == len(range(0, STEPS + 1, 5))
-
-
 def test_focus_selects_the_agent_view_and_ids_are_checked(env):
-    frames = []
+    outputs = []
     run_ascii(
         env,
         RandomAgent(env.action_spec),
         STEPS,
         seed=0,
         focus=1,
-        every=STEPS,
-        output=frames.append,
+        output=outputs.append,
     )
-    assert frames[0].splitlines()[0].endswith("agent 1")
+    frames = episode_frames(env, outputs)
+    assert frames[0].splitlines()[0] == "episode 0 step 0 agent 1"
 
     with pytest.raises(ValueError, match="focused agent"):
         run_ascii(
@@ -130,15 +126,21 @@ def test_focus_selects_the_agent_view_and_ids_are_checked(env):
             focus=env.num_agents,
             output=lambda _: None,
         )
-    with pytest.raises(ValueError, match="every"):
-        run_ascii(
-            env,
-            RandomAgent(env.action_spec),
-            STEPS,
-            seed=0,
-            every=0,
-            output=lambda _: None,
-        )
+
+
+def test_observation_legend_is_printed_before_the_frames(env):
+    outputs = []
+    run_ascii(env, RandomAgent(env.action_spec), STEPS, seed=0, output=outputs.append)
+
+    legend = outputs[: 2 * len(env.obs_vocab.symbols)]
+    assert legend[::2] == ["Observation Legend:"] * len(env.obs_vocab.symbols)
+    assert all(
+        entry.endswith(f" = {symbol}")
+        for entry, symbol in zip(legend[1::2], env.obs_vocab.symbols)
+    )
+    assert outputs[2 * len(env.obs_vocab.symbols)].splitlines()[0] == (
+        "episode 0 step 0 agent 0"
+    )
 
 
 def test_ascii_frame_marks_the_legal_actions():

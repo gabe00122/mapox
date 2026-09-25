@@ -541,7 +541,6 @@ mod tests {
                 height: 21,
                 view_width: 11,
                 view_height: 11,
-                ui_height: 2,
                 ..Default::default()
             },
             512,

@@ -31,7 +31,6 @@ pub struct ScoutsConfig {
     pub height: i32,
     pub view_width: i32,
     pub view_height: i32,
-    pub ui_height: i32,
 
     pub mapgen_threshold: f32,
     pub water_threshold: f32,
@@ -45,15 +44,14 @@ pub struct ScoutsConfig {
 impl Default for ScoutsConfig {
     fn default() -> Self {
         Self {
-            num_scouts: 4,
-            num_harvesters: 4,
+            num_scouts: 1,
+            num_harvesters: 1,
             num_treasures: 12,
-            width: 40,
-            height: 40,
-            view_width: 11,
-            view_height: 13,
-            ui_height: 2,
-            mapgen_threshold: 0.3,
+            width: 80,
+            height: 70,
+            view_width: 15,
+            view_height: 15,
+            mapgen_threshold: 0.07,
             water_threshold: -0.45,
             harvesters_move_every: 6,
             scout_reward: 1.0,
@@ -184,11 +182,11 @@ impl Scouts {
         let action_vocab = ScoutsAction::vocab();
         let obs_vocab = ScoutsObs::vocab();
 
-        let fov_height = config.view_height - config.ui_height;
+        let ui_height = 2;
+        let fov_height = config.view_height - ui_height;
         assert!(
             fov_height > 0,
-            "ui_height {} leaves no room in a {}-row window",
-            config.ui_height,
+            "the two-row UI band leaves no room in a {}-row window",
             config.view_height
         );
 
@@ -489,7 +487,7 @@ impl Environment for Scouts {
             tile_height: self.config.height as usize,
             view_width: self.config.view_width as usize,
             view_height: self.config.view_height as usize,
-            ui_height: self.config.ui_height as usize,
+            ui_height: 2,
         }
     }
 
@@ -996,10 +994,7 @@ mod tests {
         let mut buffers = TimeStepBuffers::new(&env);
         env.encode_observations(&mut buffers.view_mut());
 
-        assert_eq!(
-            env.fov_height,
-            env.config.view_height - env.config.ui_height
-        );
+        assert_eq!(env.fov_height, env.config.view_height - 2);
 
         for agent_id in 0..env.num_agents() {
             let window = buffers.obs.slice(s![agent_id, .., .., 0]);

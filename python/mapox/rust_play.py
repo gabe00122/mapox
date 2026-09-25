@@ -109,25 +109,9 @@ def run_ascii(
 
 
 CONFIGS = {
-    "find_return": RustFindReturnConfig(
-        view_width=15, view_height=15, width=80, height=70, mapgen_threshold=0.07
-    ),
-    "scouts": RustScoutsConfig(
-        view_width=15,
-        view_height=15,
-        ui_height=2,
-        width=80,
-        height=70,
-        mapgen_threshold=0.07,
-    ),
-    "snake": RustSnakeConfig(
-        view_width=15,
-        view_height=15,
-        num_agents=4096,
-        food_spawn_prob=0.001,
-        width=500,
-        height=500,
-    ),
+    "find_return": RustFindReturnConfig(),
+    "scouts": RustScoutsConfig(),
+    "snake": RustSnakeConfig(),
 }
 
 

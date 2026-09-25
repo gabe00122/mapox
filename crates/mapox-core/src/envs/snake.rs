@@ -38,14 +38,14 @@ pub struct SnakeConfig {
 impl Default for SnakeConfig {
     fn default() -> Self {
         Self {
-            num_agents: 4,
-            width: 24,
-            height: 24,
-            view_width: 11,
-            view_height: 11,
-            food_spawn_prob: 0.002,
-            food_reward: 1.0,
-            death_reward: -1.0,
+            num_agents: 16,
+            width: 80,
+            height: 70,
+            view_width: 15,
+            view_height: 15,
+            food_spawn_prob: 0.0001,
+            food_reward: 0.01,
+            death_reward: 0.0,
         }
     }
 }
@@ -787,6 +787,8 @@ mod tests {
             num_agents: 2,
             width: 12,
             height: 12,
+            view_width: 11,
+            view_height: 11,
             food_spawn_prob: 0.0,
             ..Default::default()
         }
