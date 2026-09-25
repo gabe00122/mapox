@@ -162,3 +162,10 @@ class AsciiRenderer:
             )
 
         return [self._action_vocab.symbols[i] for i in np.flatnonzero(mask)]
+
+    def print_legend(self) -> list[str]:
+        out = []
+        for symbol in self._obs_vocab.symbols:
+            char = LEGEND[symbol]
+            out.append(f"{char} = {symbol}")
+        return out

@@ -80,6 +80,9 @@ def run_ascii(
         raise ValueError(f"focused agent {focus} outside 0..{env.num_agents - 1}")
 
     renderer = AsciiRenderer(env.obs_vocab, env.action_vocab)
+    for line in renderer.print_legend():
+        output("Observation Legend:")
+        output(line)
 
     for episode in range(episodes):
         episode_seed = seed + episode
