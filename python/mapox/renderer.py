@@ -53,47 +53,41 @@ class GridRenderSettings(NamedTuple):
     ui_height: int = 0
 
 
+def _team_soldiers(row: int):
+    """[direction][health - 1] knights and [direction] archers for one team."""
+    knights = [[(d * 2, row), (d * 2 + 1, row)] for d in range(4)]
+    archers = [(8 + d, row) for d in range(4)]
+    return knights, archers
+
+
+_RED_KNIGHTS, _RED_ARCHERS = _team_soldiers(3)
+_BLUE_KNIGHTS, _BLUE_ARCHERS = _team_soldiers(4)
+
+# (col, row) on the sheet scripts/make_tileset.py draws; the rust renderer's
+# TILE_ART points into the same slots.
 tilemap = {
-    SB.TILE_MASK: (5, 2),
-    SB.TILE_EMPTY: (17, 0),
-    SB.TILE_WALL: (20, 3),
-    SB.TILE_DESTRUCTIBLE_WALL: (20, 3),
-    SB.TILE_FLAG: [(29, 23), (29, 31), (29, 32)],
-    SB.TILE_FLAG_UNLOCKED: (29, 23),
-    SB.AGENT_GENERIC: (104, 0),
-    SB.AGENT_HARVESTER: (13, 14),
-    SB.AGENT_SCOUT: (3, 16),
-    SB.AGENT_PREY: (3, 16),  # same art as scout for now
-    SB.AGENT_PREDATOR: (13, 14),  # same art as harvester for now
-    SB.AGENT_KNIGHT: [
-        None,
-        [
-            [(35, 31), (31, 31)],
-            [(36, 31), (32, 31)],
-            [(37, 31), (33, 31)],
-            [(38, 31), (34, 31)],
-        ],  # red
-        [
-            [(35, 32), (31, 32)],
-            [(36, 32), (32, 32)],
-            [(37, 32), (33, 32)],
-            [(38, 32), (34, 32)],
-        ],  # blue
-    ],
-    SB.AGENT_ARCHER: [
-        None,
-        [(39, 31), (40, 31), (41, 31), (42, 31)],  # red
-        [(39, 32), (40, 32), (41, 32), (42, 32)],  # blue
-    ],
-    SB.TILE_DECOR_1: (15, 5),
-    SB.TILE_DECOR_2: (16, 5),
-    SB.TILE_DECOR_3: (17, 5),
-    SB.TILE_DECOR_4: (14, 5),
-    SB.TILE_ARROW: (80, 21),
-    SB.TILE_GRASS: (6, 9),
-    SB.TILE_FOOD: (62, 45),
-    SB.AGENT_SNAKE_HEAD: (0, 0),
-    SB.AGENT_SNAKE_BODY: (0, 0),
+    SB.TILE_MASK: (1, 0),
+    SB.TILE_EMPTY: (2, 0),
+    SB.TILE_WALL: (3, 0),
+    SB.TILE_DESTRUCTIBLE_WALL: (4, 0),
+    SB.TILE_FLAG: [(4, 1), (5, 1), (6, 1)],  # neutral, red, blue banners
+    SB.TILE_FLAG_UNLOCKED: (1, 1),
+    SB.AGENT_GENERIC: (7, 1),
+    SB.AGENT_HARVESTER: (9, 1),
+    SB.AGENT_SCOUT: (8, 1),
+    SB.AGENT_PREY: (8, 1),  # same art as scout for now
+    SB.AGENT_PREDATOR: (9, 1),  # same art as harvester for now
+    SB.AGENT_KNIGHT: [None, _RED_KNIGHTS, _BLUE_KNIGHTS],
+    SB.AGENT_ARCHER: [None, _RED_ARCHERS, _BLUE_ARCHERS],
+    SB.TILE_DECOR_1: (8, 0),
+    SB.TILE_DECOR_2: (9, 0),
+    SB.TILE_DECOR_3: (10, 0),
+    SB.TILE_DECOR_4: (11, 0),
+    SB.TILE_ARROW: (3, 1),
+    SB.TILE_GRASS: (12, 0),
+    SB.TILE_FOOD: (2, 1),
+    SB.AGENT_SNAKE_HEAD: (10, 1),
+    SB.AGENT_SNAKE_BODY: (11, 1),
 }
 
 
@@ -123,7 +117,7 @@ class GridworldRenderer:
         self._agent_view_offset_y = 0
         self._focused_agent = None
 
-        path = files("mapox").joinpath("assets/urizen_onebit_tileset__v2d0.png")
+        path = files("mapox").joinpath("assets/mapox_tileset.png")
         self._spritesheet = SpriteSheet(str(path))
 
     def set_env(self, env_settings: GridRenderSettings):

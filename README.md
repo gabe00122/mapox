@@ -190,4 +190,4 @@ The `EnvironmentFactory` also supports a `MultiTaskConfig` that builds a multita
 
 ## Acknowledgements
 
-Rendering uses the [Urizen Onebit Tileset](https://vurmux.itch.io/urizen-onebit-tileset) by Vurmux.
+Rendering uses a tileset drawn for these environments by `scripts/make_tileset.py`.

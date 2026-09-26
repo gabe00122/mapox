@@ -1,14 +1,17 @@
-//! The Urizen sprite sheet: where each tile lives in it, and how to draw one.
+//! The mapox sprite sheet: where each tile lives in it, and how to draw one.
 
 use egui::{Color32, ColorImage, Rect, TextureHandle, TextureOptions, Vec2, pos2};
 
-/// Urizen Onebit Tileset by Vurmux — <https://vurmux.itch.io/urizen-onebit-tileset>
+/// Drawn for these environments by `scripts/make_tileset.py`; regenerate it
+/// from there rather than editing the png, and keep [`TILE_ART`] and the
+/// python renderer's table in step with the slots it assigns.
 ///
 /// The sheet is baked into the binary rather than loaded from disk, so one
 /// code path serves every host: the python extension has no asset directory to
-/// point at, and wasm has no filesystem at all. The cost is ~250 KiB of
-/// `.rodata` in every artifact.
-const TILESET_PNG: &[u8] = include_bytes!("../../assets/urizen_onebit_tileset__v2d0.png");
+/// point at, and wasm has no filesystem at all. It is a few KiB.
+///
+/// [`TILE_ART`]: super::TILE_ART
+const TILESET_PNG: &[u8] = include_bytes!("../../assets/mapox_tileset.png");
 
 /// Side of one tile, in sheet pixels. Also the art-pixel unit the
 /// [`GridLayout`](super::grid::GridLayout) snaps its scale to, so each sprite
@@ -17,28 +20,24 @@ pub(crate) const TILE_SIZE: f32 = 12.0;
 /// Separator between tiles. It is also a border, so tile (0, 0) starts at (1, 1).
 const TILE_PAD: f32 = 1.0;
 
-/// Sheet is 2679x651 px = `COLS * 13 + 1` by `ROWS * 13 + 1`.
-pub const TILESET_COLS: u32 = 206;
-pub const TILESET_ROWS: u32 = 50;
+/// Sheet is 209x66 px = `COLS * 13 + 1` by `ROWS * 13 + 1`.
+pub const TILESET_COLS: u32 = 16;
+pub const TILESET_ROWS: u32 = 5;
 
-/// The Urizen sheet, uploaded once and sampled per tile.
+/// The sheet, uploaded once and sampled per tile.
 pub struct Tileset {
     texture: TextureHandle,
 }
 
 impl Tileset {
     /// Decodes and uploads the embedded sheet.
-    ///
-    /// Call from inside a frame (i.e. within [`eframe::App::ui`]): before the
-    /// backend delivers input, the context still reports a placeholder max
-    /// texture side of 2048 and debug builds assert the 2679px sheet against it.
     pub fn embedded(ctx: &egui::Context) -> Self {
         let rgba = Self::decode();
         let size = [rgba.width() as usize, rgba.height() as usize];
         let pixels = ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
         // Pixel art, and neighbouring tiles sit one pixel away: interpolating
         // would bleed the separator and the next sprite into every edge.
-        let texture = ctx.load_texture("urizen-tileset", pixels, TextureOptions::NEAREST);
+        let texture = ctx.load_texture("mapox-tileset", pixels, TextureOptions::NEAREST);
         Self { texture }
     }
 
@@ -124,11 +123,8 @@ mod tests {
         );
 
         // tile/wall, as used by both renderers.
-        let wall = Tileset::source(20, 3);
-        assert_eq!(
-            (wall.min.x, wall.min.y),
-            (20.0 * 13.0 + 1.0, 3.0 * 13.0 + 1.0)
-        );
+        let wall = Tileset::source(3, 0);
+        assert_eq!((wall.min.x, wall.min.y), (3.0 * 13.0 + 1.0, 1.0));
     }
 
     /// The last row and column have to land inside the texture, or every tile
