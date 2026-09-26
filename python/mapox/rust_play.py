@@ -23,8 +23,10 @@ class RustAgentWrapper:
     def __init__(self, agent: Agent):
         self._agent = agent
 
-    def act(self, obs, time, terminated, last_action, reward, action_mask):
-        timestep = TimeStep(obs, time, terminated, last_action, reward, action_mask)
+    def act(self, obs, time, terminated, last_action, reward, action_mask, task_ids):
+        timestep = TimeStep(
+            obs, time, terminated, last_action, reward, action_mask, task_ids
+        )
         actions = self._agent.act(timestep)
 
         return np.ascontiguousarray(actions, dtype=np.uint16)

@@ -3939,6 +3939,7 @@ dependencies = [
 name = "mapox-core"
 version = "1.0.0"
 dependencies = [
+ "bytemuck",
  "eframe",
  "egui",
  "fastnoise-lite",

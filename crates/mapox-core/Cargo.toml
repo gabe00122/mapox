@@ -26,4 +26,5 @@ eframe.workspace = true
 wgpu = { workspace = true, features = ["fragile-send-sync-non-atomic-wasm"] }
 egui.workspace = true
 image.workspace = true
+bytemuck.workspace = true
 thiserror = "2.0.20"

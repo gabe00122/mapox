@@ -36,11 +36,20 @@ mod _core {
                     let last_action = PyArray1::from_array(py, &timestep.last_action);
                     let reward = PyArray1::from_array(py, &timestep.reward);
                     let action_mask = PyArray2::from_array(py, &timestep.action_mask);
+                    let task_ids = PyArray1::from_array(py, &timestep.task_ids);
 
                     let returned = self.callable.call_method1(
                         py,
                         "act",
-                        (obs, time, terminated, last_action, reward, action_mask),
+                        (
+                            obs,
+                            time,
+                            terminated,
+                            last_action,
+                            reward,
+                            action_mask,
+                            task_ids,
+                        ),
                     )?;
                     let returned: PyArrayLike1<'_, i32, AllowTypeChange> = returned.extract(py)?;
                     let returned = returned.as_array();

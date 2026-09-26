@@ -5,7 +5,7 @@ use std::{num::NonZeroU64, sync::Arc};
 use eframe::egui_wgpu::{
     Callback, CallbackResources, CallbackTrait, RenderState, ScreenDescriptor,
 };
-use egui::{PaintCallbackInfo, Painter, Rect, mutex::Mutex};
+use egui::{PaintCallbackInfo, Painter, Rect};
 
 use super::tileset::{TILESET_COLS, TILESET_ROWS, Tileset};
 
@@ -32,7 +32,6 @@ struct TilemapGrid {
     indices: wgpu::Texture,
     uniforms: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
-    previous_rect: Mutex<[u8; 16]>,
 }
 
 struct TilemapCallback {
@@ -259,6 +258,8 @@ impl TilemapRenderer {
         );
     }
 
+    /// At most once per frame: every callback on a grid shares one uniform
+    /// buffer, so a second rect would overwrite the first before either draws.
     pub(crate) fn paint(&self, painter: &Painter, rect: Rect) {
         if let Some(grid) = &self.grid
             && rect.is_positive()
@@ -304,16 +305,7 @@ impl TilemapGrid {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let mut atlas_bytes = [0; 16];
-        for (bytes, value) in atlas_bytes
-            .as_chunks_mut::<4>()
-            .0
-            .iter_mut()
-            .zip(pipeline.atlas_layout)
-        {
-            bytes.copy_from_slice(&value.to_le_bytes());
-        }
-        queue.write_buffer(&uniforms, 16, &atlas_bytes);
+        queue.write_buffer(&uniforms, 16, bytemuck::bytes_of(&pipeline.atlas_layout));
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("mapox tilemap bind group"),
             layout: &pipeline.layout,
@@ -337,7 +329,6 @@ impl TilemapGrid {
             indices,
             uniforms,
             bind_group,
-            previous_rect: Mutex::new([0; 16]),
         }
     }
 }
@@ -360,15 +351,7 @@ impl CallbackTrait for TilemapCallback {
             self.rect.width() * scale,
             self.rect.height() * scale,
         ];
-        let mut bytes = [0; 16];
-        for (bytes, value) in bytes.as_chunks_mut::<4>().0.iter_mut().zip(rect) {
-            bytes.copy_from_slice(&value.to_le_bytes());
-        }
-        let mut previous = self.grid.previous_rect.lock();
-        if *previous != bytes {
-            queue.write_buffer(&self.grid.uniforms, 0, &bytes);
-            *previous = bytes;
-        }
+        queue.write_buffer(&self.grid.uniforms, 0, bytemuck::bytes_of(&rect));
         Vec::new()
     }
 

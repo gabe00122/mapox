@@ -7,6 +7,7 @@ from jax import numpy as jnp
 from mapox._core import Env
 from mapox.config import EnvironmentFactory
 from mapox.envs.rust_env_jax import RustEnvJax
+from mapox.agent import RandomAgent
 from mapox.envs.rust_env_numpy import (
     RustEnvNumpy,
     RustFindReturnConfig,
@@ -15,6 +16,8 @@ from mapox.envs.rust_env_numpy import (
     RustScoutsConfig,
     RustVecConfig,
 )
+from mapox.rust_play import RustAgentWrapper
+from mapox.timestep import TimeStep
 
 # Full-field dumps, as RustScoutsConfig/RustFindReturnConfig model_dump_json()
 # produce them: the rust side parses with serde and has no field defaults.
@@ -215,3 +218,34 @@ def test_jit_step_recompiles_across_modes():
 
         assert timestep.obs.shape[0] == env.num_agents
         assert timestep.action_mask.shape[0] == env.num_agents
+
+
+@pytest.mark.parametrize("task_id", STANDALONE)
+def test_play_agent_is_handed_the_training_timestep(task_id):
+    """The graphical play loop's agent sees every field a training step has.
+
+    `enjoy`'s rust policy calls `act` with the timestep's fields in TimeStep
+    order; the task ids in particular are what tell a multitask policy which
+    task it is playing, and the loop used to drop them.
+    """
+    env = multi_env()
+    env.set_enjoy_mode(task_id)
+    timestep = env.reset(5)
+
+    seen = []
+
+    class Recorder(RandomAgent):
+        def act(self, timestep):
+            seen.append(timestep)
+            return super().act(timestep)
+
+    agent = RustAgentWrapper(Recorder(env.action_spec))
+    agent.reset(env.num_agents, 0)
+    actions = agent.act(*(np.copy(field) for field in timestep))
+
+    (handed,) = seen
+    assert isinstance(handed, TimeStep)
+    for field, expected in timestep._asdict().items():
+        np.testing.assert_array_equal(getattr(handed, field), expected, err_msg=field)
+    assert handed.task_ids.tolist() == [task_id] * env.num_agents
+    assert actions.shape == (env.num_agents,)

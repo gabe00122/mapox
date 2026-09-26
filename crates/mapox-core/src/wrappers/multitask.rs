@@ -118,6 +118,12 @@ impl MultitaskWrapper {
     }
 }
 
+/// The seed env `i` is reset with when the whole batch is reset with `seed`.
+/// Enjoy mode hands its one env the seed unchanged instead.
+fn env_seed(seed: u64, i: usize) -> u64 {
+    SmallRng::seed_from_u64(seed.wrapping_add(i as u64)).next_u64()
+}
+
 impl Environment for MultitaskWrapper {
     fn reset(&mut self, seed: u64, timestep: &mut TimeStepMut) {
         if let Some(env_idx) = self.enjoy_mode {
@@ -129,11 +135,7 @@ impl Environment for MultitaskWrapper {
             .par_iter_mut()
             .zip(timestep.partition_mut(&self.lens))
             .enumerate()
-            .for_each(|(i, (env, mut timestep))| {
-                let mut rng = SmallRng::seed_from_u64(seed.wrapping_add(i as u64));
-                let seed = rng.next_u64();
-                env.reset(seed, &mut timestep);
-            });
+            .for_each(|(i, (env, mut timestep))| env.reset(env_seed(seed, i), &mut timestep));
     }
 
     fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
@@ -232,6 +234,144 @@ impl Environment for MultitaskWrapper {
         if let Some(idx) = self.enjoy_mode {
             // The multitask wrapper currently assumes it's child tasks have no child tasks of their own, this could change in the future
             self.envs[idx].set_enjoy_mode(Some(0));
+        }
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+    use crate::envs::{find_return::FindReturnConfig, scouts::ScoutsConfig, snake::SnakeConfig};
+    use crate::make::EnvConfig;
+    use crate::policy::{Policy, RandomPolicy};
+    use crate::timestep::TimeStepBuffers;
+
+    /// One task per env kind, with several copies each so the first copy of
+    /// a later task sits at a nonzero env and agent offset in the batch.
+    pub(crate) fn mixed_specs() -> Vec<MultiEnvSpec> {
+        let spec = |name: &str, num, env| MultiEnvSpec {
+            name: name.into(),
+            num,
+            env: Box::new(env),
+        };
+        vec![
+            spec(
+                "scouts",
+                2,
+                EnvConfig::RustScouts(Box::new(ScoutsConfig {
+                    num_scouts: 2,
+                    num_harvesters: 1,
+                    width: 16,
+                    height: 16,
+                    view_width: 11,
+                    view_height: 11,
+                    ..ScoutsConfig::default()
+                })),
+            ),
+            spec(
+                "fr",
+                3,
+                EnvConfig::RustFindReturn(Box::new(FindReturnConfig {
+                    num_agents: 3,
+                    width: 16,
+                    height: 16,
+                    view_width: 11,
+                    view_height: 11,
+                    // short enough that the flags unlock inside an episode
+                    preparation_steps: 4,
+                    ..FindReturnConfig::default()
+                })),
+            ),
+            spec(
+                "snake",
+                2,
+                EnvConfig::RustSnake(Box::new(SnakeConfig {
+                    num_agents: 4,
+                    width: 16,
+                    height: 16,
+                    view_width: 11,
+                    view_height: 11,
+                    food_spawn_prob: 0.05,
+                    ..SnakeConfig::default()
+                })),
+            ),
+        ]
+    }
+
+    /// A policy trained on the batch must see the same timesteps when one
+    /// task is played alone: enjoy mode has to reproduce, bit for bit, the
+    /// rows the batch gives that task's first copy, across an episode end.
+    #[test]
+    fn enjoy_mode_timesteps_match_the_batch_rows() {
+        const LENGTH: usize = 12;
+        let specs = mixed_specs();
+
+        let mut batch = MultitaskWrapper::new(&specs, LENGTH).unwrap();
+        let mut batch_buffers = TimeStepBuffers::new(&batch);
+        let mut batch_actions = vec![0; batch.num_agents()];
+        let mut policy = RandomPolicy::new();
+        policy.reset(batch.num_agents(), 7).unwrap();
+
+        // one enjoy-mode env per task, each driven by its task's first copy's
+        // share of the batch actions
+        let mut played: Vec<_> = (0..specs.len())
+            .map(|task| {
+                let mut env = MultitaskWrapper::new(&specs, LENGTH).unwrap();
+                env.set_enjoy_mode(Some(task));
+                let buffers = TimeStepBuffers::new(&env);
+                let env_idx = batch.task_offsets[task];
+                (env, buffers, batch.offsets[env_idx], batch.lens[env_idx])
+            })
+            .collect();
+
+        for (task, (env, _, _, len)) in played.iter().enumerate() {
+            assert_eq!(env.num_agents(), *len, "task {task} agent count");
+        }
+
+        let compare = |batch_buffers: &TimeStepBuffers, played: &[_], when: &str| {
+            for (task, (_, buffers, offset, len)) in played.iter().enumerate() {
+                let (buffers, offset, len): (&TimeStepBuffers, usize, usize) =
+                    (buffers, *offset, *len);
+                let expected = batch_buffers.rows(offset, len);
+                assert_eq!(
+                    expected.differing_fields(buffers),
+                    Vec::<&str>::new(),
+                    "task {} ({}) diverged from its batch rows {when}",
+                    task,
+                    specs[task].name,
+                );
+                assert!(buffers.task_ids.iter().all(|&id| id == task as i32));
+            }
+        };
+
+        for (episode, seed) in [(0, 11u64), (1, 12)] {
+            batch.reset(seed, &mut batch_buffers.view_mut());
+            for (task, (env, buffers, ..)) in played.iter_mut().enumerate() {
+                let env_idx = batch.task_offsets[task];
+                env.reset(env_seed(seed, env_idx), &mut buffers.view_mut());
+            }
+            compare(
+                &batch_buffers,
+                &played,
+                &format!("at episode {episode} reset"),
+            );
+
+            for step in 1..=LENGTH {
+                policy
+                    .act(&batch_buffers.view(), &mut batch_actions)
+                    .unwrap();
+                batch.step(&batch_actions, &mut batch_buffers.view_mut());
+                for (env, buffers, offset, len) in played.iter_mut() {
+                    let actions = &batch_actions[*offset..*offset + *len];
+                    env.step(actions, &mut buffers.view_mut());
+                }
+                compare(
+                    &batch_buffers,
+                    &played,
+                    &format!("at episode {episode} step {step}"),
+                );
+            }
+            assert!(batch_buffers.terminated.iter().all(|&done| done));
         }
     }
 }

@@ -32,6 +32,21 @@ pub struct TimeStepRef<'a> {
     pub task_ids: ArrayView1<'a, i32>, // (num_agents,)
 }
 
+impl TimeStepRef<'_> {
+    /// An owned copy, for callers that keep a timestep past the next step.
+    pub fn to_buffers(&self) -> TimeStepBuffers {
+        TimeStepBuffers {
+            obs: self.obs.to_owned(),
+            time: self.time.to_owned(),
+            terminated: self.terminated.to_owned(),
+            last_action: self.last_action.to_owned(),
+            reward: self.reward.to_owned(),
+            action_mask: self.action_mask.to_owned(),
+            task_ids: self.task_ids.to_owned(),
+        }
+    }
+}
+
 impl TimeStepMut<'_> {
     pub fn view(&self) -> TimeStepRef<'_> {
         TimeStepRef {
@@ -151,6 +166,43 @@ impl TimeStepBuffers {
             action_mask: self.action_mask.view(),
             task_ids: self.task_ids.view(),
         }
+    }
+}
+
+#[cfg(test)]
+impl TimeStepBuffers {
+    /// Agents `start..start + len` as their own timestep.
+    pub(crate) fn rows(&self, start: usize, len: usize) -> Self {
+        use ndarray::s;
+
+        let agents = start..start + len;
+        Self {
+            obs: self.obs.slice(s![agents.clone(), .., .., ..]).to_owned(),
+            time: self.time.slice(s![agents.clone()]).to_owned(),
+            terminated: self.terminated.slice(s![agents.clone()]).to_owned(),
+            last_action: self.last_action.slice(s![agents.clone()]).to_owned(),
+            reward: self.reward.slice(s![agents.clone()]).to_owned(),
+            action_mask: self.action_mask.slice(s![agents.clone(), ..]).to_owned(),
+            task_ids: self.task_ids.slice(s![agents]).to_owned(),
+        }
+    }
+
+    /// The fields that differ from `other`, so a failing comparison names
+    /// the part of the timestep that diverged instead of dumping both.
+    pub(crate) fn differing_fields(&self, other: &Self) -> Vec<&'static str> {
+        [
+            ("obs", self.obs == other.obs),
+            ("time", self.time == other.time),
+            ("terminated", self.terminated == other.terminated),
+            ("last_action", self.last_action == other.last_action),
+            ("reward", self.reward == other.reward),
+            ("action_mask", self.action_mask == other.action_mask),
+            ("task_ids", self.task_ids == other.task_ids),
+        ]
+        .into_iter()
+        .filter(|&(_, same)| !same)
+        .map(|(name, _)| name)
+        .collect()
     }
 }
 

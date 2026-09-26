@@ -492,7 +492,114 @@ mod tests {
     use super::*;
     use crate::envs::find_return::{FindReturn, FindReturnConfig};
     use crate::envs::scouts::{Scouts, ScoutsConfig};
+    use crate::policy::RandomPolicy;
     use crate::render::env::visible_tiles;
+    use crate::wrappers::multitask::{MultitaskWrapper, tests::mixed_specs};
+    use std::sync::{Arc, Mutex};
+
+    /// What a policy was handed over a run: every reset, and every timestep
+    /// it acted on together with the actions it returned.
+    #[derive(Default)]
+    struct Transcript {
+        resets: Vec<usize>,
+        acted: Vec<(TimeStepBuffers, Vec<VocabId>)>,
+    }
+
+    struct RecordingPolicy {
+        inner: RandomPolicy,
+        transcript: Arc<Mutex<Transcript>>,
+    }
+
+    impl Policy for RecordingPolicy {
+        fn act(
+            &mut self,
+            timestep: &crate::timestep::TimeStepRef<'_>,
+            actions: &mut [VocabId],
+        ) -> Result<(), crate::policy::PolicyError> {
+            self.inner.act(timestep, actions)?;
+            let mut transcript = self.transcript.lock().unwrap();
+            transcript
+                .acted
+                .push((timestep.to_buffers(), actions.to_vec()));
+            Ok(())
+        }
+
+        fn reset(
+            &mut self,
+            num_agents: usize,
+            seed: u64,
+        ) -> Result<(), crate::policy::PolicyError> {
+            self.transcript.lock().unwrap().resets.push(num_agents);
+            self.inner.reset(num_agents, seed)
+        }
+    }
+
+    /// The env seed of the app's `episode`th episode: `new` draws the
+    /// policy's seed before the env's, `reset` bumps the app seed and draws
+    /// the env's first.
+    fn app_episode_seed(app_seed: u64, episode: usize) -> u64 {
+        let mut rng = SmallRng::seed_from_u64(app_seed + episode as u64);
+        if episode == 0 {
+            let _policy_seed: u64 = rng.random();
+        }
+        rng.random()
+    }
+
+    /// The play loop hands the policy exactly the timesteps an enjoy-mode
+    /// env emits for the actions the policy picks, task ids included; the
+    /// batch test in the multitask wrapper ties those to the training rows.
+    /// The one timestep it withholds is the terminal one: at `length` the
+    /// next step resets the episode instead of asking the policy to act.
+    #[test]
+    fn the_policy_sees_the_enjoy_mode_timesteps() {
+        const LENGTH: usize = 6;
+        const EPISODES: usize = 2;
+        const SEED: u64 = 3;
+        let specs = mixed_specs();
+
+        for task in 0..specs.len() {
+            let mut env = MultitaskWrapper::new(&specs, LENGTH).unwrap();
+            env.set_enjoy_mode(Some(task));
+            let num_agents = env.num_agents();
+
+            let transcript = Arc::new(Mutex::new(Transcript::default()));
+            let policy = RecordingPolicy {
+                inner: RandomPolicy::new(),
+                transcript: transcript.clone(),
+            };
+            let mut app = RenderApp::new(Box::new(env), LENGTH, SEED, Box::new(policy));
+            // each episode is LENGTH steps plus the call that resets it
+            for _ in 0..EPISODES * (LENGTH + 1) - 1 {
+                app.step_env(None);
+            }
+            drop(app);
+            let transcript = Arc::into_inner(transcript).unwrap().into_inner().unwrap();
+
+            assert_eq!(transcript.resets, vec![num_agents; EPISODES]);
+            assert_eq!(transcript.acted.len(), EPISODES * LENGTH);
+
+            let mut replay = MultitaskWrapper::new(&specs, LENGTH).unwrap();
+            replay.set_enjoy_mode(Some(task));
+            let mut buffers = TimeStepBuffers::new(&replay);
+
+            for (episode, acted) in transcript.acted.chunks(LENGTH).enumerate() {
+                replay.reset(app_episode_seed(SEED, episode), &mut buffers.view_mut());
+                for (step, (seen, actions)) in acted.iter().enumerate() {
+                    assert_eq!(
+                        seen.differing_fields(&buffers),
+                        Vec::<&str>::new(),
+                        "task {task} episode {episode} step {step}: the policy's view diverged",
+                    );
+                    assert!(seen.task_ids.iter().all(|&id| id == task as i32));
+                    assert!(seen.time.iter().all(|&time| time == step as i32));
+                    replay.step(actions, &mut buffers.view_mut());
+                }
+                // the step past the last action the policy saw ends the episode
+                assert!(buffers.terminated.iter().all(|&done| done));
+                assert!(buffers.time.iter().all(|&time| time == LENGTH as i32));
+            }
+        }
+    }
 
     /// The overlay reads the same buffers the env writes: every agent must
     /// see the tile it stands on, and nobody can see past the map edge or
