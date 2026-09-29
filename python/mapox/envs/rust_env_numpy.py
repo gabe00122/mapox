@@ -109,6 +109,33 @@ class RustSnakeConfig(BaseModel):
     death_reward: float = 0.0
 
 
+class RustPacmanConfig(BaseModel):
+    """Pac-Man on the classic maze. The maze is fixed, so there are no size
+    keys; the view wraps through the side tunnel the way Pac-Man does."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    env_type: Literal["rust_pacman"] = "rust_pacman"
+
+    view_width: int = 15
+    view_height: int = 15
+
+    # start each round on a random pellet instead of the classic spawn
+    randomize_starting_position: bool = False
+    # each ghost waits uniform [min, max) steps before its first move
+    min_start_timeout: int = 0
+    max_start_timeout: int = 49
+    # steps a power pellet keeps the ghosts frightened
+    frightened_time: int = 35
+    # scatter/chase flips before the ghosts chase for good
+    max_mode_changes: int = 6
+    scatter_mode_length: int = 70
+    chase_mode_length: int = 140
+
+    pellet_reward: float = 1.0
+    ghost_reward: float = 1.0
+    death_reward: float = 0.0
+
+
 class RustVecConfig(BaseModel):
     """Vectorized copies of one rust env; the rust side steps them in parallel."""
 
@@ -145,6 +172,7 @@ type RustEnvConfig = (
     RustFindReturnConfig
     | RustScoutsConfig
     | RustSnakeConfig
+    | RustPacmanConfig
     | RustVideoConfig
     | RustVecConfig
     | RustMultiConfig

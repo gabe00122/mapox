@@ -24,6 +24,8 @@ TILE_FLAG_UNLOCKED = "tile/flag_unlocked"  # scouts: flag made available for tak
 TILE_ARROW = "tile/arrow"  # king_hill: projectile in flight
 TILE_GRASS = "tile/grass"
 TILE_FOOD = "tile/food"
+TILE_PELLET = "tile/pellet"  # pacman
+TILE_POWER_PELLET = "tile/power_pellet"  # pacman: frightens the ghosts
 
 TILE_DECOR_1 = "tile/decor_1"
 TILE_DECOR_2 = "tile/decor_2"
@@ -57,6 +59,24 @@ AGENT_SNAKE_PURPLE = "agent/snake_purple"
 AGENT_SNAKE_PINK = "agent/snake_pink"
 AGENT_SNAKE_GRAY = "agent/snake_gray"
 AGENT_SNAKE_WHITE = "agent/snake_white"
+
+# the rust pacman: Pac-Man by heading (MOVES order), then the ghosts
+AGENT_PACMAN_UP = "agent/pacman_up"
+AGENT_PACMAN_RIGHT = "agent/pacman_right"
+AGENT_PACMAN_DOWN = "agent/pacman_down"
+AGENT_PACMAN_LEFT = "agent/pacman_left"
+AGENT_GHOST_BLINKY = "agent/ghost_blinky"
+AGENT_GHOST_PINKY = "agent/ghost_pinky"
+AGENT_GHOST_INKY = "agent/ghost_inky"
+AGENT_GHOST_CLYDE = "agent/ghost_clyde"
+AGENT_GHOST_FRIGHTENED = "agent/ghost_frightened"
+AGENT_GHOST_EYES = "agent/ghost_eyes"
+
+# --- observation symbols: UI band ---
+
+# Shared digit glyphs for numbers in the rust envs' UI band, indexed by the
+# digit they draw; a number is a run of them, most significant digit first.
+UI_DIGITS = tuple(f"ui/digit_{d}" for d in range(10))
 
 # --- action symbols ---
 

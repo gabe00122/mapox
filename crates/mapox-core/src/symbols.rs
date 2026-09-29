@@ -1,6 +1,22 @@
 // the empty area of a ux tile grid
 pub const TILE_UI: &str = "ui";
 
+/// Digit glyphs for numbers in the UI band, shared by every env so a count
+/// reads the same everywhere. Indexed by the digit they draw; a number is a
+/// run of these, most significant digit leftmost.
+pub const UI_DIGITS: [&str; 10] = [
+    "ui/digit_0",
+    "ui/digit_1",
+    "ui/digit_2",
+    "ui/digit_3",
+    "ui/digit_4",
+    "ui/digit_5",
+    "ui/digit_6",
+    "ui/digit_7",
+    "ui/digit_8",
+    "ui/digit_9",
+];
+
 pub const TILE_MASK: &str = "mask";
 pub const TILE_EMPTY: &str = "tile/empty";
 pub const TILE_WALL: &str = "tile/wall";
@@ -13,6 +29,8 @@ pub const TILE_ARROW: &str = "tile/arrow";
 pub const TILE_GRASS: &str = "tile/grass";
 pub const TILE_WATER: &str = "tile/water";
 pub const TILE_FOOD: &str = "tile/food";
+pub const TILE_PELLET: &str = "tile/pellet";
+pub const TILE_POWER_PELLET: &str = "tile/power_pellet";
 
 pub const TILE_PIPE_HORIZONTAL: &str = "tile/pipe_horizontal";
 pub const TILE_PIPE_VIRTICAL: &str = "tile/pipe_virtical";
@@ -39,6 +57,20 @@ pub const AGENT_SNAKE_PURPLE: &str = "agent/snake_purple";
 pub const AGENT_SNAKE_PINK: &str = "agent/snake_pink";
 pub const AGENT_SNAKE_GRAY: &str = "agent/snake_gray";
 pub const AGENT_SNAKE_WHITE: &str = "agent/snake_white";
+/// Pac-Man by heading, in `MOVES` order: the heading is state (a move into a
+/// wall keeps it going that way), so the tile carries it.
+pub const AGENT_PACMAN_UP: &str = "agent/pacman_up";
+pub const AGENT_PACMAN_RIGHT: &str = "agent/pacman_right";
+pub const AGENT_PACMAN_DOWN: &str = "agent/pacman_down";
+pub const AGENT_PACMAN_LEFT: &str = "agent/pacman_left";
+pub const AGENT_GHOST_BLINKY: &str = "agent/ghost_blinky";
+pub const AGENT_GHOST_PINKY: &str = "agent/ghost_pinky";
+pub const AGENT_GHOST_INKY: &str = "agent/ghost_inky";
+pub const AGENT_GHOST_CLYDE: &str = "agent/ghost_clyde";
+/// Any ghost while a power pellet lasts: edible, and every one looks alike.
+pub const AGENT_GHOST_FRIGHTENED: &str = "agent/ghost_frightened";
+/// An eaten ghost heading home: harmless, and not edible again until it's back.
+pub const AGENT_GHOST_EYES: &str = "agent/ghost_eyes";
 
 // --- action symbols ---
 

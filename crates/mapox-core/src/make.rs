@@ -6,6 +6,7 @@ use crate::{
     env::Environment,
     envs::{
         find_return::{FindReturn, FindReturnConfig},
+        pacman::{Pacman, PacmanConfig},
         scouts::{Scouts, ScoutsConfig},
         snake::{Snake, SnakeConfig},
     },
@@ -19,6 +20,7 @@ pub enum EnvConfig {
     RustFindReturn(Box<FindReturnConfig>),
     RustScouts(Box<ScoutsConfig>),
     RustSnake(Box<SnakeConfig>),
+    RustPacman(Box<PacmanConfig>),
     #[cfg(not(target_arch = "wasm32"))]
     RustVideo(Box<VideoConfig>),
     RustVec {
@@ -42,6 +44,7 @@ pub fn make(config: &EnvConfig, length: usize) -> MapoxResult<Box<dyn Environmen
         EnvConfig::RustFindReturn(config) => Ok(Box::new(FindReturn::new(config, length))),
         EnvConfig::RustScouts(config) => Ok(Box::new(Scouts::new(config, length))),
         EnvConfig::RustSnake(config) => Ok(Box::new(Snake::new(config, length))),
+        EnvConfig::RustPacman(config) => Ok(Box::new(Pacman::new(config, length))),
         #[cfg(not(target_arch = "wasm32"))]
         EnvConfig::RustVideo(config) => Ok(Box::new(VideoWrapper::new(config, length)?)),
         EnvConfig::RustVec { num, env } => Ok(Box::new(VectorWrapper::new(*num, env, length)?)),
@@ -90,6 +93,19 @@ mod tests {
 
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();
         assert_eq!(parsed, EnvConfig::RustSnake(Box::default()));
+    }
+
+    /// And for pac-man, which plays on a fixed maze with no size keys.
+    #[test]
+    fn a_pacman_config_dump_parses() {
+        let json = r#"{"env_type":"rust_pacman","view_width":15,"view_height":15,
+            "randomize_starting_position":false,"min_start_timeout":0,
+            "max_start_timeout":49,"frightened_time":35,"max_mode_changes":6,
+            "scatter_mode_length":70,"chase_mode_length":140,"pellet_reward":1.0,
+            "ghost_reward":1.0,"death_reward":0.0}"#;
+
+        let parsed: EnvConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed, EnvConfig::RustPacman(Box::default()));
     }
 
     /// The vectorized shape: `num` copies of a plain env config.

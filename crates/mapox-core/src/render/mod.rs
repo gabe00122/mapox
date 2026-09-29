@@ -15,7 +15,8 @@ pub use keys::{Command, Input};
 use crate::{symbols, vocab::Vocabulary};
 
 /// Symbol -> (col, row) on the sheet `scripts/make_tileset.py` draws. Row 0
-/// is terrain, row 1 items and characters, row 2 the snake colours.
+/// is terrain, row 1 items and characters, row 2 the snake colours, rows 3
+/// and 4 the soldiers, row 5 the UI digits, and row 6 pac-man.
 const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::TILE_UI, 0, 0),
     (symbols::TILE_MASK, 1, 0),
@@ -47,6 +48,28 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::AGENT_SNAKE_PINK, 7, 2),
     (symbols::AGENT_SNAKE_GRAY, 8, 2),
     (symbols::AGENT_SNAKE_WHITE, 9, 2),
+    (symbols::UI_DIGITS[0], 0, 5),
+    (symbols::UI_DIGITS[1], 1, 5),
+    (symbols::UI_DIGITS[2], 2, 5),
+    (symbols::UI_DIGITS[3], 3, 5),
+    (symbols::UI_DIGITS[4], 4, 5),
+    (symbols::UI_DIGITS[5], 5, 5),
+    (symbols::UI_DIGITS[6], 6, 5),
+    (symbols::UI_DIGITS[7], 7, 5),
+    (symbols::UI_DIGITS[8], 8, 5),
+    (symbols::UI_DIGITS[9], 9, 5),
+    (symbols::TILE_PELLET, 0, 6),
+    (symbols::TILE_POWER_PELLET, 1, 6),
+    (symbols::AGENT_PACMAN_UP, 2, 6),
+    (symbols::AGENT_PACMAN_RIGHT, 3, 6),
+    (symbols::AGENT_PACMAN_DOWN, 4, 6),
+    (symbols::AGENT_PACMAN_LEFT, 5, 6),
+    (symbols::AGENT_GHOST_PINKY, 6, 6),
+    (symbols::AGENT_GHOST_BLINKY, 7, 6),
+    (symbols::AGENT_GHOST_INKY, 8, 6),
+    (symbols::AGENT_GHOST_CLYDE, 9, 6),
+    (symbols::AGENT_GHOST_FRIGHTENED, 10, 6),
+    (symbols::AGENT_GHOST_EYES, 11, 6),
 ];
 
 pub(crate) fn resolve_art(vocab: &Vocabulary) -> Vec<(u32, u32)> {
@@ -68,6 +91,7 @@ mod tests {
     use super::*;
     use crate::env::Environment;
     use crate::envs::find_return::{FindReturn, FindReturnConfig};
+    use crate::envs::pacman::{Pacman, PacmanConfig};
     use crate::envs::scouts::{Scouts, ScoutsConfig};
     use crate::envs::snake::{Snake, SnakeConfig};
     use crate::make::{EnvConfig, MultiEnvSpec};
@@ -83,6 +107,7 @@ mod tests {
             Box::new(FindReturn::new(&FindReturnConfig::default(), 512)),
             Box::new(Scouts::new(&ScoutsConfig::default(), 512)),
             Box::new(Snake::new(&SnakeConfig::default(), 512)),
+            Box::new(Pacman::new(&PacmanConfig::default(), 512)),
         ]
     }
 

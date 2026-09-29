@@ -11,6 +11,7 @@ from mapox.envs.rust_env_jax import RustEnvJax
 from mapox.envs.rust_env_numpy import (
     RustFindReturnConfig,
     RustMultiConfig,
+    RustPacmanConfig,
     RustScoutsConfig,
     RustSnakeConfig,
     RustVecConfig,
@@ -79,6 +80,7 @@ type EnvConfig = (
     | RustFindReturnConfig
     | RustScoutsConfig
     | RustSnakeConfig
+    | RustPacmanConfig
     | RustVideoConfig
     | RustVecConfig
     | RustMultiConfig
@@ -101,6 +103,7 @@ class EnvironmentFactory:
         self.register_env("rust_find_return", RustEnvJax, RustFindReturnConfig)
         self.register_env("rust_scouts", RustEnvJax, RustScoutsConfig)
         self.register_env("rust_snake", RustEnvJax, RustSnakeConfig)
+        self.register_env("rust_pacman", RustEnvJax, RustPacmanConfig)
         self.register_env("rust_video", RustEnvJax, RustVideoConfig)
 
         self.register_env("vec", self._make_vec, VecConfig)

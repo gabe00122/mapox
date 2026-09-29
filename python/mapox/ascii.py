@@ -59,6 +59,20 @@ LEGEND: dict[str, str] = {
     SB.AGENT_SNAKE_PINK: "p",
     SB.AGENT_SNAKE_GRAY: "e",
     SB.AGENT_SNAKE_WHITE: "w",
+    SB.TILE_PELLET: "o",
+    SB.TILE_POWER_PELLET: "@",
+    SB.AGENT_PACMAN_UP: "^",
+    SB.AGENT_PACMAN_RIGHT: ">",
+    SB.AGENT_PACMAN_DOWN: "v",
+    SB.AGENT_PACMAN_LEFT: "<",
+    SB.AGENT_GHOST_BLINKY: "B",
+    SB.AGENT_GHOST_PINKY: "P",
+    SB.AGENT_GHOST_INKY: "I",
+    SB.AGENT_GHOST_CLYDE: "C",
+    SB.AGENT_GHOST_FRIGHTENED: "S",
+    SB.AGENT_GHOST_EYES: "E",
+    # UI band numbers draw as themselves
+    **{symbol: str(d) for d, symbol in enumerate(SB.UI_DIGITS)},
 }
 
 

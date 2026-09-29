@@ -117,6 +117,27 @@ SNAKE_COLORS = {
     "white": "f2f2ee",
 }
 
+UI_DIGIT = hex_color("e8ecf4")
+UI_DIGIT_SHADOW = hex_color("161a26")
+
+PAC = hex_color("ffd43b")
+PAC_EDGE = hex_color("c99a1e")
+PELLET = hex_color("ffd9b3")
+POWER = hex_color("ffb08a")
+POWER_LIGHT = hex_color("fff1e6")
+
+# Ghost bodies, in the order of the AGENT_GHOST_* symbols they draw.
+GHOST_COLORS = {
+    "pinky": "ffa3d8",
+    "blinky": "e5383f",
+    "inky": "3fd6e8",
+    "clyde": "ffb347",
+}
+GHOST_FRIGHTENED = hex_color("2f4bd8")
+GHOST_FRIGHTENED_FACE = hex_color("ffd9c7")
+GHOST_EYE = hex_color("f2f2ee")
+GHOST_PUPIL = hex_color("2121c4")
+
 TEAM_RED = hex_color("e5383f")
 TEAM_BLUE = hex_color("3a78ff")
 TEAM_NEUTRAL = hex_color("d6dbe4")
@@ -668,6 +689,140 @@ def soldier(art: list[str], team: Color, direction: int, wounded: bool) -> Sprit
     return facing_pip(sprite, direction, GOLD_LIGHT)
 
 
+# --- ui --------------------------------------------------------------------
+
+# 5x7 glyphs for the UI_DIGITS symbols, digit d at index d.
+DIGIT_GLYPHS = [
+    [".###.", "#...#", "#..##", "#.#.#", "##..#", "#...#", ".###."],
+    ["..#..", ".##..", "..#..", "..#..", "..#..", "..#..", ".###."],
+    [".###.", "#...#", "....#", "...#.", "..#..", ".#...", "#####"],
+    ["#####", "...#.", "..#..", "...#.", "....#", "#...#", ".###."],
+    ["...#.", "..##.", ".#.#.", "#..#.", "#####", "...#.", "...#."],
+    ["#####", "#....", "####.", "....#", "....#", "#...#", ".###."],
+    ["..##.", ".#...", "#....", "####.", "#...#", "#...#", ".###."],
+    ["#####", "....#", "...#.", "..#..", ".#...", ".#...", ".#..."],
+    [".###.", "#...#", "#...#", ".###.", "#...#", "#...#", ".###."],
+    [".###.", "#...#", "#...#", ".####", "....#", "...#.", ".##.."],
+]
+
+
+def digit(value: int) -> Sprite:
+    """A digit on the plain UI ground, drop-shadowed so a run of them reads
+    as one number across the band."""
+    sprite = blank(UI)
+    glyph = DIGIT_GLYPHS[value]
+    stamp(sprite, glyph, {"#": UI_DIGIT_SHADOW}, dx=4, dy=3)
+    stamp(sprite, glyph, {"#": UI_DIGIT}, dx=3, dy=2)
+    return sprite
+
+
+# --- pac-man ---------------------------------------------------------------
+
+
+def pacman(direction: int) -> Sprite:
+    """Pac-Man mouth-first in `direction`: 0 up, 1 right, 2 down, 3 left, in
+    screen space like `facing_pip`."""
+    sprite = floor()
+    cx = cy = (TILE - 1) / 2
+    fx, fy = [(0, -1), (1, 0), (0, 1), (-1, 0)][direction]
+    for y in range(TILE):
+        for x in range(TILE):
+            dx, dy = x - cx, y - cy
+            distance = (dx * dx + dy * dy) ** 0.5
+            if distance > 5.3:
+                continue
+            along = dx * fx + dy * fy
+            across = abs(dx * fy - dy * fx)
+            if along > 0 and across < along * 0.85:
+                continue  # the mouth: a ~80 degree wedge toward the heading
+            sprite[y][x] = PAC if distance < 4.3 else PAC_EDGE
+    # the eye sits above the mouth, or beside it when facing up or down
+    px, py = (0, -1) if fx else (-1, 0)
+    sprite[round(cy + fy * 0.8 + py * 2.8)][round(cx + fx * 0.8 + px * 2.8)] = OUTLINE
+    return sprite
+
+
+def pellet() -> Sprite:
+    sprite = floor()
+    for x, y in [(5, 5), (6, 5), (5, 6), (6, 6)]:
+        sprite[y][x] = PELLET
+    return sprite
+
+
+def power_pellet() -> Sprite:
+    sprite = floor()
+    c = (TILE - 1) / 2
+    for y in range(TILE):
+        for x in range(TILE):
+            if (x - c) ** 2 + (y - c) ** 2 <= 3.2**2:
+                sprite[y][x] = POWER
+    sprite[4][4] = sprite[4][5] = sprite[5][4] = POWER_LIGHT
+    return sprite
+
+
+GHOST = check(
+    [
+        "....OOOO....",
+        "..OGGGGGGO..",
+        ".OGGGGGGGGO.",
+        ".OGWWGGWWGO.",
+        "OGGWPGGWPGGO",
+        "OGGWWGGWWGGO",
+        "OGGGGGGGGGGO",
+        "OGGGGGGGGGGO",
+        "OGGGGGGGGGGO",
+        "OGGGGGGGGGGO",
+        "OGOGGOOGGOGO",
+        "OO.OO..OO.OO",
+    ],
+    "ghost",
+)
+
+GHOST_SCARED = check(
+    [
+        "....OOOO....",
+        "..OGGGGGGO..",
+        ".OGGGGGGGGO.",
+        ".OGGGGGGGGO.",
+        "OGGGFFGFFGGO",
+        "OGGGFFGFFGGO",
+        "OGGGGGGGGGGO",
+        "OGFGFGGFGFGO",
+        "OGGFGFFGFGGO",
+        "OGGGGGGGGGGO",
+        "OGOGGOOGGOGO",
+        "OO.OO..OO.OO",
+    ],
+    "frightened ghost",
+)
+
+GHOST_EYES = check(
+    [
+        "............",
+        "............",
+        "............",
+        "..WW....WW..",
+        ".WWWW..WWWW.",
+        ".WWPP..WWPP.",
+        ".WWPP..WWPP.",
+        "..WW....WW..",
+        "............",
+        "............",
+        "............",
+        "............",
+    ],
+    "ghost eyes",
+)
+
+
+def ghost(body: Color) -> Sprite:
+    return stamp(
+        floor(),
+        GHOST,
+        {"O": OUTLINE, "G": body, "W": GHOST_EYE, "P": GHOST_PUPIL},
+    )
+
+
 # --- sheet -----------------------------------------------------------------
 
 
@@ -716,7 +871,29 @@ def build_sheet() -> list[list[Sprite]]:
         archers = [soldier(ARCHER, team, direction, False) for direction in range(4)]
         return knights + archers
 
-    return [terrain, items, snakes, team_row(TEAM_RED), team_row(TEAM_BLUE)]
+    digits = [digit(value) for value in range(10)]
+    pacman_row = [
+        pellet(),
+        power_pellet(),
+        *(pacman(direction) for direction in range(4)),
+        *(ghost(hex_color(c)) for c in GHOST_COLORS.values()),
+        stamp(
+            floor(),
+            GHOST_SCARED,
+            {"O": OUTLINE, "G": GHOST_FRIGHTENED, "F": GHOST_FRIGHTENED_FACE},
+        ),
+        stamp(floor(), GHOST_EYES, {"W": GHOST_EYE, "P": GHOST_PUPIL}),
+    ]
+
+    return [
+        terrain,
+        items,
+        snakes,
+        team_row(TEAM_RED),
+        team_row(TEAM_BLUE),
+        digits,
+        pacman_row,
+    ]
 
 
 def rasterize(rows: list[list[Sprite]], zoom: int = 1) -> tuple[int, int, bytes]:
