@@ -31,7 +31,7 @@ FR_JSON = (
     '{"env_type": "rust_find_return", "num_agents": 2, "num_flags": 1, '
     '"width": 12, "height": 12, "view_width": 11, "view_height": 11, '
     '"mapgen_threshold": 0.3, "water_threshold": -0.45, "digging_timeout": 5, '
-    '"preparation_steps": 256, "treasure_reward": 1.0}'
+    '"preparation_steps": 256, "treasure_reward": 1.0, "pipes_enabled": true}'
 )
 MULTI_JSON = (
     '{"env_type": "rust_multi", "envs": ['

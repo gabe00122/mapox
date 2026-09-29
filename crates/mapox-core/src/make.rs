@@ -75,7 +75,7 @@ mod tests {
         let json = r#"{"env_type":"rust_find_return","num_agents":8,"num_flags":1,
             "width":80,"height":70,"view_width":15,"view_height":15,"mapgen_threshold":0.07,
             "water_threshold":-0.45,"digging_timeout":5,"preparation_steps":256,
-            "treasure_reward":1.0}"#;
+            "treasure_reward":1.0,"pipes_enabled":true}"#;
 
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();
         assert_eq!(parsed, EnvConfig::RustFindReturn(Box::default()));
@@ -124,7 +124,7 @@ mod tests {
             {"name":"fr","num":3,"env":{"env_type":"rust_find_return","num_agents":8,
                 "num_flags":1,"width":80,"height":70,"view_width":15,"view_height":15,
                 "mapgen_threshold":0.07,"water_threshold":-0.45,"digging_timeout":5,
-                "preparation_steps":256,"treasure_reward":1.0}}
+                "preparation_steps":256,"treasure_reward":1.0,"pipes_enabled":true}}
         ]}"#;
 
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();

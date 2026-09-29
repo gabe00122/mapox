@@ -37,6 +37,9 @@ pub struct FindReturnConfig {
     pub digging_timeout: u32,
     pub preparation_steps: usize,
     pub treasure_reward: f32,
+    /// With pipes off, agents cannot lay pipes and the flags start open,
+    /// so there is no preparation phase to spend building slideways.
+    pub pipes_enabled: bool,
 }
 
 impl Default for FindReturnConfig {
@@ -53,6 +56,7 @@ impl Default for FindReturnConfig {
             digging_timeout: 5,
             preparation_steps: 256,
             treasure_reward: 1.0,
+            pipes_enabled: true,
         }
     }
 }
@@ -322,7 +326,7 @@ impl FindReturn {
                     }
                     FindReturnAction::PlacePipe => {
                         let target = agent.position + agent.dir;
-                        self.state.map[target.idx()].spawnable()
+                        self.config.pipes_enabled && self.state.map[target.idx()].spawnable()
                     }
                     FindReturnAction::Noop => true,
                 };
@@ -392,7 +396,7 @@ impl Environment for FindReturn {
             self.state.flag_positions.push(flag_position);
         }
 
-        if self.config.preparation_steps == 0 {
+        if self.config.preparation_steps == 0 || !self.config.pipes_enabled {
             self.unlock_flags();
         }
 
@@ -475,7 +479,7 @@ impl Environment for FindReturn {
                 FindReturnAction::PlacePipe => {
                     let target_tile = &mut map[target.idx()];
 
-                    if target_tile.spawnable() {
+                    if self.config.pipes_enabled && target_tile.spawnable() {
                         *target_tile = if agent.dir.x == 0 {
                             FindReturnObs::PipeHorizontal
                         } else {
@@ -1037,6 +1041,40 @@ mod tests {
         step(&mut env, &mut buffers, &[PlacePipe]);
         assert_eq!(env.state.map[wall.idx()], TileWall);
         assert_eq!(env.state.base_map[wall.idx()], TileWall);
+    }
+
+    /// With pipes off there is nothing to prepare: the flags start open
+    /// whatever `preparation_steps` says, and laying a pipe is masked out
+    /// and does nothing even when the policy picks it anyway.
+    #[test]
+    fn disabling_pipes_opens_the_flags_and_forbids_pipes() {
+        let config = FindReturnConfig {
+            num_agents: 1,
+            num_flags: 2,
+            width: 24,
+            height: 24,
+            preparation_steps: 8,
+            pipes_enabled: false,
+            ..Default::default()
+        };
+        let mut env = FindReturn::new(&config, 512);
+        let mut buffers = TimeStepBuffers::new(&env);
+        env.reset(7, &mut buffers.view_mut());
+        assert_eq!(flag_tally(&env), (0, 2));
+
+        let mut env = empty_env_with(FindReturnConfig {
+            pipes_enabled: false,
+            ..empty_env().config
+        });
+        let start = center(&env);
+        spawn_agents(&mut env, &[start]);
+
+        step(&mut env, &mut buffers, &[MoveUp]);
+        assert!(!buffers.action_mask[[0, PlacePipe as usize]]);
+        step(&mut env, &mut buffers, &[PlacePipe]);
+        let above = start + Position::new(0, 2);
+        assert_eq!(env.state.map[above.idx()], TileEmpty);
+        assert_eq!(env.state.base_map[above.idx()], TileEmpty);
     }
 
     /// Agents are solid: two of them never share a cell, whichever order the
