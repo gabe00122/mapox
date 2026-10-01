@@ -25,6 +25,9 @@ use rand::{RngExt, SeedableRng, rngs::SmallRng};
 /// stall; the rest of the debt is forgiven.
 const MAX_CATCH_UP_STEPS: usize = 4;
 
+/// Width of the episode / agent / mode panel, in points.
+const SIDE_PANEL_WIDTH: f32 = 220.0;
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ViewMode {
     /// The map from the render state, every agent visible.
@@ -53,7 +56,7 @@ pub struct RenderApp {
     length: usize,
     step_count: usize,
     /// Rewritten by every env reset and step; the policy reads it through
-    /// [`RenderApp::compute_actions`], and the hint bar reads reward and
+    /// [`RenderApp::compute_actions`], and the side panel reads reward and
     /// last action out of it.
     buffers: TimeStepBuffers,
     actions: Vec<VocabId>,
@@ -72,7 +75,7 @@ pub struct RenderApp {
     /// Sheet coordinates indexed by obs vocab id.
     art: Vec<(u32, u32)>,
 
-    /// Per-agent reward summed since the last reset, so the hint bar can show
+    /// Per-agent reward summed since the last reset, so the side panel can show
     /// where the focused agent's episode stands and not just the last step.
     returns: Vec<f32>,
 
@@ -83,8 +86,9 @@ pub struct RenderApp {
     task_names: Vec<String>,
     /// The task being played, `Some` exactly when `task_names` is non-empty.
     task: Option<usize>,
-    /// Whether the key reference overlays the map.
-    show_keys: bool,
+    /// Whether the controls reference is open over the map. The next key
+    /// press or click closes it and does nothing else.
+    show_controls: bool,
     target_fps: f32,
     /// Deadline for the next free-run step on egui's `input.time` clock,
     /// `None` until free-run schedules one. An absolute deadline instead of
@@ -152,7 +156,7 @@ impl RenderApp {
             focused_agent: 0,
             task_names,
             task,
-            show_keys: false,
+            show_controls: false,
             target_fps: 10.0,
             next_step_time: None,
             seed,
@@ -269,8 +273,8 @@ impl RenderApp {
                     self.select_task((task + 1) % self.task_names.len());
                 }
             }
-            Command::ToggleHelp => self.show_keys = !self.show_keys,
             Command::Reset => self.reset(),
+            Command::ShowControls => self.show_controls = true,
             Command::Quit => ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close),
         }
     }
@@ -346,55 +350,18 @@ impl RenderApp {
         ui.ctx().request_repaint_after(wait);
     }
 
-    fn hint_text(&self) -> String {
-        let pacing = match self.pacing {
-            PacingMode::FreeRun => format!("free-run {}fps", self.target_fps),
-            PacingMode::StepOnInput if self.clock_runs() => "step-on-input (auto)".to_owned(),
-            PacingMode::StepOnInput => "step-on-input".to_owned(),
-        };
-        format!(
-            "t={}   agent {}/{}   {}   {}",
-            self.step_count,
-            self.focused_agent,
-            self.env.num_agents(),
-            pacing,
-            self.focused_agent_text(),
-        )
-    }
-
-    fn focused_agent_text(&self) -> String {
-        let agent = self.focused_agent;
-        if self.step_count == 0 || agent >= self.buffers.num_agents() {
-            return "action -   r -".to_owned();
-        }
-
-        let action = self
-            .env
-            .action_vocab()
-            .symbols()
-            .get(self.buffers.last_action[agent] as usize)
-            .copied()
-            .unwrap_or("?");
-
-        format!(
-            "action {}   r {:+.2}   return {:+.2}",
-            action, self.buffers.reward[agent], self.returns[agent],
-        )
-    }
-
-    /// The status line along the bottom, with the task picker and the key
-    /// reference toggle at its right end.
-    fn hint_bar_ui(&mut self, ui: &mut egui::Ui) {
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui
-                .selectable_label(self.show_keys, "keys")
-                .on_hover_text("H")
-                .clicked()
-            {
-                self.show_keys = !self.show_keys;
-            }
+    /// Episode, focused agent, modes and action keys, down the right edge. A landscape window spends no map on it: the
+    /// map runs out of height first and would leave this space black.
+    fn side_panel_ui(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(8.0);
+        section_heading(ui, "episode");
+        egui::Grid::new("episode").num_columns(2).show(ui, |ui| {
+            ui.label("step");
+            ui.label(format!("{} / {}", self.step_count, self.length));
+            ui.end_row();
 
             if let Some(current) = self.task {
+                ui.label("task");
                 let mut selected = current;
                 egui::ComboBox::from_id_salt("task")
                     .selected_text(&self.task_names[current])
@@ -404,20 +371,84 @@ impl RenderApp {
                         }
                     })
                     .response
-                    .on_hover_text("T cycles tasks");
+                    .on_hover_text(command_hint(Command::NextTask));
                 self.select_task(selected);
+                ui.end_row();
             }
-
-            // the status takes whatever width the controls leave
-            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                ui.add(egui::Label::new(RichText::new(self.hint_text()).weak()).truncate());
-            });
         });
+        if self.episode_done() {
+            ui.label(RichText::new("over; the next step starts a new one").weak());
+        }
+
+        ui.add_space(12.0);
+        ui.horizontal(|ui| {
+            // one-based for people; the index stays zero-based everywhere else
+            section_heading(ui, &format!("agent {}", self.focused_agent + 1));
+            ui.label(RichText::new(format!("({} total)", self.env.num_agents())).weak());
+            if self.env.num_agents() > 1 {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui
+                        .small_button("next")
+                        .on_hover_text(command_hint(Command::NextAgent))
+                        .clicked()
+                    {
+                        self.run_command(Command::NextAgent, ui);
+                    }
+                });
+            }
+        });
+        let agent = self.focused_agent;
+        let stepped = self.step_count > 0 && agent < self.buffers.num_agents();
+        egui::Grid::new("agent").num_columns(2).show(ui, |ui| {
+            ui.label("action");
+            let action = stepped
+                .then(|| {
+                    let id = self.buffers.last_action[agent] as usize;
+                    self.env.action_vocab().symbols().get(id).copied()
+                })
+                .flatten()
+                .map_or("–", keys::action_label);
+            ui.label(action);
+            ui.end_row();
+
+            ui.label("reward");
+            ui.label(signed(ui, stepped.then(|| self.buffers.reward[agent])));
+            ui.end_row();
+
+            ui.label("return");
+            ui.label(signed(ui, stepped.then(|| self.returns[agent])));
+            ui.end_row();
+        });
+
+        ui.add_space(12.0);
+        section_heading(ui, "mode");
+        let free_run = format!("free-run {}fps", self.target_fps);
+        if toggle(
+            ui,
+            self.pacing == PacingMode::StepOnInput,
+            ("step-on-input", &free_run),
+            command_hint(Command::TogglePacing),
+        ) {
+            self.run_command(Command::TogglePacing, ui);
+        }
+        if self.pacing == PacingMode::StepOnInput && self.clock_runs() {
+            ui.label(RichText::new("auto: one legal action").weak());
+        }
+        if toggle(
+            ui,
+            self.view_mode == ViewMode::BirdsEye,
+            ("bird's-eye", "agent view"),
+            command_hint(Command::ToggleView),
+        ) {
+            self.run_command(Command::ToggleView, ui);
+        }
+
+        self.keys_ui(ui);
     }
 
-    /// Every key the viewer responds to, in the top-right corner. Actions the
-    /// focused agent's mask rules out right now are dimmed.
-    fn keys_ui(&self, ctx: &egui::Context) {
+    /// The action keys, dimming those the focused agent's mask rules out
+    /// right now. The rest of the controls are one `?` away.
+    fn keys_ui(&self, ui: &mut egui::Ui) {
         let mask = self.buffers.action_mask.row(self.focused_agent);
         let key_names = |keys: &[egui::Key]| {
             keys.iter()
@@ -426,46 +457,54 @@ impl RenderApp {
                 .join(" ")
         };
 
-        egui::Area::new(egui::Id::new("keys"))
-            .anchor(egui::Align2::RIGHT_TOP, [-8.0, 8.0])
-            // clicks fall through to the map, so agents stay selectable
-            .interactable(false)
-            .show(ctx, |ui| {
-                egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    ui.label(RichText::new("actions").strong());
-                    if self.pacing == PacingMode::FreeRun {
-                        ui.label(RichText::new("the policy drives; P to play").weak());
-                    }
-                    egui::Grid::new("action keys").show(ui, |ui| {
-                        for (id, symbol, keys) in keys::action_bindings(self.env.action_vocab()) {
-                            let legal = mask.get(usize::from(id)).copied().unwrap_or(false);
-                            let text = |text: String| {
-                                let text = RichText::new(text);
-                                if legal { text } else { text.weak() }
-                            };
-                            ui.label(text(key_names(keys)).monospace());
-                            ui.label(text(symbol.to_owned()));
-                            ui.end_row();
-                        }
-                    });
+        ui.add_space(12.0);
+        section_heading(ui, "actions");
+        if self.pacing == PacingMode::FreeRun {
+            ui.label(RichText::new("the policy drives; P to play").weak());
+        }
+        egui::Grid::new("action keys").show(ui, |ui| {
+            for (id, label, keys) in keys::action_bindings(self.env.action_vocab()) {
+                let legal = mask.get(usize::from(id)).copied().unwrap_or(false);
+                let text = |text: String| {
+                    let text = RichText::new(text);
+                    if legal { text } else { text.weak() }
+                };
+                ui.label(text(key_names(keys)).monospace());
+                ui.label(text(label.to_owned()));
+                ui.end_row();
+            }
+        });
 
-                    ui.add_space(4.0);
-                    ui.label(RichText::new("controls").strong());
-                    egui::Grid::new("command keys").show(ui, |ui| {
-                        for (key, command) in keys::command_bindings() {
-                            if command == Command::NextTask && self.task.is_none() {
-                                continue;
-                            }
-                            ui.label(RichText::new(keys::key_label(key)).monospace());
-                            ui.label(command.label());
-                            ui.end_row();
-                        }
-                        ui.label(RichText::new("click").monospace());
-                        ui.label("focus an agent");
-                        ui.end_row();
-                    });
-                });
+        ui.add_space(4.0);
+        ui.label(
+            RichText::new(format!(
+                "{} all controls",
+                command_hint(Command::ShowControls)
+            ))
+            .weak(),
+        );
+    }
+
+    /// The command keys, over the map until the next input.
+    fn controls_ui(&self, ctx: &egui::Context) {
+        egui::Modal::new(egui::Id::new("controls")).show(ctx, |ui| {
+            section_heading(ui, "controls");
+            egui::Grid::new("command keys").show(ui, |ui| {
+                for (key, command) in keys::command_bindings() {
+                    if command == Command::NextTask && self.task.is_none() {
+                        continue;
+                    }
+                    ui.label(RichText::new(keys::key_label(key)).monospace());
+                    ui.label(command.label());
+                    ui.end_row();
+                }
+                ui.label(RichText::new("click").monospace());
+                ui.label("focus an agent");
+                ui.end_row();
             });
+            ui.add_space(4.0);
+            ui.label(RichText::new("any key or click closes this").weak());
+        });
     }
 
     /// The entire map; click an agent to focus it.
@@ -559,6 +598,45 @@ impl RenderApp {
     }
 }
 
+fn section_heading(ui: &mut egui::Ui, text: &str) {
+    ui.label(RichText::new(text).strong());
+}
+
+/// "P" style hover text naming the key bound to `command`.
+fn command_hint(command: Command) -> String {
+    keys::command_bindings()
+        .find(|&(_, bound)| bound == command)
+        .map(|(key, _)| keys::key_label(key).to_owned())
+        .unwrap_or_default()
+}
+
+/// Two-way switch as a pair of selectable labels; true when the user clicked
+/// the unselected side.
+fn toggle(ui: &mut egui::Ui, first: bool, labels: (&str, &str), hint: String) -> bool {
+    ui.horizontal(|ui| {
+        let a = ui.selectable_label(first, labels.0).on_hover_text(&hint);
+        let b = ui.selectable_label(!first, labels.1).on_hover_text(&hint);
+        (a.clicked() && !first) || (b.clicked() && first)
+    })
+    .inner
+}
+
+/// A reward or return, green above zero and red below; a dash before the
+/// first step.
+fn signed(ui: &egui::Ui, value: Option<f32>) -> RichText {
+    let Some(value) = value else {
+        return RichText::new("–").monospace();
+    };
+    let text = RichText::new(format!("{value:+.2}")).monospace();
+    if value > 0.0 {
+        text.color(Color32::from_rgb(120, 200, 120))
+    } else if value < 0.0 {
+        text.color(ui.visuals().error_fg_color)
+    } else {
+        text
+    }
+}
+
 impl eframe::App for RenderApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         if self.tilemap_renderer.is_none() {
@@ -574,9 +652,22 @@ impl eframe::App for RenderApp {
             self.compute_actions();
         }
 
-        // an open task list owns the keyboard: Escape closes it rather than
+        // an open overlay owns the keyboard: Escape closes it rather than
         // quitting, and no keypress steps the env behind it
-        let input = if egui::Popup::is_any_open(ui.ctx()) {
+        let input = if self.show_controls {
+            // any press closes the reference, and is spent on closing it
+            let dismissed = ui.input(|state| {
+                state.events.iter().any(|event| {
+                    matches!(
+                        event,
+                        egui::Event::Key { pressed: true, .. }
+                            | egui::Event::PointerButton { pressed: true, .. }
+                    )
+                })
+            });
+            self.show_controls = !dismissed;
+            None
+        } else if egui::Popup::is_any_open(ui.ctx()) {
             None
         } else {
             ui.input(|state| keys::read(state, self.env.action_vocab()))
@@ -597,15 +688,21 @@ impl eframe::App for RenderApp {
             self.render_state_dirty = false;
         }
 
-        egui::Panel::bottom("hint").show(ui, |ui| self.hint_bar_ui(ui));
+        egui::Panel::right("side")
+            .resizable(false)
+            .exact_size(SIDE_PANEL_WIDTH)
+            .show(ui, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| self.side_panel_ui(ui));
+            });
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(Color32::BLACK))
             .show(ui, |ui| match self.view_mode {
                 ViewMode::BirdsEye => self.birds_eye_ui(ui),
                 ViewMode::AgentPov => self.pov_ui(ui),
             });
-        if self.show_keys {
-            self.keys_ui(ui.ctx());
+
+        if self.show_controls {
+            self.controls_ui(ui.ctx());
         }
 
         // The keyboard belongs to the env, so no widget may keep focus:
@@ -626,7 +723,7 @@ pub fn open_window(app: RenderApp) -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("mapox")
-            .with_inner_size([800.0, 800.0]),
+            .with_inner_size([1140.0, 800.0]),
         ..Default::default()
     };
     eframe::run_native("mapox", options, Box::new(move |_cc| Ok(Box::new(app))))

@@ -11,8 +11,8 @@ pub enum Command {
     TogglePacing,
     NextAgent,
     NextTask,
-    ToggleHelp,
     Reset,
+    ShowControls,
     Quit,
 }
 
@@ -28,8 +28,8 @@ impl Command {
             Self::TogglePacing => "free-run / step-on-input",
             Self::NextAgent => "next agent",
             Self::NextTask => "next task",
-            Self::ToggleHelp => "show / hide keys",
             Self::Reset => "reset episode",
+            Self::ShowControls => "this list",
             Self::Quit => "quit",
         }
     }
@@ -41,20 +41,25 @@ const COMMAND_KEYS: &[(Key, Command)] = &[
     (Key::N, Command::NextAgent),
     (Key::T, Command::NextTask),
     (Key::R, Command::Reset),
-    (Key::H, Command::ToggleHelp),
+    (Key::Questionmark, Command::ShowControls),
     (Key::Escape, Command::Quit),
 ];
 
-const ACTION_KEYS: &[(&str, &[Key])] = &[
-    (symbols::MOVE_UP, &[Key::ArrowUp, Key::W]),
-    (symbols::MOVE_RIGHT, &[Key::ArrowRight, Key::D]),
-    (symbols::MOVE_DOWN, &[Key::ArrowDown, Key::S]),
-    (symbols::MOVE_LEFT, &[Key::ArrowLeft, Key::A]),
-    (symbols::STAY, &[Key::Space]),
-    (symbols::NOOP, &[Key::Period]),
-    (symbols::PRIMARY_ACTION, &[Key::F]),
-    (symbols::DIG_ACTION, &[Key::E]),
-    (symbols::PLACE_PIPE, &[Key::Q]),
+/// Each action symbol with the name a person reads and the keys that send it.
+const ACTION_KEYS: &[(&str, &str, &[Key])] = &[
+    (symbols::MOVE_UP, "move up", &[Key::ArrowUp, Key::W]),
+    (
+        symbols::MOVE_RIGHT,
+        "move right",
+        &[Key::ArrowRight, Key::D],
+    ),
+    (symbols::MOVE_DOWN, "move down", &[Key::ArrowDown, Key::S]),
+    (symbols::MOVE_LEFT, "move left", &[Key::ArrowLeft, Key::A]),
+    (symbols::STAY, "stay", &[Key::Space]),
+    (symbols::NOOP, "wait", &[Key::Period]),
+    (symbols::PRIMARY_ACTION, "primary action", &[Key::F]),
+    (symbols::DIG_ACTION, "dig", &[Key::E]),
+    (symbols::PLACE_PIPE, "place pipe", &[Key::Q]),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -72,14 +77,23 @@ pub fn command_bindings() -> impl Iterator<Item = (Key, Command)> {
 }
 
 /// The actions in `action_vocab` that a key sends, in display order: each
-/// action's id, symbol, and the keys bound to it. Bindings for symbols the
+/// action's id, label, and the keys bound to it. Bindings for symbols the
 /// vocab lacks are left out, as [`read`] ignores their keys.
 pub fn action_bindings(
     action_vocab: &Vocabulary,
 ) -> impl Iterator<Item = (VocabId, &'static str, &'static [Key])> + '_ {
     ACTION_KEYS
         .iter()
-        .filter_map(|&(symbol, keys)| action_vocab.get(symbol).map(|id| (id, symbol, keys)))
+        .filter_map(|&(symbol, label, keys)| action_vocab.get(symbol).map(|id| (id, label, keys)))
+}
+
+/// How the viewer names the action `symbol`; one it has no key for keeps its
+/// symbol.
+pub fn action_label(symbol: &str) -> &str {
+    ACTION_KEYS
+        .iter()
+        .find(|&&(bound, _, _)| bound == symbol)
+        .map_or(symbol, |&(_, label, _)| label)
 }
 
 /// How the key reference prints `key`: arrows as glyphs, the rest by name.
@@ -142,11 +156,19 @@ mod tests {
         for env in envs {
             for symbol in env.action_vocab().symbols() {
                 assert!(
-                    ACTION_KEYS.iter().any(|(name, _)| name == symbol),
+                    ACTION_KEYS.iter().any(|(name, _, _)| name == symbol),
                     "no key bound to {symbol}"
                 );
             }
         }
+    }
+
+    /// The panel shows the last action by label, and an action the viewer
+    /// has no row for still shows up, under its symbol.
+    #[test]
+    fn actions_are_labelled_for_people() {
+        assert_eq!(action_label(symbols::PLACE_PIPE), "place pipe");
+        assert_eq!(action_label("teleport"), "teleport");
     }
 
     /// Deliberately strict: a key means one thing in the viewer, whatever env
@@ -158,7 +180,7 @@ mod tests {
         bound.extend(
             ACTION_KEYS
                 .iter()
-                .flat_map(|(_, keys)| keys.iter().copied()),
+                .flat_map(|(_, _, keys)| keys.iter().copied()),
         );
 
         let mut seen = Vec::new();
