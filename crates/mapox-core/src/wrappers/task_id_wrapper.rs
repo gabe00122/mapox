@@ -71,4 +71,8 @@ impl Environment for TaskIdWrapper {
     fn set_enjoy_mode(&mut self, task_num: Option<usize>) {
         self.inner.set_enjoy_mode(task_num);
     }
+
+    fn enjoy_task(&self) -> Option<usize> {
+        self.inner.enjoy_task()
+    }
 }

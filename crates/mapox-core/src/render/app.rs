@@ -79,6 +79,12 @@ pub struct RenderApp {
     view_mode: ViewMode,
     pacing: PacingMode,
     focused_agent: usize,
+    /// Task names in task-id order, empty for a single-task env.
+    task_names: Vec<String>,
+    /// The task being played, `Some` exactly when `task_names` is non-empty.
+    task: Option<usize>,
+    /// Whether the key reference overlays the map.
+    show_keys: bool,
     target_fps: f32,
     /// Deadline for the next free-run step on egui's `input.time` clock,
     /// `None` until free-run schedules one. An absolute deadline instead of
@@ -98,6 +104,16 @@ impl RenderApp {
         seed: u64,
         mut policy: Box<dyn Policy>,
     ) -> Self {
+        // A multitask env plays one task at a time: the whole batch would
+        // step every task's agents while only the first env is drawn. A task
+        // the caller already picked is kept.
+        let task_names = env.task_names();
+        let mut task = env.enjoy_task();
+        if task.is_none() && !task_names.is_empty() {
+            task = Some(0);
+            env.set_enjoy_mode(task);
+        }
+
         let mut buffers = TimeStepBuffers::new(env.as_ref());
 
         let settings = env.get_render_settings();
@@ -134,6 +150,9 @@ impl RenderApp {
                 PacingMode::StepOnInput
             },
             focused_agent: 0,
+            task_names,
+            task,
+            show_keys: false,
             target_fps: 10.0,
             next_step_time: None,
             seed,
@@ -155,6 +174,27 @@ impl RenderApp {
         self.actions_ready = false;
         self.render_state_dirty = true;
         self.tilemap_dirty = true;
+    }
+
+    /// Switches a multitask env to `task` and starts a fresh episode of it.
+    /// The task can have a different agent count, map size and view, so
+    /// everything sized from the env is rebuilt.
+    fn select_task(&mut self, task: usize) {
+        if self.task == Some(task) || task >= self.task_names.len() {
+            return;
+        }
+        self.env.set_enjoy_mode(Some(task));
+        self.task = Some(task);
+
+        self.buffers = TimeStepBuffers::new(self.env.as_ref());
+        self.settings = self.env.get_render_settings();
+        self.art = resolve_art(&self.settings.obs_vocab);
+        let num_agents = self.env.num_agents();
+        self.actions = vec![0; num_agents];
+        self.returns = vec![0.0; num_agents];
+        self.focused_agent = 0;
+        // also resets the policy, which resizes itself to the new agent count
+        self.reset();
     }
 
     fn compute_actions(&mut self) {
@@ -224,6 +264,12 @@ impl RenderApp {
                     }
                 }
             }
+            Command::NextTask => {
+                if let Some(task) = self.task {
+                    self.select_task((task + 1) % self.task_names.len());
+                }
+            }
+            Command::ToggleHelp => self.show_keys = !self.show_keys,
             Command::Reset => self.reset(),
             Command::Quit => ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close),
         }
@@ -336,6 +382,92 @@ impl RenderApp {
         )
     }
 
+    /// The status line along the bottom, with the task picker and the key
+    /// reference toggle at its right end.
+    fn hint_bar_ui(&mut self, ui: &mut egui::Ui) {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui
+                .selectable_label(self.show_keys, "keys")
+                .on_hover_text("H")
+                .clicked()
+            {
+                self.show_keys = !self.show_keys;
+            }
+
+            if let Some(current) = self.task {
+                let mut selected = current;
+                egui::ComboBox::from_id_salt("task")
+                    .selected_text(&self.task_names[current])
+                    .show_ui(ui, |ui| {
+                        for (task, name) in self.task_names.iter().enumerate() {
+                            ui.selectable_value(&mut selected, task, name);
+                        }
+                    })
+                    .response
+                    .on_hover_text("T cycles tasks");
+                self.select_task(selected);
+            }
+
+            // the status takes whatever width the controls leave
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.add(egui::Label::new(RichText::new(self.hint_text()).weak()).truncate());
+            });
+        });
+    }
+
+    /// Every key the viewer responds to, in the top-right corner. Actions the
+    /// focused agent's mask rules out right now are dimmed.
+    fn keys_ui(&self, ctx: &egui::Context) {
+        let mask = self.buffers.action_mask.row(self.focused_agent);
+        let key_names = |keys: &[egui::Key]| {
+            keys.iter()
+                .map(|&key| keys::key_label(key))
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
+
+        egui::Area::new(egui::Id::new("keys"))
+            .anchor(egui::Align2::RIGHT_TOP, [-8.0, 8.0])
+            // clicks fall through to the map, so agents stay selectable
+            .interactable(false)
+            .show(ctx, |ui| {
+                egui::Frame::popup(ui.style()).show(ui, |ui| {
+                    ui.label(RichText::new("actions").strong());
+                    if self.pacing == PacingMode::FreeRun {
+                        ui.label(RichText::new("the policy drives; P to play").weak());
+                    }
+                    egui::Grid::new("action keys").show(ui, |ui| {
+                        for (id, symbol, keys) in keys::action_bindings(self.env.action_vocab()) {
+                            let legal = mask.get(usize::from(id)).copied().unwrap_or(false);
+                            let text = |text: String| {
+                                let text = RichText::new(text);
+                                if legal { text } else { text.weak() }
+                            };
+                            ui.label(text(key_names(keys)).monospace());
+                            ui.label(text(symbol.to_owned()));
+                            ui.end_row();
+                        }
+                    });
+
+                    ui.add_space(4.0);
+                    ui.label(RichText::new("controls").strong());
+                    egui::Grid::new("command keys").show(ui, |ui| {
+                        for (key, command) in keys::command_bindings() {
+                            if command == Command::NextTask && self.task.is_none() {
+                                continue;
+                            }
+                            ui.label(RichText::new(keys::key_label(key)).monospace());
+                            ui.label(command.label());
+                            ui.end_row();
+                        }
+                        ui.label(RichText::new("click").monospace());
+                        ui.label("focus an agent");
+                        ui.end_row();
+                    });
+                });
+            });
+    }
+
     /// The entire map; click an agent to focus it.
     fn birds_eye_ui(&mut self, ui: &mut egui::Ui) {
         let layout = GridLayout::fit(
@@ -444,7 +576,14 @@ impl eframe::App for RenderApp {
             self.compute_actions();
         }
 
-        match ui.input(|state| keys::read(state, self.env.action_vocab())) {
+        // an open task list owns the keyboard: Escape closes it rather than
+        // quitting, and no keypress steps the env behind it
+        let input = if egui::Popup::is_any_open(ui.ctx()) {
+            None
+        } else {
+            ui.input(|state| keys::read(state, self.env.action_vocab()))
+        };
+        match input {
             Some(Input::Command(command)) => self.run_command(command, ui),
             // the keyboard steps the env exactly when the clock does not:
             // free-run leaves every agent to the policy, and so does
@@ -460,13 +599,21 @@ impl eframe::App for RenderApp {
             self.render_state_dirty = false;
         }
 
-        egui::Panel::bottom("hint").show(ui, |ui| ui.label(RichText::new(self.hint_text()).weak()));
+        egui::Panel::bottom("hint").show(ui, |ui| self.hint_bar_ui(ui));
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(Color32::BLACK))
             .show(ui, |ui| match self.view_mode {
                 ViewMode::BirdsEye => self.birds_eye_ui(ui),
                 ViewMode::AgentPov => self.pov_ui(ui),
             });
+        if self.show_keys {
+            self.keys_ui(ui.ctx());
+        }
+
+        // The keyboard belongs to the env, so no widget may keep focus:
+        // egui moves focus onto the controls with Tab (the view toggle) and
+        // clicks a focused one with Space (stay).
+        ui.ctx().memory_mut(|memory| memory.stop_text_input());
 
         // a step consumed the precomputed actions; come straight back on an
         // idle frame to run the policy for the next one
@@ -534,6 +681,22 @@ mod tests {
         }
     }
 
+    /// An app driving `env` under a [`RecordingPolicy`], and the transcript
+    /// it records into. Drop the app before unwrapping the transcript.
+    fn recording_app(
+        env: impl Environment + 'static,
+        length: usize,
+        seed: u64,
+    ) -> (RenderApp, Arc<Mutex<Transcript>>) {
+        let transcript = Arc::new(Mutex::new(Transcript::default()));
+        let policy = RecordingPolicy {
+            inner: RandomPolicy::new(),
+            transcript: transcript.clone(),
+        };
+        let app = RenderApp::new(Box::new(env), length, seed, Box::new(policy));
+        (app, transcript)
+    }
+
     /// The env seed of the app's `episode`th episode: `new` draws the
     /// policy's seed before the env's, `reset` bumps the app seed and draws
     /// the env's first.
@@ -562,12 +725,7 @@ mod tests {
             env.set_enjoy_mode(Some(task));
             let num_agents = env.num_agents();
 
-            let transcript = Arc::new(Mutex::new(Transcript::default()));
-            let policy = RecordingPolicy {
-                inner: RandomPolicy::new(),
-                transcript: transcript.clone(),
-            };
-            let mut app = RenderApp::new(Box::new(env), LENGTH, SEED, Box::new(policy));
+            let (mut app, transcript) = recording_app(env, LENGTH, SEED);
             // each episode is LENGTH steps plus the call that resets it
             for _ in 0..EPISODES * (LENGTH + 1) - 1 {
                 app.step_env(None);
@@ -599,6 +757,73 @@ mod tests {
                 assert!(buffers.time.iter().all(|&time| time == LENGTH as i32));
             }
         }
+    }
+
+    /// The viewer never runs a multitask batch: it starts on the first task,
+    /// unless the caller already put the env in enjoy mode for another.
+    #[test]
+    fn a_multitask_env_plays_one_task() {
+        let specs = mixed_specs();
+
+        let (app, _) = recording_app(MultitaskWrapper::new(&specs, 8).unwrap(), 8, 0);
+        assert_eq!(app.task, Some(0));
+        assert_eq!(app.task_names, ["scouts", "fr", "snake"]);
+        assert_eq!(app.env.enjoy_task(), Some(0));
+        assert_eq!(app.buffers.num_agents(), 3, "one scouts env");
+
+        let mut env = MultitaskWrapper::new(&specs, 8).unwrap();
+        env.set_enjoy_mode(Some(2));
+        let (app, _) = recording_app(env, 8, 0);
+        assert_eq!(app.task, Some(2));
+        assert_eq!(app.buffers.num_agents(), 4, "one snake env");
+    }
+
+    #[test]
+    fn a_single_task_env_has_no_task_to_pick() {
+        let env = FindReturn::new(&FindReturnConfig::default(), 8);
+        let app = RenderApp::new(Box::new(env), 8, 0, Box::new(RandomPolicy::new()));
+        assert_eq!(app.task, None);
+        assert!(app.task_names.is_empty());
+    }
+
+    /// Switching tasks resizes everything sized from the env, so the next
+    /// steps run on the new task's agents and the policy is told about them.
+    #[test]
+    fn selecting_a_task_rebuilds_for_its_agents() {
+        const LENGTH: usize = 4;
+        let specs = mixed_specs();
+        let (mut app, transcript) =
+            recording_app(MultitaskWrapper::new(&specs, LENGTH).unwrap(), LENGTH, 0);
+
+        app.focused_agent = 2;
+        app.step_env(None);
+
+        for (task, num_agents) in [(2, 4), (1, 3)] {
+            app.select_task(task);
+            assert_eq!(app.task, Some(task));
+            assert_eq!(app.env.enjoy_task(), Some(task));
+            assert_eq!(app.step_count, 0);
+            assert_eq!(app.focused_agent, 0);
+            assert_eq!(app.buffers.num_agents(), num_agents);
+            assert_eq!(app.actions.len(), num_agents);
+            assert_eq!(app.returns.len(), num_agents);
+            assert_eq!(transcript.lock().unwrap().resets.last(), Some(&num_agents));
+
+            // a whole episode and the reset after it run on the new shape
+            for _ in 0..=LENGTH {
+                app.step_env(None);
+            }
+            app.env.render_state_into(&mut app.render_state);
+            assert_eq!(app.render_state.agent_positions.len(), num_agents);
+        }
+
+        let resets = transcript.lock().unwrap().resets.len();
+        app.select_task(1);
+        assert_eq!(
+            transcript.lock().unwrap().resets.len(),
+            resets,
+            "reselecting the current task is a no-op"
+        );
     }
 
     /// The overlay reads the same buffers the env writes: every agent must

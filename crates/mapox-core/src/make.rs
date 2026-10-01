@@ -286,6 +286,7 @@ mod tests {
         // every configured copy, retaining inactive task keys as well.
         for (task, steps) in [(0, 1), (1, 3)] {
             env.set_enjoy_mode(Some(task));
+            assert_eq!(env.enjoy_task(), Some(task));
             let mut buffers = TimeStepBuffers::new(&*env);
             env.reset(42, &mut buffers.view_mut());
             for _ in 0..steps {
@@ -303,6 +304,7 @@ mod tests {
         assert_eq!(env.consume_metrics(), zeros);
 
         env.set_enjoy_mode(None);
+        assert_eq!(env.enjoy_task(), None);
         let mut buffers = TimeStepBuffers::new(&*env);
         env.reset(44, &mut buffers.view_mut());
         env.step(&vec![0; env.num_agents()], &mut buffers.view_mut());

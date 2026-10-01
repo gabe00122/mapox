@@ -154,4 +154,8 @@ impl Environment for VectorWrapper {
         self.enjoy_mode = task_num.is_some();
         self.envs[0].set_enjoy_mode(task_num);
     }
+
+    fn enjoy_task(&self) -> Option<usize> {
+        self.envs[0].enjoy_task()
+    }
 }

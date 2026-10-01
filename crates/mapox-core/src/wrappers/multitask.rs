@@ -236,6 +236,12 @@ impl Environment for MultitaskWrapper {
             self.envs[idx].set_enjoy_mode(Some(0));
         }
     }
+
+    fn enjoy_task(&self) -> Option<usize> {
+        // every task owns at least one env, so the offsets are distinct
+        let idx = self.enjoy_mode?;
+        self.task_offsets.iter().position(|&offset| offset == idx)
+    }
 }
 
 #[cfg(test)]

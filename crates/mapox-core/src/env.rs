@@ -26,6 +26,11 @@ pub trait Environment: Send + Sync {
         Vec::new()
     }
     fn set_enjoy_mode(&mut self, _task_num: Option<usize>) {}
+    /// The task the last [`set_enjoy_mode`](Self::set_enjoy_mode) picked, or
+    /// `None` while the whole batch runs. Single-task envs are always `None`.
+    fn enjoy_task(&self) -> Option<usize> {
+        None
+    }
 
     fn consume_metrics(&mut self) -> Value;
 }

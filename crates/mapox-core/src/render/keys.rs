@@ -10,6 +10,8 @@ pub enum Command {
     ToggleView,
     TogglePacing,
     NextAgent,
+    NextTask,
+    ToggleHelp,
     Reset,
     Quit,
 }
@@ -18,13 +20,28 @@ impl Command {
     fn available(self) -> bool {
         !(matches!(self, Self::Quit) && cfg!(target_arch = "wasm32"))
     }
+
+    /// What the command does, as the key reference lists it.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::ToggleView => "bird's-eye / agent view",
+            Self::TogglePacing => "free-run / step-on-input",
+            Self::NextAgent => "next agent",
+            Self::NextTask => "next task",
+            Self::ToggleHelp => "show / hide keys",
+            Self::Reset => "reset episode",
+            Self::Quit => "quit",
+        }
+    }
 }
 
 const COMMAND_KEYS: &[(Key, Command)] = &[
     (Key::Tab, Command::ToggleView),
     (Key::P, Command::TogglePacing),
     (Key::N, Command::NextAgent),
+    (Key::T, Command::NextTask),
     (Key::R, Command::Reset),
+    (Key::H, Command::ToggleHelp),
     (Key::Escape, Command::Quit),
 ];
 
@@ -46,19 +63,42 @@ pub enum Input {
     Action(VocabId),
 }
 
-pub fn read(state: &InputState, action_vocab: &Vocabulary) -> Option<Input> {
-    let command = COMMAND_KEYS
+/// The commands this build responds to, with their keys, in display order.
+pub fn command_bindings() -> impl Iterator<Item = (Key, Command)> {
+    COMMAND_KEYS
         .iter()
+        .copied()
         .filter(|(_, command)| command.available())
-        .find(|(key, _)| state.key_pressed(*key))
-        .map(|&(_, command)| Input::Command(command));
+}
+
+/// The actions in `action_vocab` that a key sends, in display order: each
+/// action's id, symbol, and the keys bound to it. Bindings for symbols the
+/// vocab lacks are left out, as [`read`] ignores their keys.
+pub fn action_bindings(
+    action_vocab: &Vocabulary,
+) -> impl Iterator<Item = (VocabId, &'static str, &'static [Key])> + '_ {
+    ACTION_KEYS
+        .iter()
+        .filter_map(|&(symbol, keys)| action_vocab.get(symbol).map(|id| (id, symbol, keys)))
+}
+
+/// How the key reference prints `key`: arrows as glyphs, the rest by name.
+pub fn key_label(key: Key) -> &'static str {
+    match key {
+        Key::Escape => "Esc",
+        key => key.symbol_or_name(),
+    }
+}
+
+pub fn read(state: &InputState, action_vocab: &Vocabulary) -> Option<Input> {
+    let command = command_bindings()
+        .find(|&(key, _)| state.key_pressed(key))
+        .map(|(_, command)| Input::Command(command));
 
     command.or_else(|| {
-        ACTION_KEYS
-            .iter()
-            .find(|(_, keys)| keys.iter().any(|key| state.key_pressed(*key)))
-            .and_then(|(symbol, _)| action_vocab.get(symbol))
-            .map(Input::Action)
+        action_bindings(action_vocab)
+            .find(|(_, _, keys)| keys.iter().any(|&key| state.key_pressed(key)))
+            .map(|(id, _, _)| Input::Action(id))
     })
 }
 
@@ -67,7 +107,9 @@ mod tests {
     use super::*;
     use crate::env::Environment;
     use crate::envs::find_return::{FindReturn, FindReturnConfig};
+    use crate::envs::pacman::{Pacman, PacmanConfig};
     use crate::envs::scouts::{Scouts, ScoutsConfig};
+    use crate::envs::snake::{Snake, SnakeConfig};
     use egui::{Event, Modifiers};
 
     /// One frame's worth of input with `keys` freshly pressed. Assigned
@@ -93,6 +135,8 @@ mod tests {
         let envs: Vec<Box<dyn Environment>> = vec![
             Box::new(FindReturn::new(&FindReturnConfig::default(), 512)),
             Box::new(Scouts::new(&ScoutsConfig::default(), 512)),
+            Box::new(Snake::new(&SnakeConfig::default(), 512)),
+            Box::new(Pacman::new(&PacmanConfig::default(), 512)),
         ];
 
         for env in envs {

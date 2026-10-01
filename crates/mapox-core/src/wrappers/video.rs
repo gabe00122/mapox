@@ -195,6 +195,10 @@ impl Environment for VideoWrapper {
             recording.renderer = None;
         }
     }
+
+    fn enjoy_task(&self) -> Option<usize> {
+        self.inner.enjoy_task()
+    }
 }
 
 impl Drop for VideoWrapper {
