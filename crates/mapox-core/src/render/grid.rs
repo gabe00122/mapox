@@ -6,7 +6,8 @@ use crate::render::tileset::TILE_SIZE;
 use egui::{Pos2, Rect, pos2, vec2};
 
 /// Maps a `cols x rows` grid (env coords: x right, y up) onto a screen
-/// rect at the largest whole-number scale that fits, centred.
+/// rect, centred: [`fill`](Self::fill) for the live view, [`fit`](Self::fit)
+/// where only nearest sampling is available.
 pub(crate) struct GridLayout {
     /// Screen position of the grid's top-left corner.
     pub origin: Pos2,
@@ -17,6 +18,24 @@ pub(crate) struct GridLayout {
 }
 
 impl GridLayout {
+    /// Scales the grid to the largest size that fits `area`, at whatever
+    /// fractional tile size that takes. The tilemap shader filters texel
+    /// edges by pixel coverage, so the art stays even without snapping.
+    pub fn fill(area: Rect, cols: usize, rows: usize) -> Self {
+        let tile = if cols == 0 || rows == 0 {
+            0.0
+        } else {
+            (area.width() / cols as f32).min(area.height() / rows as f32)
+        };
+        let grid = vec2(cols as f32, rows as f32) * tile;
+        Self {
+            origin: area.center() - grid / 2.0,
+            tile,
+            cols,
+            rows,
+        }
+    }
+
     /// Fits the grid into `area` so every sprite texel covers an integer
     /// number of physical pixels: the art stays crisp at equal pixel widths
     /// instead of NEAREST sampling alternating between two sizes at
@@ -112,6 +131,15 @@ mod tests {
         let rect = layout.grid_rect();
         assert_eq!(layout.pos_to_cell(rect.min - vec2(1.0, 1.0)), None);
         assert_eq!(layout.pos_to_cell(rect.max + vec2(1.0, 1.0)), None);
+    }
+
+    /// Filling spends all of the limiting axis and centres the other.
+    #[test]
+    fn fill_uses_the_limiting_axis() {
+        let area = Rect::from_min_size(pos2(5.0, 0.0), vec2(1000.0, 500.0));
+        let layout = GridLayout::fill(area, 10, 12);
+        assert_eq!(layout.grid_rect().height(), 500.0);
+        assert_eq!(layout.grid_rect().center(), area.center());
     }
 
     /// The letterboxed grid stays centred, at a whole-pixel tile size:

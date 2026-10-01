@@ -470,11 +470,10 @@ impl RenderApp {
 
     /// The entire map; click an agent to focus it.
     fn birds_eye_ui(&mut self, ui: &mut egui::Ui) {
-        let layout = GridLayout::fit(
+        let layout = GridLayout::fill(
             ui.max_rect(),
             self.settings.tile_width,
             self.settings.tile_height,
-            ui.ctx().pixels_per_point(),
         );
 
         let response = ui.allocate_rect(layout.grid_rect(), egui::Sense::click());
@@ -538,11 +537,10 @@ impl RenderApp {
     /// the UI band fills the rows above it, leaving the agent a little below
     /// the centre of the grid as drawn.
     fn pov_ui(&mut self, ui: &mut egui::Ui) {
-        let layout = GridLayout::fit(
+        let layout = GridLayout::fill(
             ui.max_rect(),
             self.settings.view_width,
             self.settings.view_height,
-            ui.ctx().pixels_per_point(),
         );
         let renderer = self
             .tilemap_renderer
