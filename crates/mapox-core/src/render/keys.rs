@@ -8,6 +8,7 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Command {
     ToggleView,
+    ToggleFov,
     TogglePacing,
     NextAgent,
     NextTask,
@@ -25,6 +26,7 @@ impl Command {
     pub fn label(self) -> &'static str {
         match self {
             Self::ToggleView => "bird's-eye / agent view",
+            Self::ToggleFov => "field of view on / off",
             Self::TogglePacing => "free-run / step-on-input",
             Self::NextAgent => "next agent",
             Self::NextTask => "next task",
@@ -37,6 +39,7 @@ impl Command {
 
 const COMMAND_KEYS: &[(Key, Command)] = &[
     (Key::Tab, Command::ToggleView),
+    (Key::V, Command::ToggleFov),
     (Key::P, Command::TogglePacing),
     (Key::N, Command::NextAgent),
     (Key::T, Command::NextTask),

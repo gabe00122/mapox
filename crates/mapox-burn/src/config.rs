@@ -17,6 +17,7 @@ pub struct GridCnnConfig {
     pub kernels: Vec<[usize; 2]>,
     pub strides: Vec<[usize; 2]>,
     pub channels: Vec<usize>,
+    pub embedding_dim: usize,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -46,9 +47,11 @@ pub struct PolicyMetadata {
     pub model: ModelConfig,
     /// `(view_width, view_height, channels)` of one agent's observation.
     pub obs_shape: [usize; 3],
-    /// Per-channel vocabulary size; the cnn one-hot encodes each channel.
+    /// Per-channel vocabulary size; their sum is the obs embedding's rows.
     pub obs_max_value: Vec<usize>,
     pub action_dim: usize,
+    /// Rows of the task embedding; a single-task model has none.
+    pub num_tasks: usize,
     pub max_seq_length: usize,
     /// The training run's env config JSON, deserializable into
     /// `mapox_core::make::EnvConfig`.

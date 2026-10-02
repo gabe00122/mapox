@@ -1,9 +1,15 @@
-// One sprite per layer, in egui's premultiplied gamma-space representation.
-@group(0) @binding(0) var atlas: texture_2d_array<f32>;
-// One Rg8Uint texel per environment cell: atlas layer, unseen.
+// Atlas bytes have egui's premultiplied gamma-space representation.
+@group(0) @binding(0) var atlas: texture_2d<f32>;
+// One RGBA8Uint texel per environment cell: atlas col, row, unseen, unused.
 @group(0) @binding(1) var tile_indices: texture_2d<u32>;
-// Unclipped, unrounded callback rectangle in physical pixels.
-@group(0) @binding(2) var<uniform> rect: vec4<f32>;
+
+struct Geometry {
+    // Unclipped, unrounded callback rectangle in physical pixels.
+    rect: vec4<f32>,
+    // Source origin x/y, tile stride, tile size, from Tileset::source.
+    atlas_layout: vec4<u32>,
+};
+@group(0) @binding(2) var<uniform> geometry: Geometry;
 
 // Set at pipeline creation: an sRGB attachment takes linear colors.
 override LINEAR_FRAMEBUFFER: bool;
@@ -26,14 +32,15 @@ struct Tile {
 // One art pixel of the whole map, addressed top-down in sprite texels and
 // clamped to the map, so the filter's border neighbours repeat the edge.
 fn load_texel(texel: vec2<i32>) -> Tile {
-    let tile_size = vec2<i32>(textureDimensions(atlas));
+    let tile_size = vec2<i32>(i32(geometry.atlas_layout.w));
     let dimensions = vec2<i32>(textureDimensions(tile_indices));
     let clamped = clamp(texel, vec2<i32>(0), dimensions * tile_size - 1);
     let screen_cell = clamped / tile_size;
     // Flip only the environment grid. Each sprite retains its top-down rows.
     let cell = vec2<i32>(screen_cell.x, dimensions.y - 1 - screen_cell.y);
     let tile = textureLoad(tile_indices, cell, 0);
-    return Tile(textureLoad(atlas, clamped % tile_size, tile.x, 0), tile.y != 0u);
+    let source = vec2<i32>(geometry.atlas_layout.xy + tile.xy * geometry.atlas_layout.z);
+    return Tile(textureLoad(atlas, source + clamped % tile_size, 0), tile.z != 0u);
 }
 
 // The four art pixels around a fragment and how much of the fragment the
@@ -47,14 +54,14 @@ struct Footprint {
 
 fn footprint(position: vec2<f32>) -> Footprint {
     let dimensions = vec2<f32>(textureDimensions(tile_indices));
-    let grid_position = (position - rect.xy) / rect.zw * dimensions;
+    let grid_position = (position - geometry.rect.xy) / geometry.rect.zw * dimensions;
     if any(grid_position < vec2<f32>(0.0)) || any(grid_position >= dimensions) {
         discard;
     }
-    let tile_size = vec2<f32>(textureDimensions(atlas));
+    let tile_size = vec2<f32>(f32(geometry.atlas_layout.w));
     // Shift by half a texel so `base` is the nearest texel centre up-left.
     let art = grid_position * tile_size - 0.5;
-    let art_per_pixel = tile_size * dimensions / rect.zw;
+    let art_per_pixel = tile_size * dimensions / geometry.rect.zw;
     let base = floor(art);
     let weight = clamp((art - base - 0.5) / art_per_pixel + 0.5, vec2<f32>(0.0), vec2<f32>(1.0));
     return Footprint(vec2<i32>(base), weight);
@@ -68,21 +75,23 @@ fn linear_from_gamma_rgb(srgb: vec3<f32>) -> vec3<f32> {
     return select(higher, lower, cutoff);
 }
 
-// Color32::from_rgba_premultiplied(41, 41, 41, 110), not straight-alpha gray.
-const FOG: vec4<f32> = vec4<f32>(41.0, 41.0, 41.0, 110.0) / 255.0;
+// Unseen cells keep their art but lose most colour and brightness.
+const UNSEEN_DESATURATION: f32 = 0.7;
+const UNSEEN_BRIGHTNESS: f32 = 0.55;
 
 fn shade(texel: vec2<i32>) -> vec4<f32> {
     let tile = load_texel(texel);
     var color = tile.color;
-    var fog = FOG;
-    if LINEAR_FRAMEBUFFER {
-        // An sRGB attachment blends in linear space. Convert each egui draw's
-        // premultiplied color before combining, just as two separate draws do.
-        color = vec4<f32>(linear_from_gamma_rgb(color.rgb), color.a);
-        fog = vec4<f32>(linear_from_gamma_rgb(fog.rgb), fog.a);
-    }
     if tile.unseen {
-        return fog + color * (1.0 - fog.a);
+        // Done in gamma space so the look is the same on either framebuffer.
+        // Scaling premultiplied rgb without alpha keeps it premultiplied.
+        let grey = dot(color.rgb, vec3<f32>(0.299, 0.587, 0.114));
+        let muted = mix(color.rgb, vec3<f32>(grey), UNSEEN_DESATURATION);
+        color = vec4<f32>(muted * UNSEEN_BRIGHTNESS, color.a);
+    }
+    if LINEAR_FRAMEBUFFER {
+        // An sRGB attachment takes linear colors, as in egui-wgpu.
+        color = vec4<f32>(linear_from_gamma_rgb(color.rgb), color.a);
     }
     return color;
 }

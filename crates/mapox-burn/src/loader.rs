@@ -4,9 +4,11 @@
 //! to burn conventions happens here:
 //!
 //! - `nnx.Linear` kernels are `[in, out]`, which is also burn's orientation.
-//! - `nnx.LinearGeneral` q/k/v kernels are `[d_model, heads, head_dim]` and
-//!   the out kernel `[heads, head_dim, d_model]`; both flatten contiguously
-//!   to the 2d matmul shape.
+//! - the fused `nnx.LinearGeneral` qkv kernel is `[d_model, heads + 2 *
+//!   kv_heads, head_dim]`, query heads then key heads then value heads; it
+//!   flattens contiguously to `[d_model, (heads + 2 * kv_heads) * head_dim]`
+//!   and is split by column into the three projections. The out kernel
+//!   `[heads, head_dim, d_model]` flattens straight to the 2d matmul shape.
 //! - `nnx.Conv` kernels are `[kh, kw, in, out]` (NHWC), permuted to burn's
 //!   `[out, in, kh, kw]` (NCHW).
 
@@ -81,6 +83,7 @@ pub fn parse_metadata(bytes: &[u8]) -> Result<PolicyMetadata, LoadError> {
         obs_shape,
         obs_max_value: serde_json::from_str(get("obs_max_value")?)?,
         action_dim: get("action_dim")?.parse()?,
+        num_tasks: get("num_tasks")?.parse()?,
         max_seq_length: get("max_seq_length")?.parse()?,
         env_config: meta.get("env_config").cloned(),
         source: get("source")?.clone(),
@@ -131,6 +134,39 @@ impl<'a, B: Backend> Store<'a, B> {
         Ok(Tensor::from_data(TensorData::new(data, shape), self.device))
     }
 
+    /// Column blocks of a `[rows, sum(widths)]` matrix as separate
+    /// contiguous `[rows, width]` tensors, split on the host so the matmuls
+    /// never see a strided view.
+    fn split_columns(
+        &self,
+        name: &str,
+        rows: usize,
+        widths: &[usize],
+    ) -> Result<Vec<Tensor<B, 2>>, LoadError> {
+        let (data, stored) = self.raw(name)?;
+        let cols: usize = widths.iter().sum();
+        if data.len() != rows * cols {
+            return Err(format!(
+                "{name}: stored shape {stored:?} has {} elements, expected {rows}x{cols}",
+                data.len()
+            )
+            .into());
+        }
+        let mut start = 0;
+        Ok(widths
+            .iter()
+            .map(|&width| {
+                let block: Vec<f32> = data
+                    .chunks_exact(cols)
+                    .flat_map(|row| &row[start..start + width])
+                    .copied()
+                    .collect();
+                start += width;
+                Tensor::from_data(TensorData::new(block, [rows, width]), self.device)
+            })
+            .collect())
+    }
+
     fn exact<const D: usize>(
         &self,
         name: &str,
@@ -179,11 +215,11 @@ fn build_model<B: Backend>(
     let config = &meta.model;
     let hidden = config.hidden_features;
 
-    if meta.obs_shape[2] != meta.obs_max_value.len() {
+    // like the jax encoder, which embeds channel 0 only
+    if meta.obs_shape[2] != 1 {
         return Err(format!(
-            "obs has {} channels but {} per-channel sizes",
-            meta.obs_shape[2],
-            meta.obs_max_value.len()
+            "the obs encoder embeds a single channel, obs has {}",
+            meta.obs_shape[2]
         )
         .into());
     }
@@ -198,8 +234,10 @@ fn build_model<B: Backend>(
         )
         .into());
     }
+    let num_classes: usize = meta.obs_max_value.iter().sum();
+    let embedding = store.exact("obs_encoder.embedding", [num_classes, cnn.embedding_dim])?;
     let mut conv_layers = Vec::new();
-    let mut in_channels: usize = meta.obs_max_value.iter().sum();
+    let mut in_channels = cnn.embedding_dim;
     let out_channels = cnn.channels.iter().copied().chain([hidden]);
     for (i, ((kernel, stride), out)) in cnn
         .kernels
@@ -223,8 +261,8 @@ fn build_model<B: Backend>(
         in_channels = out;
     }
     let obs_encoder = GridCnnEncoder {
+        embedding,
         layers: conv_layers,
-        one_hot_sizes: meta.obs_max_value.clone(),
     };
 
     let mut layers = Vec::new();
@@ -247,19 +285,18 @@ fn build_model<B: Backend>(
                     attn.rope_max_wavelength,
                     store.device,
                 );
+                let [query_proj, key_proj, value_proj]: [Tensor<B, 2>; 3] = store
+                    .split_columns(
+                        &format!("{name}.history.qkv_proj.kernel"),
+                        hidden,
+                        &[heads * head_dim, kv_heads * head_dim, kv_heads * head_dim],
+                    )?
+                    .try_into()
+                    .expect("three column blocks");
                 let attention = Attention {
-                    query_proj: store.reshaped(
-                        &format!("{name}.history.query_proj.kernel"),
-                        [hidden, heads * head_dim],
-                    )?,
-                    key_proj: store.reshaped(
-                        &format!("{name}.history.key_proj.kernel"),
-                        [hidden, kv_heads * head_dim],
-                    )?,
-                    value_proj: store.reshaped(
-                        &format!("{name}.history.value_proj.kernel"),
-                        [hidden, kv_heads * head_dim],
-                    )?,
+                    query_proj,
+                    key_proj,
+                    value_proj,
                     out_proj: store.reshaped(
                         &format!("{name}.history.out.kernel"),
                         [heads * head_dim, hidden],
@@ -298,6 +335,14 @@ fn build_model<B: Backend>(
         reward_encoder: store.linear("reward_encoder", 1, hidden)?,
         action_embedder: Embedder {
             table: store.exact("action_embedder.embedding_table", [meta.action_dim, hidden])?,
+        },
+        // jax only builds it for multitask runs
+        task_embedder: if meta.num_tasks > 1 {
+            Some(Embedder {
+                table: store.exact("task_embedder.embedding_table", [meta.num_tasks, hidden])?,
+            })
+        } else {
+            None
         },
         layers,
         output_norm: store.norm("output_norm", hidden)?,

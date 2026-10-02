@@ -3,7 +3,7 @@ use mapox_burn::config::ModelConfig;
 /// A full jaxrl config dump: the model reads four keys out of it and ignores
 /// the rest, including the whole critic.
 const FULL: &str = r#"{
-  "obs_encoder": {"obs_type": "grid_cnn", "kernels": [[3,3],[3,3]], "strides": [[1,1],[1,1]], "channels": [32]},
+  "obs_encoder": {"obs_type": "grid_cnn", "kernels": [[3,3],[3,3]], "strides": [[1,1],[1,1]], "channels": [32], "embedding_dim": 16, "learned_embeddings": true},
   "hidden_features": 128,
   "layer": {
     "feed_forward": {"size": 256, "glu": true},

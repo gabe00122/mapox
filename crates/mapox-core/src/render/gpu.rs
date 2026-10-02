@@ -5,13 +5,9 @@ use std::{num::NonZeroU64, sync::Arc};
 use eframe::egui_wgpu::{
     Callback, CallbackResources, CallbackTrait, RenderState, ScreenDescriptor,
 };
-use egui::{Color32, PaintCallbackInfo, Painter, Rect};
-use wgpu::util::DeviceExt;
+use egui::{PaintCallbackInfo, Painter, Rect};
 
-use super::tileset::{TILE_SIZE, TILESET_COLS, TILESET_ROWS, Tileset};
-
-/// The shader's whole uniform: the callback rect in physical pixels.
-type Geometry = [f32; 4];
+use super::tileset::{TILESET_COLS, TILESET_ROWS, Tileset};
 
 /// GPU resources belong to this renderer and its outstanding paint callbacks,
 /// not to a process-global or egui-global singleton.
@@ -27,6 +23,8 @@ struct TilemapPipeline {
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
     atlas: wgpu::TextureView,
+    // Source origin x/y, tile stride, tile size; shared with the WGSL uniform.
+    atlas_layout: [u32; 4],
 }
 
 struct TilemapGrid {
@@ -44,36 +42,48 @@ struct TilemapCallback {
 impl TilemapRenderer {
     pub(crate) fn new(state: &RenderState) -> Self {
         let device = &state.device;
-        let layers = TILESET_COLS * TILESET_ROWS;
-        let limit = device.limits().max_texture_array_layers;
+        let image = Tileset::decode();
+        let (width, height) = image.dimensions();
+        let limit = device.limits().max_texture_dimension_2d;
         assert!(
-            layers <= limit,
-            "tilemap atlas has {layers} sprites, over wgpu max_texture_array_layers ({limit})"
+            width <= limit && height <= limit,
+            "tilemap atlas {width}x{height} exceeds wgpu max_texture_dimension_2d ({limit})"
         );
-        let atlas = device
-            .create_texture_with_data(
-                &state.queue,
-                &wgpu::TextureDescriptor {
-                    label: Some("mapox tile atlas"),
-                    size: wgpu::Extent3d {
-                        width: TILE_SIZE as u32,
-                        height: TILE_SIZE as u32,
-                        depth_or_array_layers: layers,
-                    },
-                    mip_level_count: 1,
-                    sample_count: 1,
-                    dimension: wgpu::TextureDimension::D2,
-                    format: wgpu::TextureFormat::Rgba8Unorm,
-                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-                    view_formats: &[],
-                },
-                wgpu::util::TextureDataOrder::LayerMajor,
-                &atlas_layers(),
-            )
-            .create_view(&wgpu::TextureViewDescriptor {
-                dimension: Some(wgpu::TextureViewDimension::D2Array),
-                ..Default::default()
-            });
+        let mut pixels = image.into_raw();
+        // Match ColorImage::from_rgba_unmultiplied, used by Tileset::embedded.
+        // Rgba8Unorm deliberately keeps the atlas in egui's gamma space.
+        for pixel in pixels.as_chunks_mut::<4>().0 {
+            if pixel[3] != 255 {
+                let color =
+                    egui::Color32::from_rgba_unmultiplied(pixel[0], pixel[1], pixel[2], pixel[3]);
+                pixel.copy_from_slice(&color.to_array());
+            }
+        }
+        let atlas = device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("mapox tile atlas"),
+            size: wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        state.queue.write_texture(
+            atlas.as_image_copy(),
+            &pixels,
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(width * 4),
+                rows_per_image: Some(height),
+            },
+            atlas.size(),
+        );
+        let atlas = atlas.create_view(&wgpu::TextureViewDescriptor::default());
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("mapox tilemap bindings"),
             entries: &[
@@ -82,7 +92,7 @@ impl TilemapRenderer {
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
                         sample_type: wgpu::TextureSampleType::Float { filterable: false },
-                        view_dimension: wgpu::TextureViewDimension::D2Array,
+                        view_dimension: wgpu::TextureViewDimension::D2,
                         multisampled: false,
                     },
                     count: None,
@@ -103,7 +113,7 @@ impl TilemapRenderer {
                     ty: wgpu::BindingType::Buffer {
                         ty: wgpu::BufferBindingType::Uniform,
                         has_dynamic_offset: false,
-                        min_binding_size: NonZeroU64::new(size_of::<Geometry>() as u64),
+                        min_binding_size: NonZeroU64::new(32),
                     },
                     count: None,
                 },
@@ -160,6 +170,8 @@ impl TilemapRenderer {
             multiview_mask: None,
             cache: None,
         });
+        let first_tile = Tileset::source(0, 0);
+        let tile_stride = Tileset::source(1, 0).min.x - first_tile.min.x;
         Self {
             device: device.clone(),
             queue: state.queue.clone(),
@@ -167,6 +179,12 @@ impl TilemapRenderer {
                 pipeline,
                 layout,
                 atlas,
+                atlas_layout: [
+                    first_tile.min.x as u32,
+                    first_tile.min.y as u32,
+                    tile_stride as u32,
+                    first_tile.width() as u32,
+                ],
             }),
             grid: None,
             staging: Vec::new(),
@@ -194,7 +212,7 @@ impl TilemapRenderer {
         );
         let byte_len = cols
             .checked_mul(rows)
-            .and_then(|cells| cells.checked_mul(2))
+            .and_then(|cells| cells.checked_mul(4))
             .expect("tilemap index upload exceeds addressable memory");
         assert!(
             byte_len as u64 <= limits.max_buffer_size,
@@ -209,10 +227,12 @@ impl TilemapRenderer {
                     atlas_col < TILESET_COLS && atlas_row < TILESET_ROWS,
                     "tilemap cell ({x}, {y}) selects atlas tile ({atlas_col}, {atlas_row}) outside {TILESET_COLS}x{TILESET_ROWS}"
                 );
-                let offset = (y * cols + x) * 2;
-                self.staging[offset..offset + 2].copy_from_slice(&[
-                    (atlas_row * TILESET_COLS + atlas_col) as u8,
+                let offset = (y * cols + x) * 4;
+                self.staging[offset..offset + 4].copy_from_slice(&[
+                    atlas_col as u8,
+                    atlas_row as u8,
                     u8::from(!visible),
+                    0,
                 ]);
             }
         }
@@ -221,6 +241,7 @@ impl TilemapRenderer {
         }) {
             self.grid = Some(Arc::new(TilemapGrid::new(
                 &self.device,
+                &self.queue,
                 Arc::clone(&self.pipeline),
                 cols as u32,
                 rows as u32,
@@ -232,7 +253,7 @@ impl TilemapRenderer {
             &self.staging,
             wgpu::TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: Some(cols as u32 * 2),
+                bytes_per_row: Some(cols as u32 * 4),
                 rows_per_image: Some(rows as u32),
             },
             grid.indices.size(),
@@ -258,7 +279,13 @@ impl TilemapRenderer {
 }
 
 impl TilemapGrid {
-    fn new(device: &wgpu::Device, pipeline: Arc<TilemapPipeline>, cols: u32, rows: u32) -> Self {
+    fn new(
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        pipeline: Arc<TilemapPipeline>,
+        cols: u32,
+        rows: u32,
+    ) -> Self {
         let indices = device.create_texture(&wgpu::TextureDescriptor {
             label: Some("mapox tile indices and fog"),
             size: wgpu::Extent3d {
@@ -269,17 +296,18 @@ impl TilemapGrid {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rg8Uint,
+            format: wgpu::TextureFormat::Rgba8Uint,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
         let indices_view = indices.create_view(&wgpu::TextureViewDescriptor::default());
         let uniforms = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("mapox tilemap geometry"),
-            size: size_of::<Geometry>() as u64,
+            size: 32,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        queue.write_buffer(&uniforms, 16, bytemuck::bytes_of(&pipeline.atlas_layout));
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("mapox tilemap bind group"),
             layout: &pipeline.layout,
@@ -319,7 +347,7 @@ impl CallbackTrait for TilemapCallback {
         // Egui rounds/clamps the viewport, but the original fractional map
         // geometry must survive both clipping and sub-texel window sizes.
         let scale = screen.pixels_per_point;
-        let rect: Geometry = [
+        let rect = [
             self.rect.min.x * scale,
             self.rect.min.y * scale,
             self.rect.width() * scale,
@@ -341,26 +369,4 @@ impl CallbackTrait for TilemapCallback {
         render_pass.set_bind_group(0, &self.grid.bind_group, &[]);
         render_pass.draw(0..3, 0..1);
     }
-}
-
-/// The sheet repacked as one sprite per layer, `row * TILESET_COLS + col`, so
-/// the shader never sees the sheet's padding. Colors are premultiplied like
-/// ColorImage::from_rgba_unmultiplied, used by Tileset::embedded; Rgba8Unorm
-/// deliberately keeps them in egui's gamma space.
-fn atlas_layers() -> Vec<u8> {
-    let sheet = Tileset::decode();
-    let tile = TILE_SIZE as u32;
-    let mut layers = Vec::with_capacity((TILESET_COLS * TILESET_ROWS * tile * tile * 4) as usize);
-    for row in 0..TILESET_ROWS {
-        for col in 0..TILESET_COLS {
-            let origin = Tileset::source(col, row).min;
-            for y in 0..tile {
-                for x in 0..tile {
-                    let [r, g, b, a] = sheet.get_pixel(origin.x as u32 + x, origin.y as u32 + y).0;
-                    layers.extend(Color32::from_rgba_unmultiplied(r, g, b, a).to_array());
-                }
-            }
-        }
-    }
-    layers
 }

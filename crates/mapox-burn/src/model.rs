@@ -12,7 +12,8 @@
 //!   forward.
 //! - flax `RMSNorm` defaults to `epsilon = 1e-6`.
 //! - the embedder scales lookups by `sqrt(hidden)` and its table doubles as
-//!   the action head (`decode` is a matmul with the transpose).
+//!   the action head (`decode` is a matmul with the transpose). the obs
+//!   encoder's embedding is a plain unscaled lookup.
 //! - rope is the split-half form (not interleaved), positions are the raw
 //!   step count, and the kv cache holds one slot per step up to
 //!   `max_seq_length`, attending to the `time + 1` written so far. the trainer
@@ -85,22 +86,33 @@ pub struct Embedder<B: Backend> {
 }
 
 impl<B: Backend> Embedder<B> {
-    pub fn encode(&self, ids: &[u16], device: &B::Device) -> Tensor<B, 2> {
-        let [vocab, features] = self.table.dims();
-        let indices: Vec<i32> = ids
-            .iter()
-            .map(|&id| {
-                assert!((id as usize) < vocab, "embedding id {id} out of range");
-                id as i32
-            })
-            .collect();
-        let indices = Tensor::<B, 1, Int>::from_data(TensorData::new(indices, [ids.len()]), device);
-        self.table.clone().select(0, indices) * (features as f64).sqrt()
+    pub fn encode(&self, ids: impl IntoIterator<Item = usize>, device: &B::Device) -> Tensor<B, 2> {
+        let [_, features] = self.table.dims();
+        lookup(&self.table, ids, device) * (features as f64).sqrt()
     }
 
     pub fn decode(&self, x: Tensor<B, 2>) -> Tensor<B, 2> {
         x.matmul(self.table.clone().transpose())
     }
+}
+
+/// Rows of `table` (`[vocab, features]`) for `ids`, as `[ids, features]`.
+fn lookup<B: Backend>(
+    table: &Tensor<B, 2>,
+    ids: impl IntoIterator<Item = usize>,
+    device: &B::Device,
+) -> Tensor<B, 2> {
+    let [vocab, _] = table.dims();
+    let indices: Vec<i32> = ids
+        .into_iter()
+        .map(|id| {
+            assert!(id < vocab, "embedding id {id} out of range");
+            id as i32
+        })
+        .collect();
+    let len = indices.len();
+    let indices = Tensor::<B, 1, Int>::from_data(TensorData::new(indices, [len]), device);
+    table.clone().select(0, indices)
 }
 
 /// One `nnx.Conv` with VALID padding, weight already in `[out, in, kh, kw]`.
@@ -110,49 +122,26 @@ pub struct ConvLayer<B: Backend> {
     pub stride: [usize; 2],
 }
 
-/// `GridCnnObsEncoder`: one-hot concat over channels, then strided convs with
-/// gelu between (not after) them, flattened to the hidden size.
+/// `GridCnnObsEncoder`: an embedding lookup of the single obs channel, then
+/// strided convs with gelu between (not after) them, flattened to the hidden
+/// size.
 pub struct GridCnnEncoder<B: Backend> {
+    pub embedding: Tensor<B, 2>, // [vocab, embedding_dim]
     pub layers: Vec<ConvLayer<B>>,
-    pub one_hot_sizes: Vec<usize>,
 }
 
 impl<B: Backend> GridCnnEncoder<B> {
-    /// `obs` is `(agents, view_w, view_h, channels)` of vocab ids.
+    /// `obs` is `(agents, view_w, view_h, 1)` of vocab ids.
     pub fn forward(&self, obs: ArrayView4<'_, u16>, device: &B::Device) -> Tensor<B, 2> {
         let (agents, width, height, channels) = obs.dim();
-        assert_eq!(channels, self.one_hot_sizes.len(), "obs channel mismatch");
+        assert_eq!(channels, 1, "the obs encoder embeds a single channel");
+        let [_, features] = self.embedding.dims();
 
-        let mut offsets = Vec::with_capacity(channels);
-        let mut total = 0usize;
-        for &size in &self.one_hot_sizes {
-            offsets.push(total);
-            total += size;
-        }
-
-        // one-hot straight into NCHW so no permute is needed; jax builds NHWC
-        // (w, h, classes) and convolves channels-last, same math
-        let mut buffer = vec![0f32; agents * total * width * height];
-        for agent in 0..agents {
-            for x in 0..width {
-                for y in 0..height {
-                    for channel in 0..channels {
-                        let id = obs[[agent, x, y, channel]] as usize;
-                        assert!(
-                            id < self.one_hot_sizes[channel],
-                            "obs id {id} exceeds channel {channel} vocab"
-                        );
-                        let class = offsets[channel] + id;
-                        buffer[((agent * total + class) * width + x) * height + y] = 1.0;
-                    }
-                }
-            }
-        }
-
-        let mut t = Tensor::<B, 4>::from_data(
-            TensorData::new(buffer, [agents, total, width, height]),
-            device,
-        );
+        // jax looks up NHWC (w, h, features) and convolves channels-last;
+        // permute to NCHW for burn, same math
+        let mut t = lookup(&self.embedding, obs.iter().map(|&id| id as usize), device)
+            .reshape([agents, width, height, features])
+            .permute([0, 3, 1, 2]);
         let last = self.layers.len() - 1;
         for (i, layer) in self.layers.iter().enumerate() {
             t = burn::tensor::module::conv2d(
@@ -383,6 +372,8 @@ pub struct TransformerActor<B: Backend> {
     pub obs_encoder: GridCnnEncoder<B>,
     pub reward_encoder: Linear<B>,
     pub action_embedder: Embedder<B>,
+    /// Only multitask runs have one.
+    pub task_embedder: Option<Embedder<B>>,
     pub layers: Vec<TransformerLayer<B>>,
     pub output_norm: RmsNorm<B>,
     pub max_seq_length: usize,
@@ -419,6 +410,7 @@ impl<B: Backend> TransformerActor<B> {
         obs: ArrayView4<'_, u16>,
         reward: &[f32],
         last_action: &[u16],
+        task_ids: &[i32],
         action_mask: ArrayView2<'_, bool>,
         carry: &mut Carry<B>,
     ) -> Tensor<B, 2> {
@@ -435,7 +427,17 @@ impl<B: Backend> TransformerActor<B> {
             Tensor::<B, 2>::from_data(TensorData::new(reward.to_vec(), [batch, 1]), device);
         let mut x = self.obs_encoder.forward(obs, device)
             + self.reward_encoder.forward(reward)
-            + self.action_embedder.encode(last_action, device);
+            + self
+                .action_embedder
+                .encode(last_action.iter().map(|&a| a as usize), device);
+        if let Some(task_embedder) = &self.task_embedder {
+            x = x + task_embedder.encode(
+                task_ids.iter().map(|&task| {
+                    usize::try_from(task).unwrap_or_else(|_| panic!("negative task id {task}"))
+                }),
+                device,
+            );
+        }
 
         for (layer, cache) in self.layers.iter().zip(&mut carry.caches) {
             if let Some((history_norm, attention)) = &layer.history {

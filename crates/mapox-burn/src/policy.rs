@@ -50,17 +50,20 @@ impl<B: Backend> Policy for BurnPolicy<B> {
         }
         self.episode_reward += timestep.reward.iter().map(|&r| r as f64).sum::<f64>();
 
-        log::info!("{} step", self.carry.time);
-
         let reward: Vec<f32> = timestep.reward.iter().copied().collect();
         let last_action = timestep
             .last_action
             .as_slice()
             .ok_or("the timestep's last_action view is not contiguous")?;
+        let task_ids = timestep
+            .task_ids
+            .as_slice()
+            .ok_or("the timestep's task_ids view is not contiguous")?;
         let log_probs = self.model.step(
             timestep.obs,
             &reward,
             last_action,
+            task_ids,
             timestep.action_mask,
             &mut self.carry,
         );

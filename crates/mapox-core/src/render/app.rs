@@ -80,6 +80,8 @@ pub struct RenderApp {
     returns: Vec<f32>,
 
     view_mode: ViewMode,
+    /// Whether the bird's-eye view fogs what no agent can see.
+    show_fov: bool,
     pacing: PacingMode,
     focused_agent: usize,
     /// Task names in task-id order, empty for a single-task env.
@@ -146,6 +148,7 @@ impl RenderApp {
             art,
             returns: vec![0.0; num_agents],
             view_mode: ViewMode::BirdsEye,
+            show_fov: true,
             // the native demo keeps the play-by-keypress feel; the web demo
             // free-runs so the page doesn't look frozen
             pacing: if cfg!(target_arch = "wasm32") {
@@ -252,6 +255,12 @@ impl RenderApp {
                     ViewMode::AgentPov => ViewMode::BirdsEye,
                 };
                 self.tilemap_dirty = true;
+            }
+            Command::ToggleFov => {
+                self.show_fov = !self.show_fov;
+                if self.view_mode == ViewMode::BirdsEye {
+                    self.tilemap_dirty = true;
+                }
             }
             Command::TogglePacing => {
                 self.pacing = match self.pacing {
@@ -442,6 +451,17 @@ impl RenderApp {
         ) {
             self.run_command(Command::ToggleView, ui);
         }
+        // the agent view draws the observations, fog and all, as encoded
+        let mut show_fov = self.show_fov;
+        let fov = ui
+            .add_enabled(
+                self.view_mode == ViewMode::BirdsEye,
+                egui::Checkbox::new(&mut show_fov, "field of view"),
+            )
+            .on_hover_text(command_hint(Command::ToggleFov));
+        if fov.changed() {
+            self.run_command(Command::ToggleFov, ui);
+        }
 
         self.keys_ui(ui);
     }
@@ -459,9 +479,6 @@ impl RenderApp {
 
         ui.add_space(12.0);
         section_heading(ui, "actions");
-        if self.pacing == PacingMode::FreeRun {
-            ui.label(RichText::new("the policy drives; P to play").weak());
-        }
         egui::Grid::new("action keys").show(ui, |ui| {
             for (id, label, keys) in keys::action_bindings(self.env.action_vocab()) {
                 let legal = mask.get(usize::from(id)).copied().unwrap_or(false);
@@ -476,13 +493,10 @@ impl RenderApp {
         });
 
         ui.add_space(4.0);
-        ui.label(
-            RichText::new(format!(
-                "{} all controls",
-                command_hint(Command::ShowControls)
-            ))
-            .weak(),
-        );
+        ui.label(RichText::new(format!(
+            "{} all controls",
+            command_hint(Command::ShowControls)
+        )));
     }
 
     /// The command keys, over the map until the next input.
@@ -541,17 +555,19 @@ impl RenderApp {
         if self.tilemap_dirty {
             // Keep the union of every agent's encoded line of sight bright;
             // a vocabulary without a mask makes the whole window visible.
-            let mask = self.settings.obs_vocab.get(symbols::TILE_MASK);
-            let seen = visible_tiles(
-                &self.settings,
-                &self.render_state.agent_positions,
-                self.buffers.obs.slice(s![.., .., .., 0]),
-                mask,
-            );
+            let seen = self.show_fov.then(|| {
+                visible_tiles(
+                    &self.settings,
+                    &self.render_state.agent_positions,
+                    self.buffers.obs.slice(s![.., .., .., 0]),
+                    self.settings.obs_vocab.get(symbols::TILE_MASK),
+                )
+            });
             let tilemap = &self.render_state.tilemap;
             let art = &self.art;
             renderer.update(layout.cols, layout.rows, |x, y| {
-                (art[usize::from(tilemap[[x, y]])], seen[[x, y]])
+                let visible = seen.as_ref().is_none_or(|seen| seen[[x, y]]);
+                (art[usize::from(tilemap[[x, y]])], visible)
             });
             self.tilemap_dirty = false;
         }
@@ -683,17 +699,20 @@ impl eframe::App for RenderApp {
 
         self.run_clock(ui);
 
-        if self.render_state_dirty {
-            self.env.render_state_into(&mut self.render_state);
-            self.render_state_dirty = false;
-        }
-
         egui::Panel::right("side")
             .resizable(false)
             .exact_size(SIDE_PANEL_WIDTH)
             .show(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| self.side_panel_ui(ui));
             });
+
+        // after the side panel: its task picker can swap in a different map
+        // size, and the settings and the render state must agree when drawn
+        if self.render_state_dirty {
+            self.env.render_state_into(&mut self.render_state);
+            self.render_state_dirty = false;
+        }
+
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(Color32::BLACK))
             .show(ui, |ui| match self.view_mode {

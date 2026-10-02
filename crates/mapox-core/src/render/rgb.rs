@@ -39,7 +39,6 @@ impl RgbRenderer {
             Rect::from_min_size(Pos2::ZERO, vec2(width as f32, height as f32)),
             settings.tile_width,
             settings.tile_height,
-            1.0,
         );
         let axis = |length: u32, origin: f32, cells: usize, flip: bool| {
             (0..length)

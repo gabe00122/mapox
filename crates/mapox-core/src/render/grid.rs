@@ -7,7 +7,7 @@ use egui::{Pos2, Rect, pos2, vec2};
 
 /// Maps a `cols x rows` grid (env coords: x right, y up) onto a screen
 /// rect, centred: [`fill`](Self::fill) for the live view, [`fit`](Self::fit)
-/// where only nearest sampling is available.
+/// for video frames, where only nearest sampling is available.
 pub(crate) struct GridLayout {
     /// Screen position of the grid's top-left corner.
     pub origin: Pos2,
@@ -36,16 +36,15 @@ impl GridLayout {
         }
     }
 
-    /// Fits the grid into `area` so every sprite texel covers an integer
-    /// number of physical pixels: the art stays crisp at equal pixel widths
-    /// instead of NEAREST sampling alternating between two sizes at
-    /// fractional scale. The leftover space becomes symmetric letterbox
-    /// padding, snapped to the physical pixel grid.
+    /// Fits the grid into an `area` measured in pixels so every sprite
+    /// texel covers a whole number of them: the art stays crisp at equal
+    /// pixel widths instead of NEAREST sampling alternating between two
+    /// sizes. The leftover space becomes symmetric letterbox padding.
     ///
-    /// Below 1 sheet pixel per screen pixel (window smaller than the grid
-    /// at 1×) an integer scale cannot fit at all; the grid then takes the
-    /// fractional fit and accepts the wobble over overflowing the window.
-    pub fn fit(area: Rect, cols: usize, rows: usize, pixels_per_point: f32) -> Self {
+    /// Below 1 sheet pixel per pixel (an area smaller than the grid at 1×)
+    /// an integer scale cannot fit at all; the grid then takes the
+    /// fractional fit and accepts the wobble over overflowing the area.
+    pub fn fit(area: Rect, cols: usize, rows: usize) -> Self {
         if cols == 0 || rows == 0 {
             return Self {
                 origin: area.center(),
@@ -54,21 +53,18 @@ impl GridLayout {
                 rows,
             };
         }
-        let tile_px =
-            (area.width() / cols as f32).min(area.height() / rows as f32) * pixels_per_point;
-        let tile = if tile_px >= TILE_SIZE {
-            (tile_px / TILE_SIZE).floor() * TILE_SIZE / pixels_per_point
+        let fill = (area.width() / cols as f32).min(area.height() / rows as f32);
+        let tile = if fill >= TILE_SIZE {
+            (fill / TILE_SIZE).floor() * TILE_SIZE
         } else {
-            tile_px / pixels_per_point
+            fill
         };
         let grid = vec2(cols as f32, rows as f32) * tile;
-        // Snap the centred origin to a physical pixel boundary. With the tile
-        // already an integer number of pixels, that puts every tile edge —
-        // and the grid as a whole — on the pixel grid; only the padding can
-        // be a physical pixel lopsided, when the leftover space is odd.
-        let origin = ((area.center() - grid / 2.0) * pixels_per_point).round() / pixels_per_point;
+        // With the tile already a whole number of pixels, a whole-pixel
+        // origin puts every tile edge on the pixel grid; only the padding can
+        // be a pixel lopsided, when the leftover space is odd.
         Self {
-            origin,
+            origin: (area.center() - grid / 2.0).round(),
             tile,
             cols,
             rows,
@@ -113,7 +109,7 @@ mod tests {
     #[test]
     fn pos_to_cell_inverts_cell_rect() {
         let area = Rect::from_min_size(pos2(13.0, 7.0), vec2(800.0, 600.0));
-        let layout = GridLayout::fit(area, 40, 30, 1.0);
+        let layout = GridLayout::fill(area, 40, 30);
 
         for x in [0, 1, 20, 39] {
             for y in [0, 1, 15, 29] {
@@ -126,7 +122,7 @@ mod tests {
     #[test]
     fn positions_outside_the_grid_are_rejected() {
         let area = Rect::from_min_size(pos2(0.0, 0.0), vec2(600.0, 600.0));
-        let layout = GridLayout::fit(area, 10, 10, 1.0);
+        let layout = GridLayout::fill(area, 10, 10);
 
         let rect = layout.grid_rect();
         assert_eq!(layout.pos_to_cell(rect.min - vec2(1.0, 1.0)), None);
@@ -147,25 +143,8 @@ mod tests {
     #[test]
     fn fit_centers_the_grid() {
         let area = Rect::from_min_size(pos2(0.0, 0.0), vec2(1000.0, 500.0));
-        let layout = GridLayout::fit(area, 10, 10, 1.0);
+        let layout = GridLayout::fit(area, 10, 10);
         assert_eq!(layout.tile, 48.0);
         assert_eq!(layout.grid_rect().center(), area.center());
-    }
-
-    /// Under fractional HiDPI (1.5 physical px per point) the tile must
-    /// still span a whole multiple of sheet pixels and the grid must start
-    /// on a physical pixel, or NEAREST sampling renders uneven art rows.
-    #[test]
-    fn fit_snaps_to_whole_physical_pixels() {
-        let pixels_per_point = 1.5;
-        let area = Rect::from_min_size(pos2(3.0, 7.0), vec2(777.0, 499.0));
-        let layout = GridLayout::fit(area, 16, 9, pixels_per_point);
-
-        assert_eq!(layout.tile * pixels_per_point % TILE_SIZE, 0.0);
-        let origin_px = layout.origin.to_vec2() * pixels_per_point;
-        assert!(
-            (origin_px - origin_px.round()).length() < 1e-3,
-            "grid origin {origin_px} must land on a physical pixel"
-        );
     }
 }

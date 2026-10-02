@@ -100,6 +100,22 @@
         }
         const policy = new Uint8Array(await response.arrayBuffer());
 
+        // eframe 0.35 started in a background tab never paints its first
+        // frame, and stays black once the tab is shown, so hold off until
+        // the page is actually visible.
+        if (document.visibilityState !== "visible") {
+          say("waiting for this tab to be visible…");
+          await new Promise((resolve) => {
+            const onChange = () => {
+              if (document.visibilityState === "visible") {
+                document.removeEventListener("visibilitychange", onChange);
+                resolve();
+              }
+            };
+            document.addEventListener("visibilitychange", onChange);
+          });
+        }
+
         // start() only resolves when the app shuts down, so the overlay
         // comes off first; eframe paints over it either way.
         say("starting…");
