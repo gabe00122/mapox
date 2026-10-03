@@ -26,7 +26,7 @@ from pathlib import Path
 
 TILE = 12
 PAD = 1
-COLS = 16
+COLS = 12
 
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUTS = [
@@ -497,91 +497,89 @@ def banner(team: Color) -> Sprite:
 
 # --- agents ----------------------------------------------------------------
 
-MINER = check(
+# A blank figure rather than a character: no hair, skin or clothes, nothing
+# that suggests a role. Drawn 1-bit style, with gaps instead of an outline
+# separating head, body and limbs.
+AGENT = check(
     [
-        "....OOOO....",
-        "...OYYYYO...",
-        "..OYYLLYYO..",
-        "..OyyyyyyO..",
-        "..OSESSESO..",
-        "..OsSSSSsO..",
-        "..OBBbbBBO..",
-        ".OSBBBBBBSO.",
-        ".OSBBBBBBSO.",
-        "..ObbbbbbO..",
-        "..OKKO.OKKO.",
-        "..OOOO.OOOO.",
+        "............",
+        "....hWWW....",
+        "...hWWWWw...",
+        "...WEWWEw...",
+        "...WEWWEw...",
+        "....WWWw....",
+        "............",
+        "..W.WWWw.w..",
+        "..W.WWWw.w..",
+        "..W.WWWw.w..",
+        "....W..w....",
+        "....W..w....",
     ],
-    "miner",
+    "agent",
 )
 
-MINER_PALETTE = {
-    "O": OUTLINE,
-    "Y": hex_color("f4c430"),
-    "y": hex_color("b8891c"),
-    "L": hex_color("fffbd0"),
-    "S": SKIN,
-    "s": SKIN_SHADE,
+AGENT_PALETTE = {
+    "W": hex_color("d3d7e0"),
+    "w": hex_color("9ea4b2"),
+    "h": hex_color("f4f6fa"),
     "E": EYE,
-    "B": hex_color("4a86e8"),
-    "b": hex_color("2e5cb3"),
-    "K": BOOT,
 }
 
-SCOUT = check(
+# Scouts are rabbits: quick, and all ears.
+RABBIT = check(
     [
-        ".....OO.....",
-        "....OHHO....",
-        "...OHHHHO...",
-        "...OSESEO...",
-        "...OSSSSO...",
-        "..OHHHHHHO..",
-        ".OSHhHHhHSO.",
-        "..OHhHHhHO..",
-        "..OHHHHHHO..",
-        "...OLOOLO...",
-        "..OLO..OLO..",
         "..OO....OO..",
+        ".OWPO..OPWO.",
+        ".OWPO..OPWO.",
+        "..OWPOOPWO..",
+        "..OWWWWWWO..",
+        ".OWEWWWWEWO.",
+        ".OWWWPPWWWO.",
+        "..OwWWWWwO..",
+        "..OOwWWwOO..",
+        ".OWWOCCOWWO.",
+        ".OWwWCCWwWO.",
+        "..OOOOOOOO..",
     ],
-    "scout",
+    "rabbit",
 )
 
-SCOUT_PALETTE = {
+RABBIT_PALETTE = {
     "O": OUTLINE,
-    "H": hex_color("3fd6c2"),
-    "h": hex_color("218f82"),
-    "S": SKIN,
+    "W": hex_color("ece7df"),
+    "w": hex_color("b3aca3"),
+    "P": hex_color("f29ab0"),
+    "C": hex_color("fffaf2"),
     "E": EYE,
-    "L": hex_color("2b3040"),
 }
 
-HARVESTER = check(
+# Harvesters are turtles: slow, low and armoured, in profile facing right.
+TURTLE = check(
     [
-        "...OOOOOO...",
-        "..OMMMMMMO..",
-        ".OMMMMMMMmO.",
-        ".OSSESSESSO.",
-        ".OSSSSSSSSO.",
-        "OORRRRRRRROO",
-        "ORRRRRRRRRRO",
-        "OSRRRrrRRRSO",
-        "OSRRRRRRRRSO",
-        ".OrrrrrrrrO.",
-        ".OKKKO.OKKKO",
-        ".OOOOO.OOOOO",
+        "............",
+        "............",
+        "............",
+        "............",
+        "............",
+        "..OOOO..OOO.",
+        ".OhhGGOOSSSO",
+        "OhGgggGOSESO",
+        "OGgGGGgSSSO.",
+        "ORRRRRRROO..",
+        ".OSSOOOOSSO.",
+        ".OOOO..OOOO.",
     ],
-    "harvester",
+    "turtle",
 )
 
-HARVESTER_PALETTE = {
+TURTLE_PALETTE = {
     "O": OUTLINE,
-    "M": hex_color("a3acbb"),
-    "m": hex_color("6a7282"),
-    "S": SKIN,
+    "G": hex_color("4f9a3a"),
+    "g": hex_color("2f6424"),
+    "h": hex_color("8ccf5e"),
+    "R": hex_color("d8b860"),
+    "S": hex_color("a6c77a"),
     "E": EYE,
-    "R": hex_color("e8642e"),
-    "r": hex_color("9c3a17"),
-    "K": BOOT,
 }
 
 
@@ -840,7 +838,6 @@ def build_sheet() -> list[list[Sprite]]:
         decor(DECOR_PEBBLES, {"l": hex_color("4a5060"), "s": hex_color("323641")}),
         decor(DECOR_CRACKS, {"c": hex_color("0f1116")}),
         decor(DECOR_MOSS, {"g": GRASS_DIM, "m": GRASS_DIM_LIGHT}),
-        decor(GRASS_TILE, {"g": GRASS, "l": GRASS_LIGHT}),
     ]
     items = [
         stamp(floor(), CHEST_LOCKED, CHEST_PALETTE),
@@ -854,11 +851,12 @@ def build_sheet() -> list[list[Sprite]]:
         banner(TEAM_NEUTRAL),
         banner(TEAM_RED),
         banner(TEAM_BLUE),
-        stamp(floor(), MINER, MINER_PALETTE),
-        stamp(floor(), SCOUT, SCOUT_PALETTE),
-        stamp(floor(), HARVESTER, HARVESTER_PALETTE),
+        stamp(floor(), AGENT, AGENT_PALETTE),
+        stamp(floor(), RABBIT, RABBIT_PALETTE),
+        stamp(floor(), TURTLE, TURTLE_PALETTE),
         snake_segment(hex_color(SNAKE_COLORS["green"]), eyes=True),
-        snake_segment(hex_color(SNAKE_COLORS["green"])),
+        # Lush grass is terrain, but row 0 is full.
+        decor(GRASS_TILE, {"g": GRASS, "l": GRASS_LIGHT}),
     ]
     snakes = [snake_segment(hex_color(c)) for c in SNAKE_COLORS.values()]
 

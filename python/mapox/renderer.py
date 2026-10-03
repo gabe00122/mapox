@@ -84,10 +84,10 @@ tilemap = {
     SB.TILE_DECOR_3: (10, 0),
     SB.TILE_DECOR_4: (11, 0),
     SB.TILE_ARROW: (3, 1),
-    SB.TILE_GRASS: (12, 0),
+    SB.TILE_GRASS: (11, 1),
     SB.TILE_FOOD: (2, 1),
     SB.AGENT_SNAKE_HEAD: (10, 1),
-    SB.AGENT_SNAKE_BODY: (11, 1),
+    SB.AGENT_SNAKE_BODY: (4, 2),  # the plain green snake segment
 }
 
 

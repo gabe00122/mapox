@@ -20,8 +20,8 @@ pub(crate) const TILE_SIZE: f32 = 12.0;
 /// Separator between tiles. It is also a border, so tile (0, 0) starts at (1, 1).
 const TILE_PAD: f32 = 1.0;
 
-/// Sheet is 209x92 px = `COLS * 13 + 1` by `ROWS * 13 + 1`.
-pub const TILESET_COLS: u32 = 16;
+/// Sheet is 157x92 px = `COLS * 13 + 1` by `ROWS * 13 + 1`.
+pub const TILESET_COLS: u32 = 12;
 pub const TILESET_ROWS: u32 = 7;
 
 /// The sheet, uploaded once and sampled per tile.

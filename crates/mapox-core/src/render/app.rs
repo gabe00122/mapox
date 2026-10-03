@@ -125,11 +125,13 @@ impl RenderApp {
         let settings = env.get_render_settings();
         let art = resolve_art(&settings.obs_vocab);
 
+        // the same draw order as `reset`, so the seed the side panel shows
+        // replays its episode when passed back in
         let mut rng = SmallRng::seed_from_u64(seed);
+        env.reset(rng.random(), &mut buffers.view_mut());
         policy
             .reset(env.num_agents(), rng.random())
             .expect("Policy reset failed");
-        env.reset(rng.random(), &mut buffers.view_mut());
 
         let num_agents = env.num_agents();
         Self {
@@ -369,6 +371,11 @@ impl RenderApp {
             ui.label(format!("{} / {}", self.step_count, self.length));
             ui.end_row();
 
+            ui.label("seed");
+            ui.label(self.seed.to_string())
+                .on_hover_text("pass back as the seed to replay this episode");
+            ui.end_row();
+
             if let Some(current) = self.task {
                 ui.label("task");
                 let mut selected = current;
@@ -385,9 +392,6 @@ impl RenderApp {
                 ui.end_row();
             }
         });
-        if self.episode_done() {
-            ui.label(RichText::new("over; the next step starts a new one").weak());
-        }
 
         ui.add_space(12.0);
         ui.horizontal(|ui| {
@@ -811,15 +815,10 @@ mod tests {
         (app, transcript)
     }
 
-    /// The env seed of the app's `episode`th episode: `new` draws the
-    /// policy's seed before the env's, `reset` bumps the app seed and draws
-    /// the env's first.
+    /// The env seed of the app's `episode`th episode: each one bumps the
+    /// app seed, and both `new` and `reset` draw the env's seed first.
     fn app_episode_seed(app_seed: u64, episode: usize) -> u64 {
-        let mut rng = SmallRng::seed_from_u64(app_seed + episode as u64);
-        if episode == 0 {
-            let _policy_seed: u64 = rng.random();
-        }
-        rng.random()
+        SmallRng::seed_from_u64(app_seed + episode as u64).random()
     }
 
     /// The play loop hands the policy exactly the timesteps an enjoy-mode

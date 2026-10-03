@@ -10,7 +10,6 @@
       html,
       body {
         margin: 0;
-        padding: 0;
         width: 100%;
         height: 100%;
         overflow: hidden;
@@ -22,15 +21,14 @@
          every ResizeObserver delivery. */
       canvas {
         position: absolute;
-        top: 0;
-        left: 0;
+        inset: 0;
         width: 100%;
         height: 100%;
         display: block;
       }
-      /* Sits over the canvas until the app starts: the policy is a multi-MB
-         download and the first frame is a long way off, so an unexplained
-         black page is the default experience without this. */
+      /* Sits over the canvas until the app starts: the wasm and the policy
+         are multi-MB downloads and the first frame is a long way off, so an
+         unexplained black page is the default experience without this. */
       #status {
         position: absolute;
         inset: 0;
@@ -40,19 +38,61 @@
         padding: 2rem;
         color: #888;
         font:
-          14px/1.5 ui-monospace,
+          13px/1.5 ui-monospace,
           monospace;
+      }
+      .panel {
+        width: min(320px, 100%);
+        display: grid;
+        gap: 1.25rem;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr auto;
+        row-gap: 0.4rem;
+      }
+      .size {
+        color: #555;
+        font-variant-numeric: tabular-nums;
+      }
+      .bar {
+        grid-column: 1 / -1;
+        height: 2px;
+        background: #222;
+      }
+      .fill {
+        width: 0;
+        height: 100%;
+        background: #bbb;
+      }
+      .msg {
+        min-height: 1.5em;
         text-align: center;
         white-space: pre-wrap;
       }
-      #status.error {
+      #status.error .row {
+        display: none;
+      }
+      #status.error .msg {
         color: #e06c75;
       }
     </style>
   </head>
   <body>
     <canvas id="mapox-canvas"></canvas>
-    <div id="status">loading…</div>
+    <div id="status">
+      <div class="panel">
+        <div class="row" id="wasm-row">
+          <span>wasm</span><span class="size"></span>
+          <div class="bar"><div class="fill"></div></div>
+        </div>
+        <div class="row" id="policy-row">
+          <span>policy</span><span class="size"></span>
+          <div class="bar"><div class="fill"></div></div>
+        </div>
+        <div class="msg"></div>
+      </div>
+    </div>
     <!--
       mapox_web.js and mapox_web_bg.wasm are generated in lockstep by the
       wasm-bindgen CLI (scripts/build_web.py) -- don't edit or pin them by hand.
@@ -62,12 +102,60 @@
       import init, { start } from "./mapox_web.js";
 
       const status = document.getElementById("status");
-      const say = (text) => (status.textContent = text);
+      const msg = status.querySelector(".msg");
+      const say = (text) => (msg.textContent = text);
+
+      const mb = (n) => (n / 1e6).toFixed(1);
+
+      // Fetches `url` and returns a Response that streams the same body while
+      // driving the progress row. Handing init() a Response (not the bytes)
+      // keeps instantiateStreaming, so the wasm compiles as it downloads.
+      async function tracked(url, rowId) {
+        const row = document.getElementById(rowId);
+        const fill = row.querySelector(".fill");
+        const size = row.querySelector(".size");
+
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(
+            `${url}: ${response.status} ${response.statusText}\n` +
+              "stage it with: uv run scripts/build_web.py --policy <path>",
+          );
+        }
+        // Unknown when the header is absent, or when the body is compressed
+        // and the header counts different bytes than the stream yields; the
+        // bar then sits empty until the download completes.
+        const total = response.headers.has("Content-Encoding")
+          ? 0
+          : Number(response.headers.get("Content-Length") ?? 0);
+
+        let loaded = 0;
+        const show = () => {
+          size.textContent = total
+            ? `${mb(loaded)} / ${mb(total)} MB`
+            : `${mb(loaded)} MB`;
+          if (total) fill.style.width = `${(100 * loaded) / total}%`;
+        };
+        show();
+        const body = response.body.pipeThrough(
+          new TransformStream({
+            transform(chunk, controller) {
+              loaded += chunk.byteLength;
+              show();
+              controller.enqueue(chunk);
+            },
+            flush() {
+              fill.style.width = "100%";
+              size.textContent = `${mb(loaded)} MB`;
+            },
+          }),
+        );
+        return new Response(body, { headers: response.headers });
+      }
 
       // ?seed=N seeds the action sampling, the same knob the native demo
       // takes as a flag.
-      const params = new URLSearchParams(location.search);
-      const seed = Number(params.get("seed") ?? 0);
+      const seed = Number(new URLSearchParams(location.search).get("seed") ?? 0);
 
       try {
         // Inference is CPU-side (burn's flex backend), but eframe's renderer
@@ -87,43 +175,44 @@
           );
         }
 
-        say("loading wasm…");
-        await init();
-
-        say("loading policy…");
-        const response = await fetch("./policy.safetensors");
-        if (!response.ok) {
-          throw new Error(
-            `policy.safetensors: ${response.status} ${response.statusText}\n` +
-              `stage one with: uv run scripts/build_web.py --policy <path>`,
-          );
-        }
-        const policy = new Uint8Array(await response.arrayBuffer());
+        // Both downloads run side by side; the policy doesn't need the wasm
+        // until start().
+        const [, policy] = await Promise.all([
+          init(tracked("./mapox_web_bg.wasm", "wasm-row")),
+          tracked("./policy.safetensors", "policy-row").then((response) =>
+            response.bytes(),
+          ),
+        ]);
 
         // eframe 0.35 started in a background tab never paints its first
         // frame, and stays black once the tab is shown, so hold off until
         // the page is actually visible.
-        if (document.visibilityState !== "visible") {
+        while (document.visibilityState !== "visible") {
           say("waiting for this tab to be visible…");
-          await new Promise((resolve) => {
-            const onChange = () => {
-              if (document.visibilityState === "visible") {
-                document.removeEventListener("visibilitychange", onChange);
-                resolve();
-              }
-            };
-            document.addEventListener("visibilitychange", onChange);
-          });
+          await new Promise((resolve) =>
+            document.addEventListener("visibilitychange", resolve, {
+              once: true,
+            }),
+          );
         }
+
+        // start() parses the policy synchronously before its first await, so
+        // the main thread is blocked for a moment and whatever was last
+        // painted stays on screen. Get full bars and a message painted first:
+        // a rAF callback runs just before a paint, a timeout queued from it
+        // runs just after.
+        say("starting…");
+        await new Promise((resolve) =>
+          requestAnimationFrame(() => setTimeout(resolve)),
+        );
 
         // start() only resolves when the app shuts down, so the overlay
         // comes off first; eframe paints over it either way.
-        say("starting…");
         status.remove();
         await start(document.getElementById("mapox-canvas"), policy, seed);
       } catch (err) {
         document.body.appendChild(status);
-        status.className = "error";
+        status.classList.add("error");
         say(String(err.message ?? err));
         throw err;
       }

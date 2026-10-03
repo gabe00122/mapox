@@ -1101,12 +1101,8 @@ mod tests {
         let row = |y: usize| (0..width).map(|x| view[[x, y]]).collect::<Vec<_>>();
 
         let blank = |n: usize| std::iter::repeat_n(id(TileUI), n);
-        let score: Vec<_> = blank(width - 2)
-            .chain([id(Digit4), id(Digit2)])
-            .collect();
-        let power: Vec<_> = blank(width - 2)
-            .chain([id(Digit3), id(Digit5)])
-            .collect();
+        let score: Vec<_> = blank(width - 2).chain([id(Digit4), id(Digit2)]).collect();
+        let power: Vec<_> = blank(width - 2).chain([id(Digit3), id(Digit5)]).collect();
         assert_eq!(row(fov + 1), score);
         assert_eq!(row(fov), power);
 
