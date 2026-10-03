@@ -1,6 +1,7 @@
 //! wasm-bindgen exports for the browser: the page imports the generated JS
-//! module, awaits `init()`, then calls [`start`] with its canvas and the
-//! bytes of a policy exported by jaxrl's `scripts/export_burn_policy.py`.
+//! module, awaits `init()`, then constructs a [`WebHandle`] and starts it
+//! with its canvas and the bytes of a policy exported by jaxrl's
+//! `scripts/export_burn_policy.py`.
 //!
 //! This is the browser shell around [`mapox_burn`] — the same
 //! [`BurnPolicy`](mapox_burn::BurnPolicy) and
@@ -20,34 +21,74 @@ use mapox_core::policy::Policy;
 use mapox_core::render::RenderApp;
 use wasm_bindgen::prelude::*;
 
-/// Starts the viewer on `canvas`, driven by the policy in `policy_bytes` (a
-/// `*.safetensors` bundle, fetched by the page). Resolves once the app is
-/// running; the app then owns the canvas for the life of the page.
+/// The running viewer, as the page holds it. Construct one, [`start`] it on a
+/// canvas, and [`destroy`] it to stop the app and release the canvas and GPU
+/// resources; the wasm instance itself lives as long as the page does.
+///
+/// [`start`]: WebHandle::start
+/// [`destroy`]: WebHandle::destroy
 #[wasm_bindgen]
-pub async fn start(
-    canvas: web_sys::HtmlCanvasElement,
-    policy_bytes: Vec<u8>,
-    // u32 rather than the u64 the policy wants: wasm-bindgen maps u64 to a JS
-    // BigInt, and a plain number literal from the page would be a TypeError
-    seed: u32,
-) -> Result<(), JsValue> {
-    // Without this a Rust panic surfaces as an opaque "unreachable executed";
-    // with it the message and backtrace land in the browser console.
-    console_error_panic_hook::set_once();
-    // eframe reports backend choices and failures through `log`, and so does
-    // BurnPolicy's per-cycle reward line; without a logger they vanish, and a
-    // broken canvas stays a silent black rectangle.
-    eframe::WebLogger::init(log::LevelFilter::Debug).ok();
+pub struct WebHandle {
+    runner: eframe::WebRunner,
+}
 
-    let (env, length, policy) = setup(&policy_bytes, seed)?;
+#[wasm_bindgen]
+impl WebHandle {
+    /// Installs eframe's panic hook, which logs a Rust panic's message and
+    /// backtrace to the browser console (otherwise an opaque "unreachable
+    /// executed") and backs [`has_panicked`](Self::has_panicked).
+    #[wasm_bindgen(constructor)]
+    #[expect(clippy::new_without_default, reason = "a JS constructor")]
+    pub fn new() -> Self {
+        // eframe reports backend choices and failures through `log`, and so
+        // does BurnPolicy's per-cycle reward line; without a logger they
+        // vanish, and a broken canvas stays a silent black rectangle.
+        eframe::WebLogger::init(log::LevelFilter::Debug).ok();
+        Self {
+            runner: eframe::WebRunner::new(),
+        }
+    }
 
-    eframe::WebRunner::new()
-        .start(
-            canvas,
-            eframe::WebOptions::default(),
-            Box::new(move |_cc| Ok(Box::new(RenderApp::new(env, length, seed.into(), policy)))),
-        )
-        .await
+    /// Starts the viewer on `canvas`, driven by the policy in `policy_bytes`
+    /// (a `*.safetensors` bundle, fetched by the page). Resolves once the app
+    /// is running; it then runs until [`destroy`](Self::destroy).
+    pub async fn start(
+        &self,
+        canvas: web_sys::HtmlCanvasElement,
+        policy_bytes: Vec<u8>,
+        // u32 rather than the u64 the policy wants: wasm-bindgen maps u64 to
+        // a JS BigInt, and a plain number literal from the page would be a
+        // TypeError
+        seed: u32,
+    ) -> Result<(), JsValue> {
+        let (env, length, policy) = setup(&policy_bytes, seed)?;
+
+        self.runner
+            .start(
+                canvas,
+                eframe::WebOptions::default(),
+                Box::new(move |_cc| {
+                    Ok(Box::new(RenderApp::new(env, length, seed.into(), policy)))
+                }),
+            )
+            .await
+    }
+
+    /// Stops the app: unhooks its event listeners, cancels the next frame,
+    /// and drops the app along with its GPU resources.
+    pub fn destroy(&self) {
+        self.runner.destroy();
+    }
+
+    /// Whether the app has panicked; it stops drawing when it does.
+    pub fn has_panicked(&self) -> bool {
+        self.runner.has_panicked()
+    }
+
+    /// The panic message, if the app has panicked.
+    pub fn panic_message(&self) -> Option<String> {
+        self.runner.panic_summary().map(|summary| summary.message())
+    }
 }
 
 /// What [`setup`] hands back: an env, the episode length to run it for, and

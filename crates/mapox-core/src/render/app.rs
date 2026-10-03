@@ -169,8 +169,14 @@ impl RenderApp {
     }
 
     fn reset(&mut self) {
-        self.seed += 1;
-        let mut rng = SmallRng::seed_from_u64(self.seed);
+        self.reseed(self.seed.wrapping_add(1));
+    }
+
+    /// Starts a fresh episode from `seed`; the ones after it count up from
+    /// there.
+    fn reseed(&mut self, seed: u64) {
+        self.seed = seed;
+        let mut rng = SmallRng::seed_from_u64(seed);
 
         self.step_count = 0;
         self.env.reset(rng.random(), &mut self.buffers.view_mut());
@@ -372,8 +378,16 @@ impl RenderApp {
             ui.end_row();
 
             ui.label("seed");
-            ui.label(self.seed.to_string())
-                .on_hover_text("pass back as the seed to replay this episode");
+            let mut seed = self.seed;
+            ui.add(
+                egui::DragValue::new(&mut seed)
+                    .speed(0.1)
+                    .update_while_editing(false),
+            )
+            .on_hover_text("edit to restart on that seed; pass it back in to replay this episode");
+            if seed != self.seed {
+                self.reseed(seed);
+            }
             ui.end_row();
 
             if let Some(current) = self.task {
@@ -435,11 +449,10 @@ impl RenderApp {
 
         ui.add_space(12.0);
         section_heading(ui, "mode");
-        let free_run = format!("free-run {}fps", self.target_fps);
         if toggle(
             ui,
             self.pacing == PacingMode::StepOnInput,
-            ("step-on-input", &free_run),
+            ("step-on-input", "free-run"),
             command_hint(Command::TogglePacing),
         ) {
             self.run_command(Command::TogglePacing, ui);
@@ -687,7 +700,9 @@ impl eframe::App for RenderApp {
             });
             self.show_controls = !dismissed;
             None
-        } else if egui::Popup::is_any_open(ui.ctx()) {
+        } else if egui::Popup::is_any_open(ui.ctx()) || ui.ctx().egui_wants_keyboard_input() {
+            // typing into the seed field is not playing, and a control Tab
+            // moved focus onto keeps the keys until a click or Esc drops it
             None
         } else {
             ui.input(|state| keys::read(state, self.env.action_vocab()))
@@ -727,11 +742,6 @@ impl eframe::App for RenderApp {
         if self.show_controls {
             self.controls_ui(ui.ctx());
         }
-
-        // The keyboard belongs to the env, so no widget may keep focus:
-        // egui moves focus onto the controls with Tab (the view toggle) and
-        // clicks a focused one with Space (stay).
-        ui.ctx().memory_mut(|memory| memory.stop_text_input());
 
         // a step consumed the precomputed actions; come straight back on an
         // idle frame to run the policy for the next one

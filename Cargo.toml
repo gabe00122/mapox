@@ -37,14 +37,13 @@ pyo3 = "0.29.0"
 numpy = "0.29.0"
 
 # UI
-eframe = { version="0.35.0", default-features = false, features = ["wayland", "wgpu_no_default_features"] }
-wgpu = { version = "*", features = ["webgpu", "vulkan"] }
-egui = "0.35.0"
+eframe = { version="0.36.2", default-features = false, features = ["wayland", "wgpu_no_default_features"] }
+wgpu = { version = "30", features = ["webgpu", "vulkan"] }
+egui = "0.36.2"
 image = { version = "0.25.10", default-features = false, features = ["png"] }
 bytemuck = "1.25.2"
 
 # WEB
-wasm-bindgen = "0.2.126"
+wasm-bindgen = "0.2.129"
 wasm-bindgen-futures = "0.4.76"
 web-sys = { version = "0.3.103", features = ["HtmlCanvasElement"] }
-console_error_panic_hook = "0.1.7"

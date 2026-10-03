@@ -99,7 +99,7 @@
       policy.safetensors is staged by the same script's --policy flag.
     -->
     <script type="module">
-      import init, { start } from "./mapox_web.js";
+      import init, { WebHandle } from "./mapox_web.js";
 
       const status = document.getElementById("status");
       const msg = status.querySelector(".msg");
@@ -176,7 +176,7 @@
         }
 
         // Both downloads run side by side; the policy doesn't need the wasm
-        // until start().
+        // until handle.start().
         const [, policy] = await Promise.all([
           init(tracked("./mapox_web_bg.wasm", "wasm-row")),
           tracked("./policy.safetensors", "policy-row").then((response) =>
@@ -184,7 +184,7 @@
           ),
         ]);
 
-        // eframe 0.35 started in a background tab never paints its first
+        // eframe (seen on 0.35) started in a background tab never paints its first
         // frame, and stays black once the tab is shown, so hold off until
         // the page is actually visible.
         while (document.visibilityState !== "visible") {
@@ -196,7 +196,7 @@
           );
         }
 
-        // start() parses the policy synchronously before its first await, so
+        // handle.start() parses the policy synchronously before its first await, so
         // the main thread is blocked for a moment and whatever was last
         // painted stays on screen. Get full bars and a message painted first:
         // a rAF callback runs just before a paint, a timeout queued from it
@@ -206,10 +206,22 @@
           requestAnimationFrame(() => setTimeout(resolve)),
         );
 
-        // start() only resolves when the app shuts down, so the overlay
-        // comes off first; eframe paints over it either way.
+        // Exposed so the app can be stopped from the console with
+        // `mapox.destroy()`.
+        const handle = new WebHandle();
+        window.mapox = handle;
+        await handle.start(document.getElementById("mapox-canvas"), policy, seed);
         status.remove();
-        await start(document.getElementById("mapox-canvas"), policy, seed);
+
+        // A panic stops the app without rejecting anything, leaving the
+        // last frame frozen on the canvas; poll for it to say so.
+        const watch = setInterval(() => {
+          if (!handle.has_panicked()) return;
+          clearInterval(watch);
+          document.body.appendChild(status);
+          status.classList.add("error");
+          say(`the app crashed: ${handle.panic_message()}\nsee the console for the backtrace`);
+        }, 1000);
       } catch (err) {
         document.body.appendChild(status);
         status.classList.add("error");

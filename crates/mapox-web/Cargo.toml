@@ -32,7 +32,6 @@ wasm-bindgen.workspace = true
 # names this crate, so it has to be in the graph.
 wasm-bindgen-futures.workspace = true
 web-sys.workspace = true
-console_error_panic_hook.workspace = true
 log.workspace = true
 serde_json.workspace = true
 # Not used directly: getrandom refuses to build for wasm32-unknown-unknown

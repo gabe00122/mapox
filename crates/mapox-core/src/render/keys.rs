@@ -38,7 +38,7 @@ impl Command {
 }
 
 const COMMAND_KEYS: &[(Key, Command)] = &[
-    (Key::Tab, Command::ToggleView),
+    (Key::C, Command::ToggleView),
     (Key::V, Command::ToggleFov),
     (Key::P, Command::TogglePacing),
     (Key::N, Command::NextAgent),
@@ -58,7 +58,6 @@ const ACTION_KEYS: &[(&str, &str, &[Key])] = &[
     ),
     (symbols::MOVE_DOWN, "move down", &[Key::ArrowDown, Key::S]),
     (symbols::MOVE_LEFT, "move left", &[Key::ArrowLeft, Key::A]),
-    (symbols::STAY, "stay", &[Key::Space]),
     (symbols::NOOP, "wait", &[Key::Period]),
     (symbols::PRIMARY_ACTION, "primary action", &[Key::F]),
     (symbols::DIG_ACTION, "dig", &[Key::E]),

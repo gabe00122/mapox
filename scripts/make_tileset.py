@@ -86,6 +86,7 @@ COPPER_FLANGE = hex_color("d98a4c")
 
 WOOD = hex_color("7a4b26")
 WOOD_DARK = hex_color("4a2c14")
+WOOD_LIGHT = hex_color("a06a38")
 IRON = hex_color("8a93a4")
 IRON_LIGHT = hex_color("c8cfdb")
 GOLD = hex_color("ffc933")
@@ -220,22 +221,34 @@ def wall() -> Sprite:
     return sprite
 
 
+DIRT_CLODS = check(
+    [
+        "..l......k..",
+        ".kk...ll....",
+        "......kk..l.",
+        "..pl........",
+        "..kk...k....",
+        "l.......pl..",
+        "k...ll..kk..",
+        "....kkk....l",
+        ".l.........k",
+        ".k...pl..l..",
+        ".....kk..kk.",
+        "..k.........",
+    ],
+    "dirt",
+)
+
+
 def dirt() -> Sprite:
-    """Diggable earth: warm, crumbly and structureless, unlike cut stone."""
-    rng = random.Random(11)
-    sprite = blank(DIRT)
-    for y in range(TILE):
-        for x in range(TILE):
-            roll = rng.random()
-            if roll < 0.18:
-                sprite[y][x] = DIRT_DARK
-            elif roll < 0.30:
-                sprite[y][x] = DIRT_LIGHT
-    for px, py in [(2, 2), (8, 4), (4, 8), (10, 10)]:
-        sprite[py][px] = PEBBLE
-        sprite[py][px + 1] = DIRT_LIGHT
-        sprite[py + 1][px] = DIRT_DARK
-    return sprite
+    """Diggable earth: warm, crumbly and structureless, unlike cut stone.
+
+    Clods are lit from above, each a light crumb over its own shadow, and the
+    ones on the edges wrap so a bank of dirt shows no seams.
+    """
+    return stamp(
+        blank(DIRT), DIRT_CLODS, {"k": DIRT_DARK, "l": DIRT_LIGHT, "p": PEBBLE}
+    )
 
 
 def water() -> Sprite:
@@ -378,14 +391,14 @@ CHEST_LOCKED = check(
     [
         "............",
         "............",
-        "............",
-        "..OOOOOOOO..",
-        ".OWWWIIWWWO.",
-        ".OwwwIIwwwO.",
+        "...OOOOOO...",
+        "..OlllWWwO..",
+        ".OIlWWWWwIO.",
+        ".OIWWWWWwIO.",
         ".OOOOLLOOOO.",
-        ".OWWWLkWWWO.",
-        ".OWIWLLWIWO.",
-        ".OwIwwwwIwO.",
+        ".OIwwLkwwIO.",
+        ".OIWWLLWwIO.",
+        ".OIWWWWWwIO.",
         ".OOOOOOOOOO.",
         "............",
     ],
@@ -394,16 +407,16 @@ CHEST_LOCKED = check(
 
 CHEST_OPEN = check(
     [
-        "..........*.",
+        "............",
         "..OOOOOOOO..",
         ".OwwwwwwwwO.",
-        ".OWggGGggWO.",
-        ".OgGGGGGGgO*",
-        ".OGGhGGhGGO.",
-        ".OOOOOOOOOO.",
-        ".OWWWIIWWWO.",
-        ".OWIWIIWIWO.",
-        ".OwIwwwwIwO.",
+        ".OwgG*GGgwO.",
+        ".OgGhGGGGgO.",
+        ".OGGGGh*GGO.",
+        ".OOOOLLOOOO.",
+        ".OIwwLLwwIO.",
+        ".OIWWWWWwIO.",
+        ".OIWWWWWwIO.",
         ".OOOOOOOOOO.",
         "............",
     ],
@@ -414,6 +427,7 @@ CHEST_PALETTE = {
     "O": OUTLINE,
     "W": WOOD,
     "w": WOOD_DARK,
+    "l": WOOD_LIGHT,
     "I": IRON,
     "L": IRON_LIGHT,
     "k": OUTLINE,
@@ -426,16 +440,16 @@ CHEST_PALETTE = {
 APPLE = check(
     [
         "............",
-        "............",
-        "......l.....",
-        ".....sl.....",
-        "...OOsOOO...",
-        "..ORwRRRRO..",
-        "..ORRRRRRO..",
-        "..ORRRRRRO..",
-        "..OrRRRRrO..",
-        "...OrrrrO...",
-        "....OOOO....",
+        ".......lL...",
+        "......sll...",
+        "...OOOsOO...",
+        "..ORRRsRRO..",
+        ".ORwRRRRRrO.",
+        ".ORwRRRRRrO.",
+        ".ORRRRRRrrO.",
+        ".OrRRRRrrrO.",
+        "..OrrRrrrO..",
+        "...OOOOOO...",
         "............",
     ],
     "apple",
@@ -446,7 +460,8 @@ APPLE_PALETTE = {
     "R": hex_color("ff4d4d"),
     "r": hex_color("b3202b"),
     "w": hex_color("ffd6d6"),
-    "l": GRASS_LIGHT,
+    "l": GRASS,
+    "L": GRASS_LIGHT,
     "s": hex_color("6b4423"),
 }
 
@@ -497,28 +512,28 @@ def banner(team: Color) -> Sprite:
 
 # --- agents ----------------------------------------------------------------
 
-# A blank figure rather than a character: no hair, skin or clothes, nothing
-# that suggests a role. Drawn 1-bit style, with gaps instead of an outline
-# separating head, body and limbs.
+# A blank token rather than a character: no hair, skin or clothes, nothing
+# that suggests a role, just enough face and limbs to read as someone.
 AGENT = check(
     [
         "............",
-        "....hWWW....",
-        "...hWWWWw...",
-        "...WEWWEw...",
-        "...WEWWEw...",
-        "....WWWw....",
-        "............",
-        "..W.WWWw.w..",
-        "..W.WWWw.w..",
-        "..W.WWWw.w..",
-        "....W..w....",
-        "....W..w....",
+        "....OOOO....",
+        "...OhhWWO...",
+        "..OhWWWWwO..",
+        "..OWEWWEwO..",
+        "..OWEWWEwO..",
+        ".OOWWWWWwOO.",
+        ".OWOWWWWOwO.",
+        ".OWOWWWWOwO.",
+        ".OOOWWWwOOO.",
+        "...OwOOwO...",
+        "...OOOOOO...",
     ],
     "agent",
 )
 
 AGENT_PALETTE = {
+    "O": OUTLINE,
     "W": hex_color("d3d7e0"),
     "w": hex_color("9ea4b2"),
     "h": hex_color("f4f6fa"),
@@ -553,27 +568,28 @@ RABBIT_PALETTE = {
     "E": EYE,
 }
 
-# Harvesters are turtles: slow, low and armoured, in profile facing right.
+# Harvesters are turtles: slow and armoured, mid-plod with the head craned
+# up on an S of neck. Drawn as a bare silhouette, with gaps rather than an
+# outline separating neck, shell and legs.
 TURTLE = check(
     [
         "............",
-        "............",
-        "............",
-        "............",
-        "............",
-        "..OOOO..OOO.",
-        ".OhhGGOOSSSO",
-        "OhGgggGOSESO",
-        "OGgGGGgSSSO.",
-        "ORRRRRRROO..",
-        ".OSSOOOOSSO.",
-        ".OOOO..OOOO.",
+        ".SSS........",
+        "SESES.......",
+        "SSSSS.......",
+        "...SS.......",
+        ".SSS..h.....",
+        ".....hhGg...",
+        "..SSGGGgGg..",
+        ".SRRRRRRRRS.",
+        ".S......SSS.",
+        "..SS.SS.....",
+        ".SS...SS.S..",
     ],
     "turtle",
 )
 
 TURTLE_PALETTE = {
-    "O": OUTLINE,
     "G": hex_color("4f9a3a"),
     "g": hex_color("2f6424"),
     "h": hex_color("8ccf5e"),
@@ -636,14 +652,14 @@ KNIGHT = check(
         "............",
         "............",
         "....OOOO....",
-        "...OMMMMO...",
-        "...OMkkMO...",
-        "..OOMMMMOO..",
-        ".OMTTTTTTMO.",
-        ".OMTTWWTTMO.",
-        "..OTTWWTTO..",
+        "...OLMMmO...",
+        "...OMkkmO...",
+        "..OOMMMmOO..",
+        ".OMTTTTTTmO.",
+        ".OMTTWWTtmO.",
+        "..OTTWWTtO..",
         "..OttttttO..",
-        "...OKO.OKO..",
+        "..OKKOOKKO..",
         "............",
     ],
     "knight",
@@ -653,15 +669,15 @@ ARCHER = check(
     [
         "............",
         "............",
-        ".....OO.....",
-        "....OTTO....",
-        "...OTSSTO...",
-        "...OSESEO...",
-        "..OTTTTTTOb.",
-        "..OTTttTTOb.",
-        "..OTTttTTOb.",
-        "...OTTTTO...",
-        "...OKO.OKO..",
+        "....OO......",
+        "...OTTO.....",
+        "..OTSSTO.b..",
+        "..OSESEO..b.",
+        ".OTTTTTTOsb.",
+        ".OTTTttTOsb.",
+        ".OTTTttTOsb.",
+        "..OttttO.b..",
+        ".OKKOOKKO...",
         "............",
     ],
     "archer",
@@ -672,6 +688,8 @@ def soldier(art: list[str], team: Color, direction: int, wounded: bool) -> Sprit
     palette = {
         "O": OUTLINE,
         "M": IRON_LIGHT,
+        "m": IRON,
+        "L": SPARKLE,
         "k": OUTLINE,
         "T": team,
         "t": scale(team, 0.65),
@@ -680,6 +698,7 @@ def soldier(art: list[str], team: Color, direction: int, wounded: bool) -> Sprit
         "E": EYE,
         "K": BOOT,
         "b": hex_color("a0703c"),
+        "s": hex_color("d8d2c4"),
     }
     if wounded:
         palette = {k: scale(v, 0.6) for k, v in palette.items()}
