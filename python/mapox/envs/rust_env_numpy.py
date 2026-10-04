@@ -134,6 +134,8 @@ class RustPacmanConfig(BaseModel):
     pellet_reward: float = 1.0
     ghost_reward: float = 1.0
     death_reward: float = 0.0
+    # paid on top of the last pellet's reward when the maze is cleared
+    clear_reward: float = 0.0
 
 
 class RustVecConfig(BaseModel):

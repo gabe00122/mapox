@@ -102,7 +102,7 @@ mod tests {
             "randomize_starting_position":false,"min_start_timeout":0,
             "max_start_timeout":49,"frightened_time":35,"max_mode_changes":6,
             "scatter_mode_length":70,"chase_mode_length":140,"pellet_reward":1.0,
-            "ghost_reward":1.0,"death_reward":0.0}"#;
+            "ghost_reward":1.0,"death_reward":0.0,"clear_reward":0.0}"#;
 
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();
         assert_eq!(parsed, EnvConfig::RustPacman(Box::default()));

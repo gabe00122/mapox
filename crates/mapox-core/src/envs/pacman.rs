@@ -43,6 +43,9 @@ pub struct PacmanConfig {
     pub ghost_reward: f32,
     /// Paid on the step a ghost catches Pac-Man.
     pub death_reward: f32,
+    /// Paid on the step the last pellet is eaten, on top of its pellet
+    /// reward.
+    pub clear_reward: f32,
 }
 
 impl Default for PacmanConfig {
@@ -60,6 +63,7 @@ impl Default for PacmanConfig {
             pellet_reward: 1.0,
             ghost_reward: 1.0,
             death_reward: 0.0,
+            clear_reward: 0.0,
         }
     }
 }
@@ -773,6 +777,7 @@ impl Environment for Pacman {
             reward += self.config.death_reward;
             self.metrics.deaths += 1.0;
         } else if cleared {
+            reward += self.config.clear_reward;
             self.metrics.clears += 1.0;
         }
         if caught || cleared {
@@ -1220,7 +1225,11 @@ mod tests {
 
     #[test]
     fn eating_the_last_pellet_clears_the_round() {
-        let mut env = test_env();
+        let config = PacmanConfig {
+            clear_reward: 10.0,
+            ..PacmanConfig::default()
+        };
+        let mut env = Pacman::new(&config, 512);
         let mut buffers = setup(&mut env, pos(14, 7), RIGHT);
         env.state.tiles.mapv_inplace(|t| match t {
             Pellet | PowerPellet => TileEmpty,
@@ -1231,13 +1240,13 @@ mod tests {
         step(&mut env, &mut buffers, RIGHT);
 
         assert!(buffers.terminated[0]);
-        assert_eq!(buffers.reward[0], env.config.pellet_reward);
+        assert_eq!(buffers.reward[0], 1.0 + 10.0);
         assert_eq!(pellets_left(&env), PICKUPS);
         assert_eq!(env.state.remaining_pellets, PICKUPS);
         assert_eq!(
             env.consume_metrics(),
             serde_json::json!({
-                "reward": 1.0,
+                "reward": 11.0,
                 "pellets_eaten": 1.0,
                 "ghosts_eaten": 0.0,
                 "deaths": 0.0,
