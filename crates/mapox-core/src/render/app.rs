@@ -454,11 +454,11 @@ impl RenderApp {
         });
 
         ui.add_space(12.0);
-        section_heading(ui, "mode");
+        section_heading(ui, "control");
         if toggle(
             ui,
             self.pacing == PacingMode::StepOnInput,
-            ("step-on-input", "free-run"),
+            ("manual", "policy"),
             command_hint(Command::TogglePacing),
         ) {
             self.run_command(Command::TogglePacing, ui);
@@ -469,7 +469,7 @@ impl RenderApp {
         if toggle(
             ui,
             self.view_mode == ViewMode::BirdsEye,
-            ("bird's-eye", "agent view"),
+            ("world", "observation"),
             command_hint(Command::ToggleView),
         ) {
             self.run_command(Command::ToggleView, ui);
@@ -479,7 +479,7 @@ impl RenderApp {
         let fov = ui
             .add_enabled(
                 self.view_mode == ViewMode::BirdsEye,
-                egui::Checkbox::new(&mut show_fov, "field of view"),
+                egui::Checkbox::new(&mut show_fov, "fog"),
             )
             .on_hover_text(command_hint(Command::ToggleFov));
         if fov.changed() {
