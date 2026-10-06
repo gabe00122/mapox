@@ -138,6 +138,66 @@ class RustPacmanConfig(BaseModel):
     clear_reward: float = 0.0
 
 
+class RustSurvivalConfig(BaseModel):
+    """A first pass at a survival game: health, hunger, a two-slot inventory
+    and crafting. No reward yet; see the rust env's docs for the rules."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    env_type: Literal["rust_survival"] = "rust_survival"
+
+    num_agents: int = 8
+    width: int = 80
+    height: int = 70
+    view_width: int = 15
+    view_height: int = 15
+
+    # shares of the map under water and rock: the low and high ground
+    water_fraction: float = 0.10
+    rock_fraction: float = 0.15
+    # shares of the land between that are forest (trees, sticks) and scrub
+    # (stones): its wettest and driest ground. The rest is meadow (berries).
+    forest_fraction: float = 0.35
+    scrub_fraction: float = 0.25
+
+    # stats run 0..150
+    start_hunger: int = 100
+    start_health: int = 150
+    # hunger drops by one every this many steps
+    hunger_interval: int = 2
+    # health lost each step spent at zero hunger
+    starve_damage: int = 1
+    # health grows by one every regen_interval steps while hunger is at
+    # least regen_threshold
+    regen_threshold: int = 100
+    regen_interval: int = 4
+
+    berry_food: int = 20
+    cooked_berry_food: int = 50
+    bush_regrow_steps: int = 200
+    # steps felling a tree takes, the axe use included; the agent can only
+    # wait meanwhile, and a log drops at the end
+    chop_steps: int = 6
+    fire_burn_steps: int = 200
+    # the last of those steps it burns low; wood stokes a low fire back up
+    fire_low_steps: int = 50
+    fire_light_radius: int = 4
+
+    # steps of day then night in each cycle, starting at dawn
+    day_length: int = 200
+    night_length: int = 100
+    # at night agents see this far, and lit ground as far as by day
+    night_vision_radius: int = 2
+    # the last steps of each day, over which sight closes in to the night's
+    dusk_length: int = 50
+
+    # nests in the forest, each hatching a spider every nightfall; spiders
+    # hunt agents in the dark until dawn and never step on lit ground
+    num_spider_eggs: int = 4
+    spider_damage: int = 15
+    # how far, walking, a spider tracks an agent
+    spider_hunt_radius: int = 12
+
+
 class RustVecConfig(BaseModel):
     """Vectorized copies of one rust env; the rust side steps them in parallel."""
 
@@ -175,6 +235,7 @@ type RustEnvConfig = (
     | RustScoutsConfig
     | RustSnakeConfig
     | RustPacmanConfig
+    | RustSurvivalConfig
     | RustVideoConfig
     | RustVecConfig
     | RustMultiConfig

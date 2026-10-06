@@ -139,6 +139,52 @@ GHOST_FRIGHTENED_FACE = hex_color("ffd9c7")
 GHOST_EYE = hex_color("f2f2ee")
 GHOST_PUPIL = hex_color("2121c4")
 
+LEAF = hex_color("3f9a4a")
+LEAF_LIGHT = hex_color("6fd26a")
+LEAF_DARK = hex_color("25602e")
+LEAF_EDGE = hex_color("14301a")
+
+BERRY = hex_color("d6336c")
+BERRY_DARK = hex_color("8a1c44")
+BERRY_LIGHT = hex_color("ff9ec0")
+BERRY_EDGE = hex_color("4a0d24")
+
+COOKED = hex_color("9a5a2e")
+COOKED_DARK = hex_color("5e3018")
+COOKED_LIGHT = hex_color("d89a5e")
+COOKED_EDGE = hex_color("2e160a")
+STEAM = hex_color("c8cfdb")
+
+FLAME_DEEP = hex_color("e85d04")
+FLAME = hex_color("ff9f1c")
+FLAME_CORE = hex_color("ffd166")
+EMBER = hex_color("c2410c")
+
+MEAT = hex_color("c8763c")
+MEAT_DARK = hex_color("8c4a20")
+MEAT_LIGHT = hex_color("f0a769")
+BONE = hex_color("f2efe6")
+
+HEART = hex_color("e5383f")
+HEART_DARK = hex_color("8f1d22")
+HEART_LIGHT = hex_color("ff8a8f")
+
+SPIDER_BODY = hex_color("3a2b45")
+SPIDER_LEG = hex_color("6e5a80")
+SPIDER_MARK = hex_color("b3202b")
+SPIDER_EYE = hex_color("ff3b3b")
+
+EGG = hex_color("e8e2c8")
+EGG_SHADE = hex_color("b8ae8a")
+EGG_EDGE = hex_color("4a4434")
+WEB = hex_color("7d8494")
+
+MOON = hex_color("e8ecf4")
+MOON_EDGE = hex_color("8a93a4")
+
+LEATHER = hex_color("8a5a32")
+LEATHER_DARK = hex_color("5e3b1e")
+
 TEAM_RED = hex_color("e5383f")
 TEAM_BLUE = hex_color("3a78ff")
 TEAM_NEUTRAL = hex_color("d6dbe4")
@@ -840,6 +886,492 @@ def ghost(body: Color) -> Sprite:
     )
 
 
+# --- survival --------------------------------------------------------------
+
+TREE = check(
+    [
+        "....OOOO....",
+        "..OOLLLGOO..",
+        ".OLLLGGGGGO.",
+        ".OLGGGGGgGO.",
+        "OLGGGgGGGGgO",
+        "OGGGGGGGgGgO",
+        ".OGgGGGGGgO.",
+        "..OOgGGgOO..",
+        "....OTTO....",
+        "....OTtO....",
+        "...OTTTtO...",
+        "....OOOO....",
+    ],
+    "tree",
+)
+
+# A ripe bush carries berries on R and h; picked bare, those are leaf.
+BUSH = check(
+    [
+        "............",
+        "............",
+        "....OOOO....",
+        "..OOGGLGOO..",
+        ".OGLGRhGGGO.",
+        ".OGGGRRGLGO.",
+        "OGRhGGGGRhGO",
+        "OGRRGgGGRRGO",
+        "OGGGGGRhGGgO",
+        ".OgGGGRRGgO.",
+        "..OOgggggO..",
+        "............",
+    ],
+    "bush",
+)
+
+FIRE = check(
+    [
+        "............",
+        "......y.....",
+        ".....yY.....",
+        "....yYY..y..",
+        "...yYWY.yY..",
+        "...YWWWYYY..",
+        "..yYWWWWWYy.",
+        "..YYWWWWWYY.",
+        "...rYYYYYr..",
+        ".TTtrrrrrtTT",
+        "..tTTttTTt..",
+        "............",
+    ],
+    "fire",
+)
+
+FIRE_LOW = check(
+    [
+        "............",
+        "............",
+        "............",
+        "............",
+        "............",
+        ".....y......",
+        "....yYy.....",
+        "...yYWYy....",
+        "...rYYYr....",
+        ".TTtrrrrrtTT",
+        "..tTTttTTt..",
+        "............",
+    ],
+    "fire low",
+)
+
+SPIDER = check(
+    [
+        "............",
+        "..L......L..",
+        "...L.OO.L...",
+        "L...OBBO...L",
+        ".L.OBBBBO.L.",
+        "..OBRBBRBO..",
+        "LLOBBBBBBOLL",
+        "..OBBBBBBO..",
+        ".L.OBBBBO.L.",
+        "L..OBmmBO..L",
+        "...OBmmBO...",
+        "....OOOO....",
+    ],
+    "spider",
+)
+
+SPIDER_EGGS = check(
+    [
+        "w..........w",
+        ".w........w.",
+        "..w..OOO.w..",
+        "....OhEEO...",
+        "..OOOEEEO...",
+        ".OhEEOEeOOO.",
+        ".OEEEOeOhEEO",
+        ".OEEeOOEEEeO",
+        "..OeOhEEEeO.",
+        "...OOEEEeO..",
+        ".w..OOOOO.w.",
+        "w..........w",
+    ],
+    "spider eggs",
+)
+
+SUN = check(
+    [
+        "............",
+        ".....yy.....",
+        "..y......y..",
+        "....OOOO....",
+        "...OYYhYO...",
+        ".yyOYYYYOyy.",
+        ".yyOYYYYOyy.",
+        "...OyYYYO...",
+        "....OOOO....",
+        "..y......y..",
+        ".....yy.....",
+        "............",
+    ],
+    "sun",
+)
+
+MOON_ICON = check(
+    [
+        "............",
+        ".....OOO....",
+        "...OOMMO.s..",
+        "..OMMMO.....",
+        "..OMMO......",
+        ".OMMMO...s..",
+        ".OMMMO......",
+        ".OMMMMO.....",
+        "..OMMMMOOO..",
+        "..OOMMMMMO..",
+        "....OOOOO...",
+        "............",
+    ],
+    "moon",
+)
+
+STICK = check(
+    [
+        "............",
+        "..........w.",
+        ".........lw.",
+        "........lw..",
+        ".......lw...",
+        "......lw.w..",
+        ".....lwlw...",
+        "....lw......",
+        "...lw.......",
+        "..lw........",
+        ".lw.........",
+        "............",
+    ],
+    "stick",
+)
+
+STONE_ITEM = check(
+    [
+        "............",
+        "............",
+        "............",
+        "....OOOO....",
+        "...OLLssO...",
+        "..OLLsssSO..",
+        ".OLssssssSO.",
+        ".OsssssssSO.",
+        ".OSssssSSSO.",
+        "..OOSSSSOO..",
+        "....OOOO....",
+        "............",
+    ],
+    "stone",
+)
+
+LOG = check(
+    [
+        "............",
+        "............",
+        "............",
+        ".OOOOOOOOOO.",
+        "OlllllllOeeO",
+        "OwwwwwwwOekO",
+        "OwwwwwwwOkeO",
+        "OdddddddOeeO",
+        ".OOOOOOOOOO.",
+        "............",
+        "............",
+        "............",
+    ],
+    "log",
+)
+
+BERRIES = check(
+    [
+        "............",
+        "............",
+        "......gG....",
+        "...OOOgOOO..",
+        "..OhRRORhRO.",
+        "..ORRrORRrO.",
+        "..OOrOOOrOO.",
+        "....OhRRO...",
+        "....ORRrO...",
+        "....OrrrO...",
+        ".....OOO....",
+        "............",
+    ],
+    "berries",
+)
+
+AXE = check(
+    [
+        "............",
+        ".....OOOO...",
+        "....OLLssO..",
+        "...OLsssSSO.",
+        "...OsswSSSO.",
+        "....OOwlOO..",
+        ".....wl.....",
+        "....wl......",
+        "...wl.......",
+        "..wl........",
+        ".wl.........",
+        "............",
+    ],
+    "axe",
+)
+
+CAMPFIRE_KIT = check(
+    [
+        "............",
+        "............",
+        "............",
+        "..lT....Tl..",
+        "...lT..Tl...",
+        "....lTTl....",
+        "....TttT....",
+        "...Tt..tT...",
+        ".LsSLsSLsSs.",
+        ".SOSSOSSOSS.",
+        "............",
+        "............",
+    ],
+    "campfire kit",
+)
+
+HEART_ICON = check(
+    [
+        "............",
+        "............",
+        "..OOO..OOO..",
+        ".OhRROORRrO.",
+        ".OhRRRRRRrO.",
+        ".ORRRRRRRrO.",
+        "..ORRRRRrO..",
+        "...ORRRrO...",
+        "....ORrO....",
+        ".....OO.....",
+        "............",
+        "............",
+    ],
+    "heart",
+)
+
+DRUMSTICK = check(
+    [
+        "............",
+        "............",
+        "....OOOO....",
+        "...OMMmmO...",
+        "..OMhMMmmO..",
+        "..OMMMMmmO..",
+        "..OmMMmmmO..",
+        "...OmmmmO...",
+        "....OOBO....",
+        ".....OBO....",
+        "....OBBBO...",
+        "....OOOOO...",
+    ],
+    "drumstick",
+)
+
+MITTEN = check(
+    [
+        "............",
+        "....OOOO....",
+        "...OSSSsO...",
+        "...OSSSsO...",
+        "...OSSSsOOO.",
+        "...OSSSsSsO.",
+        "...OSSSSSsO.",
+        "...OSSSSsO..",
+        "....OSSsO...",
+        "....OCCCO...",
+        "....OOOOO...",
+        "............",
+    ],
+    "mitten",
+)
+
+BACKPACK = check(
+    [
+        "............",
+        ".....OO.....",
+        "....O..O....",
+        "..OOOOOOOO..",
+        ".OBBBBBBBBO.",
+        ".ObbbbbbbbO.",
+        ".OBBBkkBBBO.",
+        ".OBBBBBBBBO.",
+        ".OBBBBBBBBO.",
+        ".ObbbbbbbbO.",
+        "..OOOOOOOO..",
+        "............",
+    ],
+    "backpack",
+)
+
+TREE_PALETTE = {
+    "O": LEAF_EDGE,
+    "L": LEAF_LIGHT,
+    "G": LEAF,
+    "g": LEAF_DARK,
+    "T": WOOD,
+    "t": WOOD_DARK,
+}
+
+
+def bush(ripe: bool) -> Sprite:
+    berry, shine = (BERRY, BERRY_LIGHT) if ripe else (LEAF, LEAF)
+    palette = {
+        "O": LEAF_EDGE,
+        "L": LEAF_LIGHT,
+        "G": LEAF,
+        "g": LEAF_DARK,
+        "R": berry,
+        "h": shine,
+    }
+    return stamp(floor(), BUSH, palette)
+
+
+def berries(cooked: bool) -> Sprite:
+    """Raw berries are bright; cooked ones roasted brown and steaming."""
+    if cooked:
+        palette = {
+            "O": COOKED_EDGE,
+            "R": COOKED,
+            "r": COOKED_DARK,
+            "h": COOKED_LIGHT,
+            "g": STEAM,
+            "G": STEAM,
+        }
+    else:
+        palette = {
+            "O": BERRY_EDGE,
+            "R": BERRY,
+            "r": BERRY_DARK,
+            "h": BERRY_LIGHT,
+            "g": GRASS,
+            "G": GRASS_LIGHT,
+        }
+    return stamp(floor(), BERRIES, palette)
+
+
+STONE_PALETTE = {"O": OUTLINE, "L": STONE_LIGHT, "s": STONE, "S": STONE_DARK}
+
+
+def survival_rows() -> list[list[Sprite]]:
+    agents = [
+        facing_pip(stamp(floor(), AGENT, AGENT_PALETTE), direction, GOLD_LIGHT)
+        for direction in range(4)
+    ]
+    world = [
+        *agents,
+        stamp(floor(), TREE, TREE_PALETTE),
+        bush(ripe=True),
+        bush(ripe=False),
+        stamp(
+            floor(),
+            FIRE,
+            {
+                "y": FLAME_DEEP,
+                "Y": FLAME,
+                "W": FLAME_CORE,
+                "r": EMBER,
+                "T": WOOD,
+                "t": WOOD_DARK,
+            },
+        ),
+        stamp(floor(), STICK, {"l": WOOD_LIGHT, "w": WOOD}),
+        stamp(floor(), STONE_ITEM, STONE_PALETTE),
+        stamp(
+            floor(),
+            LOG,
+            {
+                "O": OUTLINE,
+                "l": WOOD_LIGHT,
+                "w": WOOD,
+                "d": WOOD_DARK,
+                "e": hex_color("d8b07a"),
+                "k": WOOD,
+            },
+        ),
+        berries(cooked=False),
+    ]
+    items_and_ui = [
+        berries(cooked=True),
+        stamp(floor(), AXE, {**STONE_PALETTE, "w": WOOD, "l": WOOD_LIGHT}),
+        stamp(
+            floor(),
+            CAMPFIRE_KIT,
+            {
+                "T": WOOD,
+                "t": WOOD_DARK,
+                "l": WOOD_LIGHT,
+                **{k: v for k, v in STONE_PALETTE.items() if k != "s"},
+                "s": STONE,
+            },
+        ),
+        stamp(
+            blank(UI),
+            HEART_ICON,
+            {"O": OUTLINE, "R": HEART, "r": HEART_DARK, "h": HEART_LIGHT},
+        ),
+        stamp(
+            blank(UI),
+            DRUMSTICK,
+            {"O": OUTLINE, "M": MEAT, "m": MEAT_DARK, "h": MEAT_LIGHT, "B": BONE},
+        ),
+        stamp(
+            blank(UI),
+            MITTEN,
+            {"O": OUTLINE, "S": SKIN, "s": SKIN_SHADE, "C": UI_DOT},
+        ),
+        stamp(
+            blank(UI),
+            BACKPACK,
+            {"O": OUTLINE, "B": LEATHER, "b": LEATHER_DARK, "k": GOLD},
+        ),
+        stamp(
+            floor(),
+            FIRE_LOW,
+            {
+                "y": EMBER,
+                "Y": FLAME_DEEP,
+                "W": FLAME,
+                "r": EMBER,
+                "T": WOOD,
+                "t": WOOD_DARK,
+            },
+        ),
+        stamp(
+            floor(),
+            SPIDER_EGGS,
+            {"O": EGG_EDGE, "E": EGG, "e": EGG_SHADE, "h": SPARKLE, "w": WEB},
+        ),
+        stamp(
+            floor(),
+            SPIDER,
+            {
+                "O": OUTLINE,
+                "B": SPIDER_BODY,
+                "L": SPIDER_LEG,
+                "m": SPIDER_MARK,
+                "R": SPIDER_EYE,
+            },
+        ),
+        stamp(blank(UI), SUN, {"O": GOLD_DARK, "Y": GOLD, "h": GOLD_LIGHT, "y": GOLD}),
+        stamp(
+            blank(UI),
+            MOON_ICON,
+            {"O": MOON_EDGE, "M": MOON, "s": GOLD_LIGHT},
+        ),
+    ]
+    return [world, items_and_ui]
+
+
 # --- sheet -----------------------------------------------------------------
 
 
@@ -910,6 +1442,7 @@ def build_sheet() -> list[list[Sprite]]:
         team_row(TEAM_BLUE),
         digits,
         pacman_row,
+        *survival_rows(),
     ]
 
 

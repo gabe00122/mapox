@@ -62,6 +62,12 @@ const ACTION_KEYS: &[(&str, &str, &[Key])] = &[
     (symbols::PRIMARY_ACTION, "primary action", &[Key::F]),
     (symbols::DIG_ACTION, "dig", &[Key::E]),
     (symbols::PLACE_PIPE, "place pipe", &[Key::Q]),
+    (symbols::GRAB_ACTION, "grab", &[Key::G]),
+    (symbols::DROP_ACTION, "drop", &[Key::X]),
+    (symbols::SWAP_ACTION, "swap hands / backpack", &[Key::Z]),
+    (symbols::USE_ACTION, "use", &[Key::Space]),
+    (symbols::EAT_ACTION, "eat", &[Key::H]),
+    (symbols::COMBINE_ACTION, "combine", &[Key::B]),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -126,6 +132,7 @@ mod tests {
     use crate::envs::pacman::{Pacman, PacmanConfig};
     use crate::envs::scouts::{Scouts, ScoutsConfig};
     use crate::envs::snake::{Snake, SnakeConfig};
+    use crate::envs::survival::{Survival, SurvivalConfig};
     use egui::{Event, Modifiers};
 
     /// One frame's worth of input with `keys` freshly pressed. Assigned
@@ -153,6 +160,7 @@ mod tests {
             Box::new(Scouts::new(&ScoutsConfig::default(), 512)),
             Box::new(Snake::new(&SnakeConfig::default(), 512)),
             Box::new(Pacman::new(&PacmanConfig::default(), 512)),
+            Box::new(Survival::new(&SurvivalConfig::default(), 512)),
         ];
 
         for env in envs {

@@ -9,6 +9,7 @@ use crate::{
         pacman::{Pacman, PacmanConfig},
         scouts::{Scouts, ScoutsConfig},
         snake::{Snake, SnakeConfig},
+        survival::{Survival, SurvivalConfig},
     },
     error::MapoxResult,
     wrappers::{multitask::MultitaskWrapper, vector::VectorWrapper},
@@ -21,6 +22,7 @@ pub enum EnvConfig {
     RustScouts(Box<ScoutsConfig>),
     RustSnake(Box<SnakeConfig>),
     RustPacman(Box<PacmanConfig>),
+    RustSurvival(Box<SurvivalConfig>),
     #[cfg(not(target_arch = "wasm32"))]
     RustVideo(Box<VideoConfig>),
     RustVec {
@@ -45,6 +47,7 @@ pub fn make(config: &EnvConfig, length: usize) -> MapoxResult<Box<dyn Environmen
         EnvConfig::RustScouts(config) => Ok(Box::new(Scouts::new(config, length))),
         EnvConfig::RustSnake(config) => Ok(Box::new(Snake::new(config, length))),
         EnvConfig::RustPacman(config) => Ok(Box::new(Pacman::new(config, length))),
+        EnvConfig::RustSurvival(config) => Ok(Box::new(Survival::new(config, length))),
         #[cfg(not(target_arch = "wasm32"))]
         EnvConfig::RustVideo(config) => Ok(Box::new(VideoWrapper::new(config, length)?)),
         EnvConfig::RustVec { num, env } => Ok(Box::new(VectorWrapper::new(*num, env, length)?)),
@@ -106,6 +109,23 @@ mod tests {
 
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();
         assert_eq!(parsed, EnvConfig::RustPacman(Box::default()));
+    }
+
+    /// And for survival, `RustSurvivalConfig().model_dump_json()` verbatim.
+    #[test]
+    fn a_survival_config_dump_parses() {
+        let json = r#"{"env_type":"rust_survival","num_agents":8,"width":80,"height":70,
+            "view_width":15,"view_height":15,"water_fraction":0.1,"rock_fraction":0.15,
+            "forest_fraction":0.35,"scrub_fraction":0.25,"start_hunger":100,
+            "start_health":150,"hunger_interval":2,"starve_damage":1,"regen_threshold":100,
+            "regen_interval":4,"berry_food":20,"cooked_berry_food":50,
+            "bush_regrow_steps":200,"chop_steps":6,"fire_burn_steps":200,"fire_low_steps":50,
+            "fire_light_radius":4,"day_length":200,"night_length":100,
+            "night_vision_radius":2,"dusk_length":50,"num_spider_eggs":4,"spider_damage":15,
+            "spider_hunt_radius":12}"#;
+
+        let parsed: EnvConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed, EnvConfig::RustSurvival(Box::default()));
     }
 
     /// The vectorized shape: `num` copies of a plain env config.

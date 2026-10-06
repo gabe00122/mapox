@@ -9,6 +9,7 @@ from mapox.envs.rust_env_numpy import (
     RustPacmanConfig,
     RustScoutsConfig,
     RustSnakeConfig,
+    RustSurvivalConfig,
 )
 
 CONFIGS = {
@@ -16,6 +17,7 @@ CONFIGS = {
     "scouts": RustScoutsConfig(num_scouts=1, num_harvesters=1, width=12, height=12),
     "snake": RustSnakeConfig(num_agents=2, width=12, height=12),
     "pacman": RustPacmanConfig(),
+    "survival": RustSurvivalConfig(num_agents=2, width=12, height=12),
 }
 
 

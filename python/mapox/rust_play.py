@@ -15,6 +15,7 @@ from mapox.envs.rust_env_numpy import (
     RustPacmanConfig,
     RustScoutsConfig,
     RustSnakeConfig,
+    RustSurvivalConfig,
     RustVideoConfig,
 )
 from mapox.timestep import TimeStep
@@ -116,6 +117,7 @@ CONFIGS = {
     "scouts": RustScoutsConfig(),
     "snake": RustSnakeConfig(),
     "pacman": RustPacmanConfig(),
+    "survival": RustSurvivalConfig(),
 }
 
 
@@ -139,7 +141,7 @@ def main() -> None:
         help="run headless and print the ASCII view instead of the native window",
     )
     parser.add_argument("--episodes", type=int, default=2)
-    parser.add_argument("--steps", type=int, default=512)
+    parser.add_argument("--steps", type=int, default=1024)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
         "--agent", type=int, default=0, help="focused agent for the ASCII view"
