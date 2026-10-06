@@ -249,6 +249,12 @@ impl RenderApp {
         for (total, reward) in self.returns.iter_mut().zip(self.buffers.reward.iter()) {
             *total += reward;
         }
+        // envs like Pac-Man start a new round in place on termination
+        for (total, &done) in self.returns.iter_mut().zip(self.buffers.terminated.iter()) {
+            if done {
+                *total = 0.0;
+            }
+        }
         self.step_count += 1;
         self.actions_ready = false;
         self.render_state_dirty = true;
