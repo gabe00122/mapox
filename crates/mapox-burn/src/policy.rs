@@ -9,7 +9,11 @@ use crate::model::{Carry, TransformerActor};
 
 pub struct BurnPolicy<B: Backend> {
     model: TransformerActor<B>,
-    carry: Carry<B>,
+    /// Allocated by [`Policy::reset`], sized for the agents the driver will
+    /// actually step: a multitask env only settles its agent count once the
+    /// driver picks an enjoy-mode task, and a cache sized for the whole
+    /// training batch can run to gigabytes.
+    carry: Option<Carry<B>>,
     num_agents: usize,
     /// Samples the action distribution (with our own rng, not jax's).
     rng: SmallRng,
@@ -17,14 +21,14 @@ pub struct BurnPolicy<B: Backend> {
 }
 
 impl<B: Backend> BurnPolicy<B> {
-    pub fn new(loaded: LoadedPolicy<B>, num_agents: usize, seed: u64) -> Self {
-        let model = loaded.model;
+    /// The kv cache is not allocated until the first [`Policy::reset`].
+    pub fn new(loaded: LoadedPolicy<B>, seed: u64) -> Self {
         Self {
-            carry: model.init_carry(num_agents),
-            num_agents,
+            model: loaded.model,
+            carry: None,
+            num_agents: 0,
             rng: SmallRng::seed_from_u64(seed),
             episode_reward: 0.0,
-            model,
         }
     }
 
@@ -39,12 +43,16 @@ impl<B: Backend> Policy for BurnPolicy<B> {
         timestep: &TimeStepRef<'_>,
         actions: &mut [VocabId],
     ) -> Result<(), PolicyError> {
-        if self.carry.time >= self.context_length() {
+        let context_length = self.context_length();
+        let carry = self
+            .carry
+            .as_mut()
+            .ok_or("act before reset: a driver must reset this policy first")?;
+        if carry.time >= context_length {
             return Err(format!(
                 "{} steps without a reset: a driver must reset this policy at least every \
-                 context_length ({}) steps",
-                self.carry.time,
-                self.context_length()
+                 context_length ({context_length}) steps",
+                carry.time,
             )
             .into());
         }
@@ -65,7 +73,7 @@ impl<B: Backend> Policy for BurnPolicy<B> {
             last_action,
             task_ids,
             timestep.action_mask,
-            &mut self.carry,
+            carry,
         );
         let num_actions = log_probs.dims()[1];
         let log_probs = log_probs
@@ -83,21 +91,26 @@ impl<B: Backend> Policy for BurnPolicy<B> {
     }
 
     fn reset(&mut self, num_agents: usize, seed: u64) -> Result<(), PolicyError> {
-        if self.carry.time > 0 {
+        if let Some(carry) = &self.carry
+            && carry.time > 0
+        {
             log::info!(
                 "[{} steps] mean reward per agent: {:.3}",
-                self.carry.time,
+                carry.time,
                 self.episode_reward / self.num_agents as f64
             );
         }
         self.episode_reward = 0.0;
         self.rng = SmallRng::seed_from_u64(seed);
 
-        if num_agents == self.num_agents {
-            self.carry.rewind();
-        } else {
-            self.num_agents = num_agents;
-            self.carry = self.model.init_carry(num_agents);
+        match &mut self.carry {
+            Some(carry) if num_agents == self.num_agents => carry.rewind(),
+            _ => {
+                // drop the old cache before allocating its replacement
+                self.carry = None;
+                self.num_agents = num_agents;
+                self.carry = Some(self.model.init_carry(num_agents));
+            }
         }
         Ok(())
     }

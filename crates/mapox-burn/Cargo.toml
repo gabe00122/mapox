@@ -38,6 +38,8 @@ autotune = ["burn/autotune"]
 # flex's `rayon` default stays off on purpose: wasm32-unknown-unknown has no
 # threads, and it measured slower here anyway at this batch size.
 burn = { version = "0.21.0", default-features = false, features = ["flex", "std", "simd"] }
+# f16/bf16 bundles are widened to f32 on load; already in the tree via burn
+half = "2.7.1"
 mapox-core = { version = "1.0.0", path = "../mapox-core" }
 log.workspace = true
 ndarray.workspace = true

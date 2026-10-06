@@ -61,7 +61,7 @@ where
     let env_config: EnvConfig = serde_json::from_str(&env_json)?;
     let env = make(&env_config, length)?;
 
-    let policy = BurnPolicy::new(loaded, env.num_agents(), args.seed);
+    let policy = BurnPolicy::new(loaded, args.seed);
 
     open_window(RenderApp::new(env, length, args.seed, Box::new(policy)))?;
     Ok(())

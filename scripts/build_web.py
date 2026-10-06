@@ -73,14 +73,6 @@ def optimize(release: bool) -> None:
         staged = WEB_DIR / f"{LIB}_bg.wasm"
         run("wasm-opt", "-Oz", staged, "-o", staged)
 
-
-def stage_policy(path: Path) -> None:
-    if not path.is_file():
-        die(f"{path}: no such policy file")
-    info(f"staging {path.name} as {POLICY}")
-    shutil.copyfile(path, WEB_DIR / POLICY)
-
-
 def human(size: float) -> str:
     for unit in ("B", "K", "M"):
         if size < 1024:
@@ -121,20 +113,12 @@ def main() -> None:
         metavar="PORT",
         help="serve the staged page on PORT (default 8000)",
     )
-    parser.add_argument(
-        "--policy",
-        type=Path,
-        metavar="PATH",
-        help=f"copy a jaxrl policy export into the page as {POLICY}",
-    )
     parser.set_defaults(release=True, autotune=True)
     args = parser.parse_args()
 
     ensure_target()
     bindgen(build())
     optimize(args.release)
-    if args.policy is not None:
-        stage_policy(args.policy)
     report()
     if args.serve is not None:
         serve(args.serve)

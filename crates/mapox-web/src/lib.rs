@@ -118,6 +118,6 @@ fn setup(policy_bytes: &[u8], seed: u32) -> Result<Running, JsValue> {
     let env = make(&env_config, length)
         .map_err(|err| JsValue::from_str(&format!("building the env: {err}")))?;
 
-    let policy = BurnPolicy::<Flex>::new(loaded, env.num_agents(), seed.into());
+    let policy = BurnPolicy::<Flex>::new(loaded, seed.into());
     Ok((env, length, Box::new(policy)))
 }

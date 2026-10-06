@@ -3932,6 +3932,7 @@ version = "1.0.0"
 dependencies = [
  "burn",
  "env_logger",
+ "half",
  "log",
  "mapox-core",
  "ndarray 0.17.2",

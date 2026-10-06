@@ -1,7 +1,9 @@
 //! Reads the safetensors bundle written by jaxrl's
-//! `scripts/export_burn_policy.py`: raw flax-layout f32 tensors under dotted
-//! nnx state paths, plus JSON configs in the metadata. All layout conversion
-//! to burn conventions happens here:
+//! `scripts/export_burn_policy.py`: raw flax-layout tensors under dotted nnx
+//! state paths, plus JSON configs in the metadata. Tensors may be stored as
+//! f32, f16 or bf16 (half precision halves the download for the web build);
+//! all are widened to f32 here, so inference always computes in f32. All
+//! layout conversion to burn conventions happens here too:
 //!
 //! - `nnx.Linear` kernels are `[in, out]`, which is also burn's orientation.
 //! - the fused `nnx.LinearGeneral` qkv kernel is `[d_model, heads + 2 *
@@ -17,6 +19,7 @@ use std::path::Path;
 
 use burn::tensor::backend::Backend;
 use burn::tensor::{Tensor, TensorData};
+use half::{bf16, f16};
 use safetensors::{Dtype, SafeTensors};
 
 use crate::config::PolicyMetadata;
@@ -102,16 +105,28 @@ impl<'a, B: Backend> Store<'a, B> {
             .tensors
             .tensor(name)
             .map_err(|_| format!("checkpoint is missing tensor {name:?}"))?;
-        if view.dtype() != Dtype::F32 {
-            return Err(format!("{name}: expected f32, got {:?}", view.dtype()).into());
-        }
-        let data = view
-            .data()
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .map(|b| f32::from_le_bytes(*b))
-            .collect();
+        let bytes = view.data();
+        let data = match view.dtype() {
+            Dtype::F32 => bytes
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|b| f32::from_le_bytes(*b))
+                .collect(),
+            Dtype::F16 => bytes
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|b| f16::from_le_bytes(*b).to_f32())
+                .collect(),
+            Dtype::BF16 => bytes
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|b| bf16::from_le_bytes(*b).to_f32())
+                .collect(),
+            dtype => return Err(format!("{name}: expected f32, f16 or bf16, got {dtype:?}").into()),
+        };
         Ok((data, view.shape().to_vec()))
     }
 
