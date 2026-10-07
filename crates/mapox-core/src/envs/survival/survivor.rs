@@ -85,9 +85,9 @@ impl Survival {
         // counting this step, so the first drain lands after a full interval
         let steps = self.state.time as u32 + 1;
         let winter = self.is_winter(steps as usize);
+        let warm = self.by_fire(self.state.agents[agent_id].position);
         let config = &self.config;
         let agent = &mut self.state.agents[agent_id];
-        let warm = self.state.lit[agent.position.idx()];
 
         if steps.is_multiple_of(config.hunger_interval) {
             agent.hunger = agent.hunger.saturating_sub(1);
@@ -125,7 +125,7 @@ impl Survival {
         let mut spots = std::iter::once(position).chain(DIRECTIONS.map(|d| position + d));
         for item in [agent.hands, agent.backpack].into_iter().flatten() {
             if let Some(spot) = spots.find(|spot| self.state.map[spot.idx()].is_floor()) {
-                self.set_ground(spot, item.tile());
+                self.lay(spot, item);
             }
         }
 

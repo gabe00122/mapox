@@ -45,21 +45,22 @@ pub struct SurvivalConfig {
     /// Health lost on every step spent at zero temperature.
     pub freeze_damage: u16,
 
-    /// Hunger a berry restores, raw and cooked, and a carrot.
+    /// Hunger a berry restores, raw and cooked, and a carrot likewise.
     pub berry_food: u16,
     pub cooked_berry_food: u16,
     pub carrot_food: u16,
+    pub cooked_carrot_food: u16,
     /// Steps a picked bush takes to fruit again.
     pub bush_regrow_steps: u32,
     /// Steps felling a tree takes, the use that starts it included. See
     /// [`Job`](super::items::Job).
     pub chop_steps: u32,
+    /// Steps clearing a bush with an axe takes, the use that starts it
+    /// included; it leaves a stick.
+    pub clear_bush_steps: u32,
     /// Steps harvesting tall grass by hand takes, the use that starts it
     /// included.
     pub harvest_steps: u32,
-    /// Steps digging up a buried carrot by hand takes, the use that starts
-    /// it included.
-    pub dig_carrot_steps: u32,
     /// Steps a fire burns before it goes out.
     pub fire_burn_steps: u32,
     /// The last of those steps it burns low, when wood stokes it back up to
@@ -67,6 +68,10 @@ pub struct SurvivalConfig {
     pub fire_low_steps: u32,
     /// How far a fire's light reaches, in cells.
     pub fire_light_radius: i32,
+    /// Steps a torch burns held in hand before it is gone, and how far its
+    /// light reaches. Unlike a fire's, its light gives no warmth.
+    pub torch_burn_steps: u32,
+    pub torch_light_radius: i32,
 
     /// Steps of day and then of night in each cycle; the episode starts at
     /// dawn.
@@ -114,13 +119,16 @@ impl Default for SurvivalConfig {
             berry_food: 20,
             cooked_berry_food: 50,
             carrot_food: 35,
+            cooked_carrot_food: 70,
             bush_regrow_steps: 200,
             chop_steps: 6,
+            clear_bush_steps: 3,
             harvest_steps: 3,
-            dig_carrot_steps: 1,
             fire_burn_steps: 200,
             fire_low_steps: 50,
             fire_light_radius: 4,
+            torch_burn_steps: 100,
+            torch_light_radius: 3,
             day_length: 200,
             night_length: 100,
             night_vision_radius: 2,

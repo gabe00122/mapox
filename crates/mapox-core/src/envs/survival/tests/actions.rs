@@ -188,8 +188,11 @@ fn combine_follows_the_recipes_either_way_round() {
     for (hands, backpack, made) in [
         (Item::Stick, Item::Stone, Item::Axe),
         (Item::Stone, Item::Stick, Item::Axe),
-        (Item::Wood, Item::Stone, Item::Campfire),
-        (Item::Stone, Item::Wood, Item::Campfire),
+        (Item::Wood, Item::Grass, Item::Campfire),
+        (Item::Grass, Item::Wood, Item::Campfire),
+        // a torch is lit in hand, so it burns through the step it is made
+        (Item::Stick, Item::Grass, Item::Torch { burnt: 1 }),
+        (Item::Grass, Item::Stick, Item::Torch { burnt: 1 }),
     ] {
         agent(&mut env, 0).hands = Some(hands);
         agent(&mut env, 0).backpack = Some(backpack);
@@ -199,10 +202,13 @@ fn combine_follows_the_recipes_either_way_round() {
     }
     assert_eq!(achieved(&env, Achievement::MakeAxe), 1.0);
     assert_eq!(achieved(&env, Achievement::MakeCampfire), 1.0);
+    assert_eq!(achieved(&env, Achievement::MakeTorch), 1.0);
 
-    agent(&mut env, 0).hands = Some(Item::Stick);
-    agent(&mut env, 0).backpack = Some(Item::Stick);
-    assert!(!legal(&observe(&env), 0, Combine));
+    for (hands, backpack) in [(Item::Stick, Item::Stick), (Item::Wood, Item::Stone)] {
+        agent(&mut env, 0).hands = Some(hands);
+        agent(&mut env, 0).backpack = Some(backpack);
+        assert!(!legal(&observe(&env), 0, Combine));
+    }
 }
 
 /// Using the axe on a tree locks the agent in place, able only to wait,
@@ -285,4 +291,45 @@ fn two_agents_felling_one_tree_get_one_log() {
     assert_eq!(env.state.map[tree.idx()], ItemWood);
     assert!(env.state.agents.iter().all(|a| a.work.is_none()));
     assert_eq!(achieved(&env, Achievement::ChopTree), 1.0);
+}
+
+/// The axe clears a bush, ripe, bare or dead, as slow work like felling, and
+/// leaves a stick where it grew. A bush picked bare and cleared before it
+/// fruits again stays gone.
+#[test]
+fn the_axe_clears_a_bush_for_a_stick() {
+    let mut env = empty_env_with(SurvivalConfig {
+        num_agents: 1,
+        clear_bush_steps: 2,
+        bush_regrow_steps: 4,
+        ..Default::default()
+    });
+    let start = center(&env);
+    let bush = start + UP;
+    spawn_facing(&mut env, start, 0);
+    let mut buffers = TimeStepBuffers::new(&env);
+
+    for tile in [TileBerryBush, TileBush, TileDeadBush] {
+        env.set_ground(bush, tile);
+        assert!(!legal(&observe(&env), 0, Use), "no axe in hand");
+        agent(&mut env, 0).hands = Some(Item::Axe);
+        step(&mut env, &mut buffers, &[Use]);
+        assert_eq!(env.state.map[bush.idx()], tile, "still clearing");
+        step(&mut env, &mut buffers, &[Noop]);
+        assert_eq!(env.state.map[bush.idx()], ItemStick);
+        assert_eq!(env.state.agents[0].hands, Some(Item::Axe));
+        agent(&mut env, 0).hands = None;
+    }
+    assert_eq!(achieved(&env, Achievement::ClearBush), 1.0);
+
+    env.set_ground(bush, TileBerryBush);
+    step(&mut env, &mut buffers, &[Grab]);
+    step(&mut env, &mut buffers, &[Swap]);
+    agent(&mut env, 0).hands = Some(Item::Axe);
+    step(&mut env, &mut buffers, &[Use]);
+    step(&mut env, &mut buffers, &[Noop]);
+    for _ in 0..4 {
+        step(&mut env, &mut buffers, &[Noop]);
+    }
+    assert_eq!(env.state.map[bush.idx()], ItemStick, "no regrowth");
 }

@@ -3,7 +3,7 @@
 
 use crate::envs::common::Position;
 
-use super::{SurvivalConfig, metrics::Achievement, tiles::SurvivalObs};
+use super::{Survival, SurvivalConfig, metrics::Achievement, tiles::SurvivalObs};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Item {
@@ -13,9 +13,17 @@ pub(super) enum Item {
     Berry,
     CookedBerry,
     Carrot,
+    CookedCarrot,
     Grass,
     Axe,
     Campfire,
+    /// Lights the ground around the agent holding it, burning down a step
+    /// for every step it is held, and gone once it has burnt
+    /// `torch_burn_steps`. In the backpack or on the ground it neither lights
+    /// nor burns, and keeps its wear.
+    Torch {
+        burnt: u32,
+    },
 }
 
 impl Item {
@@ -27,9 +35,11 @@ impl Item {
             Item::Berry => SurvivalObs::ItemBerry,
             Item::CookedBerry => SurvivalObs::ItemCookedBerry,
             Item::Carrot => SurvivalObs::ItemCarrot,
+            Item::CookedCarrot => SurvivalObs::ItemCookedCarrot,
             Item::Grass => SurvivalObs::ItemGrass,
             Item::Axe => SurvivalObs::ItemAxe,
             Item::Campfire => SurvivalObs::ItemCampfire,
+            Item::Torch { .. } => SurvivalObs::ItemTorch,
         }
     }
 
@@ -52,7 +62,49 @@ impl Item {
             Item::Berry => Some((config.berry_food, Achievement::EatBerry)),
             Item::CookedBerry => Some((config.cooked_berry_food, Achievement::EatCookedBerry)),
             Item::Carrot => Some((config.carrot_food, Achievement::EatCarrot)),
+            Item::CookedCarrot => Some((config.cooked_carrot_food, Achievement::EatCookedCarrot)),
             _ => None,
+        }
+    }
+
+    /// What the item cooks into, held to a fire, if it cooks.
+    pub(super) fn cooked(self) -> Option<(Item, Achievement)> {
+        match self {
+            Item::Berry => Some((Item::CookedBerry, Achievement::CookBerry)),
+            Item::Carrot => Some((Item::CookedCarrot, Achievement::CookCarrot)),
+            _ => None,
+        }
+    }
+}
+
+impl Survival {
+    /// Sets `item` down on the ground at `position`; a torch keeps its wear
+    /// there until it is taken up again.
+    pub(super) fn lay(&mut self, position: Position, item: Item) {
+        if let Item::Torch { burnt } = item {
+            self.state.laid_torches.push((position, burnt));
+        }
+        self.set_ground(position, item.tile());
+    }
+
+    /// Takes up the item lying at `position`, leaving bare ground.
+    pub(super) fn take(&mut self, position: Position) -> Item {
+        let item = self.state.base_map[position.idx()]
+            .item()
+            .expect("only an item can be taken up");
+        self.set_ground(position, SurvivalObs::TileEmpty);
+        match item {
+            Item::Torch { .. } => {
+                let laid = &mut self.state.laid_torches;
+                let i = laid
+                    .iter()
+                    .position(|&(at, _)| at == position)
+                    .expect("every torch on the ground was laid there");
+                Item::Torch {
+                    burnt: laid.swap_remove(i).1,
+                }
+            }
+            item => item,
         }
     }
 }
@@ -63,9 +115,15 @@ pub(super) const RECIPES: &[(Item, Item, Item, Achievement)] = &[
     (Item::Stick, Item::Stone, Item::Axe, Achievement::MakeAxe),
     (
         Item::Wood,
-        Item::Stone,
+        Item::Grass,
         Item::Campfire,
         Achievement::MakeCampfire,
+    ),
+    (
+        Item::Stick,
+        Item::Grass,
+        Item::Torch { burnt: 0 },
+        Achievement::MakeTorch,
     ),
 ];
 
@@ -79,39 +137,40 @@ pub(super) fn recipe(a: Item, b: Item) -> Option<(Item, Achievement)> {
 /// Slow work. Using a job's tool on its tile in front starts it (with empty
 /// hands for a job done by hand), and locks the agent in place, able only
 /// to wait, until its steps are done; then the tile becomes what the job
-/// leaves of it. Felling a tree with an axe, and by hand harvesting tall grass
-/// and digging up carrots, are the first; digging walls and mining are meant
-/// to join them.
+/// leaves of it. Felling a tree and clearing a bush with an axe, and
+/// harvesting tall grass by hand, are the first; digging walls and mining are
+/// meant to join them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Job {
     Chop,
+    ClearBush,
     Harvest,
-    DigCarrot,
 }
 
 impl Job {
-    const ALL: [Job; 3] = [Job::Chop, Job::Harvest, Job::DigCarrot];
+    const ALL: [Job; 3] = [Job::Chop, Job::ClearBush, Job::Harvest];
 
     /// The job `tool` does on `tile`, if any; `None` is bare hands.
     pub(super) fn of(tool: Option<Item>, tile: SurvivalObs) -> Option<Job> {
         Self::ALL
             .into_iter()
-            .find(|job| job.tool() == tool && job.works() == tile)
+            .find(|job| job.tool() == tool && job.works(tile))
     }
 
     fn tool(self) -> Option<Item> {
         match self {
-            Job::Chop => Some(Item::Axe),
-            Job::Harvest | Job::DigCarrot => None,
+            Job::Chop | Job::ClearBush => Some(Item::Axe),
+            Job::Harvest => None,
         }
     }
 
-    /// The tile the job works on.
-    pub(super) fn works(self) -> SurvivalObs {
+    /// Whether the job works on `tile`.
+    pub(super) fn works(self, tile: SurvivalObs) -> bool {
+        use SurvivalObs::*;
         match self {
-            Job::Chop => SurvivalObs::TileTree,
-            Job::Harvest => SurvivalObs::TileTallGrass,
-            Job::DigCarrot => SurvivalObs::TileBuriedCarrot,
+            Job::Chop => tile == TileTree,
+            Job::ClearBush => matches!(tile, TileBerryBush | TileBush | TileDeadBush),
+            Job::Harvest => tile == TileTallGrass,
         }
     }
 
@@ -119,8 +178,8 @@ impl Job {
     pub(super) fn leaves(self) -> SurvivalObs {
         match self {
             Job::Chop => SurvivalObs::ItemWood,
+            Job::ClearBush => SurvivalObs::ItemStick,
             Job::Harvest => SurvivalObs::ItemGrass,
-            Job::DigCarrot => SurvivalObs::ItemCarrot,
         }
     }
 
@@ -128,16 +187,16 @@ impl Job {
     pub(super) fn steps(self, config: &SurvivalConfig) -> u32 {
         match self {
             Job::Chop => config.chop_steps,
+            Job::ClearBush => config.clear_bush_steps,
             Job::Harvest => config.harvest_steps,
-            Job::DigCarrot => config.dig_carrot_steps,
         }
     }
 
     pub(super) fn achievement(self) -> Achievement {
         match self {
             Job::Chop => Achievement::ChopTree,
+            Job::ClearBush => Achievement::ClearBush,
             Job::Harvest => Achievement::HarvestGrass,
-            Job::DigCarrot => Achievement::DigCarrot,
         }
     }
 }

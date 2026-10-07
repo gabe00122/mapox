@@ -49,7 +49,7 @@ pub const TILE_BERRY_BUSH: &str = "tile/berry_bush";
 pub const TILE_BUSH: &str = "tile/bush";
 /// Tall grass: walked through, and harvested slowly for [`ITEM_GRASS`].
 pub const TILE_TALL_GRASS: &str = "tile/tall_grass";
-/// A carrot still in the ground; digging it up leaves an [`ITEM_CARROT`].
+/// A carrot still in the ground; grabbing pulls it up as an [`ITEM_CARROT`].
 pub const TILE_BURIED_CARROT: &str = "tile/buried_carrot";
 /// Water frozen over in winter: it can be walked on.
 pub const TILE_ICE: &str = "tile/ice";
@@ -69,11 +69,14 @@ pub const ITEM_WOOD: &str = "item/wood";
 pub const ITEM_BERRY: &str = "item/berry";
 pub const ITEM_COOKED_BERRY: &str = "item/cooked_berry";
 pub const ITEM_CARROT: &str = "item/carrot";
+pub const ITEM_COOKED_CARROT: &str = "item/cooked_carrot";
 /// A bundle of cut grass.
 pub const ITEM_GRASS: &str = "item/grass";
 pub const ITEM_AXE: &str = "item/axe";
 /// An unlit campfire, carried; using it sets down a [`TILE_FIRE`].
 pub const ITEM_CAMPFIRE: &str = "item/campfire";
+/// A lit torch: lights the ground around whoever holds it, burning down.
+pub const ITEM_TORCH: &str = "item/torch";
 
 pub const TILE_PIPE_HORIZONTAL: &str = "tile/pipe_horizontal";
 pub const TILE_PIPE_VIRTICAL: &str = "tile/pipe_virtical";

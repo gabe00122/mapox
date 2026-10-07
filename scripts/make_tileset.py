@@ -1375,6 +1375,25 @@ SNOWFLAKE = check(
     "snowflake",
 )
 
+# Held by the handle, burning at the head where a twist of grass is bound on.
+TORCH = check(
+    [
+        "........y...",
+        ".......yYy..",
+        "......yYWYy.",
+        "......YWWY..",
+        ".......YYr..",
+        "......sSS...",
+        ".....lwS....",
+        "....lw......",
+        "...lw.......",
+        "..lw........",
+        ".lw.........",
+        "............",
+    ],
+    "torch",
+)
+
 TREE_PALETTE = {
     "O": LEAF_EDGE,
     "L": LEAF_LIGHT,
@@ -1573,6 +1592,33 @@ def survival_rows() -> list[list[Sprite]]:
             {"O": OUTLINE, "w": SNOW, "R": HEART, "r": HEART_DARK, "h": UI_DOT},
         ),
         stamp(blank(UI), SNOWFLAKE, {"S": SNOW, "s": ICE}),
+        # roasted darker than raw, steaming where the leaves were
+        stamp(
+            floor(),
+            CARROT_ITEM,
+            {
+                "O": COOKED_EDGE,
+                "C": CARROT_DARK,
+                "c": COOKED,
+                "h": CARROT,
+                "G": STEAM,
+                "L": STEAM,
+            },
+        ),
+        stamp(
+            floor(),
+            TORCH,
+            {
+                "y": FLAME_DEEP,
+                "Y": FLAME,
+                "W": FLAME_CORE,
+                "r": EMBER,
+                "S": STRAW,
+                "s": STRAW_LIGHT,
+                "l": WOOD_LIGHT,
+                "w": WOOD,
+            },
+        ),
     ]
     return [world, items_and_ui, plants]
 

@@ -112,12 +112,11 @@ fn agents_walk_through_tall_grass() {
     assert_eq!(env.state.map[(start + UP).idx()], TileTallGrass);
 }
 
-/// Carrots start buried: using empty hands on one digs it up, leaving the
-/// carrot lying there to grab. Grab can't reach a buried carrot, and holding
-/// something rules digging out. A carrot taken is gone for good: nothing
-/// grows back where it lay.
+/// Carrots start buried, and grab pulls one straight out of the ground,
+/// into the backpack if the hands are full; use does nothing to it. A carrot
+/// taken is gone for good: nothing grows back where it lay.
 #[test]
-fn buried_carrots_are_dug_up_and_never_regrow() {
+fn buried_carrots_are_grabbed_and_never_regrow() {
     let mut env = empty_env_with(SurvivalConfig {
         num_agents: 1,
         bush_regrow_steps: 1,
@@ -127,19 +126,18 @@ fn buried_carrots_are_dug_up_and_never_regrow() {
     let carrot = start + UP;
     env.set_ground(carrot, TileBuriedCarrot);
     spawn_facing(&mut env, start, 0);
-    assert!(!legal(&observe(&env), 0, Grab), "the carrot is buried");
+    assert!(!legal(&observe(&env), 0, Use), "use doesn't dig");
     agent(&mut env, 0).hands = Some(Item::Stick);
-    assert!(!legal(&observe(&env), 0, Use), "digging needs empty hands");
-    agent(&mut env, 0).hands = None;
+    assert!(legal(&observe(&env), 0, Grab));
 
     let mut buffers = TimeStepBuffers::new(&env);
-    step(&mut env, &mut buffers, &[Use]);
-    assert_eq!(env.state.map[carrot.idx()], ItemCarrot);
-    assert_eq!(achieved(&env, Achievement::DigCarrot), 1.0);
-    assert!(env.state.agents[0].work.is_none(), "one use digs it up");
-
     step(&mut env, &mut buffers, &[Grab]);
-    assert_eq!(env.state.agents[0].hands, Some(Item::Carrot));
+    let survivor = env.state.agents[0];
+    assert_eq!(
+        (survivor.hands, survivor.backpack),
+        (Some(Item::Stick), Some(Item::Carrot))
+    );
+    assert_eq!(env.state.map[carrot.idx()], TileEmpty);
     assert_eq!(achieved(&env, Achievement::CollectCarrot), 1.0);
     for _ in 0..10 {
         step(&mut env, &mut buffers, &[Noop]);

@@ -7,11 +7,12 @@ use crate::{
     symbols::{
         AGENT_GENERIC_DOWN, AGENT_GENERIC_LEFT, AGENT_GENERIC_RIGHT, AGENT_GENERIC_UP,
         AGENT_SPIDER, ITEM_AXE, ITEM_BERRY, ITEM_CAMPFIRE, ITEM_CARROT, ITEM_COOKED_BERRY,
-        ITEM_GRASS, ITEM_STICK, ITEM_STONE, ITEM_WOOD, TILE_BERRY_BUSH, TILE_BURIED_CARROT,
-        TILE_BUSH, TILE_DEAD_BUSH, TILE_DECOR_1, TILE_DECOR_2, TILE_DECOR_3, TILE_DECOR_4,
-        TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_FIRE, TILE_FIRE_LOW, TILE_ICE, TILE_MASK,
-        TILE_SPIDER_EGGS, TILE_TALL_GRASS, TILE_TREE, TILE_UI, TILE_WALL, TILE_WATER, UI_BACKPACK,
-        UI_DAY, UI_DIGITS, UI_HANDS, UI_HEALTH, UI_HUNGER, UI_NIGHT, UI_TEMPERATURE, UI_WINTER,
+        ITEM_COOKED_CARROT, ITEM_GRASS, ITEM_STICK, ITEM_STONE, ITEM_TORCH, ITEM_WOOD,
+        TILE_BERRY_BUSH, TILE_BURIED_CARROT, TILE_BUSH, TILE_DEAD_BUSH, TILE_DECOR_1, TILE_DECOR_2,
+        TILE_DECOR_3, TILE_DECOR_4, TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_FIRE, TILE_FIRE_LOW,
+        TILE_ICE, TILE_MASK, TILE_SPIDER_EGGS, TILE_TALL_GRASS, TILE_TREE, TILE_UI, TILE_WALL,
+        TILE_WATER, UI_BACKPACK, UI_DAY, UI_DIGITS, UI_HANDS, UI_HEALTH, UI_HUNGER, UI_NIGHT,
+        UI_TEMPERATURE, UI_WINTER,
     },
     vocab::{VocabId, Vocabulary},
     vocab_enum,
@@ -46,9 +47,11 @@ vocab_enum!(pub(super) SurvivalObs {
     ItemBerry => ITEM_BERRY,
     ItemCookedBerry => ITEM_COOKED_BERRY,
     ItemCarrot => ITEM_CARROT,
+    ItemCookedCarrot => ITEM_COOKED_CARROT,
     ItemGrass => ITEM_GRASS,
     ItemAxe => ITEM_AXE,
     ItemCampfire => ITEM_CAMPFIRE,
+    ItemTorch => ITEM_TORCH,
     AgentUp => AGENT_GENERIC_UP,
     AgentRight => AGENT_GENERIC_RIGHT,
     AgentDown => AGENT_GENERIC_DOWN,
@@ -131,7 +134,9 @@ impl SurvivalObs {
         )
     }
 
-    /// The item lying here, if the tile is one.
+    /// The item lying here, if the tile is one. A torch's wear is kept off
+    /// the map, so this one is fresh; [`Survival::take`](super::Survival::take)
+    /// picks it up as it was laid down.
     pub(super) fn item(self) -> Option<Item> {
         use SurvivalObs::*;
         Some(match self {
@@ -141,9 +146,11 @@ impl SurvivalObs {
             ItemBerry => Item::Berry,
             ItemCookedBerry => Item::CookedBerry,
             ItemCarrot => Item::Carrot,
+            ItemCookedCarrot => Item::CookedCarrot,
             ItemGrass => Item::Grass,
             ItemAxe => Item::Axe,
             ItemCampfire => Item::Campfire,
+            ItemTorch => Item::Torch { burnt: 0 },
             _ => return None,
         })
     }

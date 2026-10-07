@@ -1,11 +1,16 @@
 //! Fires: lit from a campfire, burning down, stoked back up with wood, and
-//! the light they cast. Light is the shared `lit` layer other systems read:
-//! agents see lit ground by night, and spiders keep off it.
+//! the light they cast; and torches, burning down in hand and lighting the
+//! ground around whoever holds them. Light is the shared `lit` layer other
+//! systems read: agents see lit ground by night, and spiders keep off it.
+//! Only a fire's light warms.
+
+use ndarray::Array2;
 
 use crate::envs::common::Position;
 
 use super::{
     Survival, SurvivalState,
+    items::Item,
     tiles::{SurvivalObs, within},
 };
 
@@ -73,22 +78,53 @@ impl Survival {
         }
     }
 
-    /// Marks the ground each fire lights.
-    pub(super) fn light_up(&mut self) {
-        let SurvivalState { fires, lit, .. } = &mut self.state;
+    /// Whether `position` is warmed by a fire: it is if the fire's light
+    /// reaches it.
+    pub(super) fn by_fire(&self, position: Position) -> bool {
         let radius = self.config.fire_light_radius;
+        self.state
+            .fires
+            .iter()
+            .any(|fire| within(position - fire.position, radius))
+    }
+
+    /// Torches held in hand burn down a step, and one burnt out is gone.
+    pub(super) fn burn_torches(&mut self) {
+        let burn_steps = self.config.torch_burn_steps;
+        for agent in &mut self.state.agents {
+            if let Some(Item::Torch { burnt }) = agent.hands {
+                let burnt = burnt + 1;
+                agent.hands = (burnt < burn_steps).then_some(Item::Torch { burnt });
+            }
+        }
+    }
+
+    /// Marks the ground each fire lights, and each torch held in hand.
+    pub(super) fn light_up(&mut self) {
+        let SurvivalState {
+            fires, agents, lit, ..
+        } = &mut self.state;
         lit.fill(false);
         for fire in fires.iter() {
-            for dy in -radius..=radius {
-                for dx in -radius..=radius {
-                    let offset = Position::new(dx, dy);
-                    if !within(offset, radius) {
-                        continue;
-                    }
-                    if let Some(cell) = lit.get_mut((fire.position + offset).idx()) {
-                        *cell = true;
-                    }
-                }
+            light_around(lit, fire.position, self.config.fire_light_radius);
+        }
+        for agent in agents.iter() {
+            if let Some(Item::Torch { .. }) = agent.hands {
+                light_around(lit, agent.position, self.config.torch_light_radius);
+            }
+        }
+    }
+}
+
+fn light_around(lit: &mut Array2<bool>, center: Position, radius: i32) {
+    for dy in -radius..=radius {
+        for dx in -radius..=radius {
+            let offset = Position::new(dx, dy);
+            if !within(offset, radius) {
+                continue;
+            }
+            if let Some(cell) = lit.get_mut((center + offset).idx()) {
+                *cell = true;
             }
         }
     }

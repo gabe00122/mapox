@@ -185,21 +185,28 @@ class RustSurvivalConfig(BaseModel):
 
     berry_food: int = 20
     cooked_berry_food: int = 50
-    # carrots are buried at reset and never grow back
+    # carrots are buried at reset, grabbed straight out of the ground, and
+    # never grow back; held to a fire, a berry or carrot cooks at once
     carrot_food: int = 35
+    cooked_carrot_food: int = 70
     bush_regrow_steps: int = 200
     # steps felling a tree takes, the axe use included; the agent can only
     # wait meanwhile, and a log drops at the end
     chop_steps: int = 6
+    # steps clearing a bush (ripe, bare or dead) with the axe takes, likewise;
+    # a stick drops at the end
+    clear_bush_steps: int = 3
     # steps harvesting tall grass takes, the empty-handed use that starts it
     # included; a bundle of grass drops at the end
     harvest_steps: int = 3
-    # steps digging up a buried carrot takes, likewise; the carrot drops
-    dig_carrot_steps: int = 1
     fire_burn_steps: int = 200
     # the last of those steps it burns low; wood stokes a low fire back up
     fire_low_steps: int = 50
     fire_light_radius: int = 4
+    # a torch (stick + grass) lights torch_light_radius around whoever holds
+    # it, without warming, and is gone after torch_burn_steps held
+    torch_burn_steps: int = 100
+    torch_light_radius: int = 3
 
     # steps of day then night in each cycle, starting at dawn
     day_length: int = 200

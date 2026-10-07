@@ -3,7 +3,8 @@
 //!
 //! The world is three layers on one grid, in [`SurvivalState`]: `base_map`
 //! is the ground (terrain, and items lying on it), `map` is the ground with
-//! the creatures drawn over it, and `lit` is the ground fires light. Systems
+//! the creatures drawn over it, and `lit` is the ground fires and torches
+//! light. Systems
 //! change them only through the shared rules here, [`Survival::set_ground`]
 //! for the ground and [`Survival::place_creature`] and
 //! [`Survival::remove_creature`] for creatures, and they judge a cell by the
@@ -16,7 +17,7 @@
 //! - [`actions`]: what agents can do, and doing it
 //! - [`survivor`]: the agents' stats, life and death
 //! - [`items`]: items, recipes and jobs
-//! - [`fire`]: fires burning down, and the light they cast
+//! - [`fire`]: fires and torches burning down, and the light they cast
 //! - [`plants`]: bushes fruiting again (carrots and tall grass don't regrow)
 //! - [`clock`]: day, dusk and night
 //! - [`season`]: summer, and winter at the end
@@ -77,10 +78,13 @@ struct SurvivalState {
     base_map: Array2<SurvivalObs>, // terrain and ground items, without agents
     map: Array2<SurvivalObs>,      // the base map plus the agents
     fires: Vec<Fire>,
+    /// Torches lying on the ground, and how far each had burnt when it was
+    /// set down.
+    laid_torches: Vec<(Position, u32)>,
     /// Picked bushes and the step each fruits again, in that order.
     regrowing: VecDeque<(Position, usize)>,
-    /// Ground a fire lights: spiders keep off it, and agents see it at night
-    /// as far as by day. Brought up to date every world turn.
+    /// Ground a fire or a held torch lights: spiders keep off it, and agents
+    /// see it at night as far as by day. Brought up to date every world turn.
     lit: Array2<bool>,
     /// Where the spider nests are, and the spiders out of them.
     eggs: Vec<Position>,
@@ -94,8 +98,9 @@ struct SurvivalState {
 /// Each agent has health, hunger and temperature, 0 to [`MAX_STAT`]. Hunger
 /// drains with time; while it is high health grows back, and at zero health
 /// drains instead. Temperature rises on ground a fire lights, in any season,
-/// and in winter drops everywhere else; at zero it drains health too. An agent whose health runs out drops what it carries where it
-/// stood, is flagged terminated, and respawns with fresh stats elsewhere.
+/// and in winter drops everywhere else; at zero it drains health too. An
+/// agent whose health runs out drops what it carries where it stood, is
+/// flagged terminated, and respawns with fresh stats elsewhere.
 ///
 /// Everything an agent does to the world it does to the tile in front of it,
 /// and its tile shows which way that is. Moving turns the agent to face the
@@ -104,29 +109,32 @@ struct SurvivalState {
 /// walks over them, hiding the one it stands on, and has to step off and face
 /// it to pick it up.
 /// The inventory is two slots, hands and backpack. Grab takes the item in
-/// front (or the berries off a bush) into empty hands, or into the backpack
-/// if the hands are full; drop sets the hands' item down in front, swap
-/// trades hands and backpack. Use invokes the hand's item on what is in
-/// front, or bare hands: the axe sets to felling a tree, bare hands to
-/// harvesting tall grass or digging up a carrot, a campfire is set down lit, and a
-/// raw berry held to a fire cooks at once.
+/// front (or the berries off a bush, or a buried carrot out of the ground)
+/// into empty hands, or into the backpack if the hands are full; drop sets
+/// the hands' item down in front, swap trades hands and backpack. Use invokes
+/// the hand's item on what is in front, or bare hands: the axe sets to
+/// felling a tree or clearing a bush, bare hands to harvesting tall grass, a
+/// campfire is set down lit, and a raw berry or carrot held to a fire cooks
+/// at once.
 /// Felling is a [`Job`](items::Job), slow work: the agent can only wait until
 /// it is done, `chop_steps` in all, and then a log lies where the tree stood.
-/// Harvesting tall grass is another, done by using empty hands on it: after
-/// `harvest_steps` a bundle of grass lies where it grew.
-/// Eat eats the food in hand: a raw berry, a cooked one feeding more, or a
-/// carrot. Carrots start buried, and using bare hands on one digs it up
-/// (`dig_carrot_steps`); they are buried at reset and never grow back. Combine
-/// turns the hand and backpack items into a new one per
-/// [`RECIPES`](items::RECIPES): stick and stone make an axe, wood and stone a
-/// campfire.
+/// Clearing a bush, ripe, bare or dead, is another (`clear_bush_steps`), and
+/// leaves a stick; harvesting tall grass is a third, done by using empty
+/// hands on it: after `harvest_steps` a bundle of grass lies where it grew.
+/// Eat eats the food in hand: a berry or a carrot, raw or, feeding more,
+/// cooked. Carrots are buried at reset and never grow back. Combine turns the
+/// hand and backpack items into a new one per [`RECIPES`](items::RECIPES):
+/// stick and stone make an axe, wood and grass a campfire, stick and grass a
+/// torch. A torch in hand lights the ground `torch_light_radius` around its
+/// holder, as a fire does but without warming it, and burns down a step for
+/// every step it is held, gone after `torch_burn_steps`.
 ///
 /// Days and nights alternate, starting at dawn. By night an agent sees only
 /// `night_vision_radius` around itself, except for ground a fire lights,
 /// which it sees as far as by day. Night closes in gradually: over the last
 /// `dusk_length` steps of the day, sight shrinks step by step from the
 /// whole view down to the night's, so the dark is a warning before it is a
-/// danger. A fire burns `fire_burn_steps`, the last
+/// danger. Held torches light the dark too. A fire burns `fire_burn_steps`, the last
 /// `fire_low_steps` of them low; using wood on a low fire stokes it back up.
 /// Spider nests hatch a giant spider each at nightfall, and the spiders hunt
 /// until dawn: each bites an agent next to it, or walks toward the nearest it
@@ -246,6 +254,7 @@ impl Survival {
                 base_map: Array2::from_elem(dim, SurvivalObs::TileEmpty),
                 map: Array2::from_elem(dim, SurvivalObs::TileEmpty),
                 fires: Vec::new(),
+                laid_torches: Vec::new(),
                 regrowing: VecDeque::new(),
                 lit: Array2::from_elem(dim, false),
                 eggs: Vec::new(),
@@ -305,13 +314,15 @@ impl Survival {
 
     /// The world's own turn, after the agents': winter sets in if it is
     /// due, fires burn down and picked bushes fruit again, the light catches
-    /// up with the fires lit and gone out this step, and the spiders move by
-    /// it.
+    /// up with the fires lit and gone out this step and the torches carried,
+    /// held torches burn down a step for the light they gave, and the
+    /// spiders move by it.
     fn tick_world(&mut self) {
         self.tick_season(self.state.time + 1);
         self.burn_fires();
         self.regrow_bushes();
         self.light_up();
+        self.burn_torches();
         self.tick_spiders();
     }
 }
@@ -330,6 +341,7 @@ impl Environment for Survival {
         // Base map finished
         self.state.map.assign(&self.state.base_map);
         self.state.fires.clear();
+        self.state.laid_torches.clear();
         self.state.regrowing.clear();
         self.state.lit.fill(false);
         self.state.spiders.clear();

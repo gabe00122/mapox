@@ -59,14 +59,18 @@ impl Survival {
             MoveUp | MoveRight | MoveDown | MoveLeft | Noop => true,
             Grab => {
                 (agent.hands.is_none() || agent.backpack.is_none())
-                    && (ahead.item().is_some() || ahead == SurvivalObs::TileBerryBush)
+                    && (ahead.item().is_some()
+                        || matches!(
+                            ahead,
+                            SurvivalObs::TileBerryBush | SurvivalObs::TileBuriedCarrot
+                        ))
             }
             Drop => agent.hands.is_some() && ahead.is_floor(),
             Swap => agent.hands.is_some() || agent.backpack.is_some(),
             Use => match agent.hands {
-                Some(Item::Berry) => ahead.is_fire(),
                 Some(Item::Wood) => ahead == SurvivalObs::TileFireLow,
                 Some(Item::Campfire) => ahead.is_floor(),
+                Some(food) if food.cooked().is_some() => ahead.is_fire(),
                 // a tool's job, or with empty hands one done by hand
                 tool => Job::of(tool, ahead).is_some(),
             },
@@ -110,14 +114,16 @@ impl Survival {
                 self.place_creature(agent.position, agent.tile());
             }
             SurvivalAction::Grab => {
-                let tile = self.state.map[ahead.idx()];
-                let item = if tile == SurvivalObs::TileBerryBush {
-                    self.pick_bush(ahead);
-                    Item::Berry
-                } else {
-                    self.set_ground(ahead, SurvivalObs::TileEmpty);
-                    tile.item()
-                        .expect("grab is legal only facing an item or a bush")
+                let item = match self.state.map[ahead.idx()] {
+                    SurvivalObs::TileBerryBush => {
+                        self.pick_bush(ahead);
+                        Item::Berry
+                    }
+                    SurvivalObs::TileBuriedCarrot => {
+                        self.set_ground(ahead, SurvivalObs::TileEmpty);
+                        Item::Carrot
+                    }
+                    _ => self.take(ahead),
                 };
                 // full hands spill over into an empty backpack
                 let slot = if agent.hands.is_none() {
@@ -135,14 +141,10 @@ impl Survival {
                     .hands
                     .take()
                     .expect("drop is legal only holding something");
-                self.set_ground(ahead, item.tile());
+                self.lay(ahead, item);
             }
             SurvivalAction::Swap => std::mem::swap(&mut agent.hands, &mut agent.backpack),
             SurvivalAction::Use => match agent.hands {
-                Some(Item::Berry) => {
-                    agent.hands = Some(Item::CookedBerry);
-                    agent.unlock(&mut self.metrics, Achievement::CookBerry);
-                }
                 Some(Item::Wood) => {
                     self.stoke(ahead);
                     agent.hands = None;
@@ -152,6 +154,11 @@ impl Survival {
                     self.kindle(ahead);
                     agent.hands = None;
                     agent.unlock(&mut self.metrics, Achievement::PlaceFire);
+                }
+                Some(food) if food.cooked().is_some() => {
+                    let (cooked, achievement) = food.cooked().expect("matched on cooking");
+                    agent.hands = Some(cooked);
+                    agent.unlock(&mut self.metrics, achievement);
                 }
                 tool => {
                     let job = Job::of(tool, self.state.map[ahead.idx()])
@@ -209,7 +216,7 @@ impl Survival {
         }
 
         agent.work = None;
-        if self.state.base_map[work.target.idx()] == work.job.works() {
+        if work.job.works(self.state.base_map[work.target.idx()]) {
             self.set_ground(work.target, work.job.leaves());
             agent.unlock(&mut self.metrics, work.job.achievement());
         }

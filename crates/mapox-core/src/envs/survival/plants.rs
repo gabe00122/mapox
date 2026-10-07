@@ -13,14 +13,17 @@ impl Survival {
         self.state.regrowing.push_back((bush, ripe));
     }
 
-    /// Bushes picked long enough ago fruit again.
+    /// Bushes picked long enough ago fruit again, if they are still there:
+    /// an axe may have cleared one meanwhile.
     pub(super) fn regrow_bushes(&mut self) {
         while let Some(&(bush, ripe)) = self.state.regrowing.front() {
             if ripe > self.state.time {
                 break;
             }
             self.state.regrowing.pop_front();
-            self.set_ground(bush, SurvivalObs::TileBerryBush);
+            if self.state.base_map[bush.idx()] == SurvivalObs::TileBush {
+                self.set_ground(bush, SurvivalObs::TileBerryBush);
+            }
         }
     }
 }

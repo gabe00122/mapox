@@ -34,16 +34,19 @@ achievements! {
     CollectCarrot => "collect_carrot",
     CollectGrass => "collect_grass",
     ChopTree => "chop_tree",
+    ClearBush => "clear_bush",
     HarvestGrass => "harvest_grass",
-    DigCarrot => "dig_carrot",
     MakeAxe => "make_axe",
     MakeCampfire => "make_campfire",
+    MakeTorch => "make_torch",
     PlaceFire => "place_fire",
     RefuelFire => "refuel_fire",
     CookBerry => "cook_berry",
+    CookCarrot => "cook_carrot",
     EatBerry => "eat_berry",
     EatCookedBerry => "eat_cooked_berry",
     EatCarrot => "eat_carrot",
+    EatCookedCarrot => "eat_cooked_carrot",
 }
 
 #[derive(Debug, Default, Clone)]
