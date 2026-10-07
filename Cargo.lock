@@ -3957,6 +3957,7 @@ dependencies = [
  "rayon",
  "serde",
  "serde_json",
+ "slotmap",
  "thiserror 2.0.20",
  "wgpu 30.0.1",
 ]
