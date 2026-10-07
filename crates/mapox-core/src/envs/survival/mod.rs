@@ -5,7 +5,7 @@ use slotmap::{SlotMap, new_key_type};
 
 use crate::{
     env::Environment,
-    envs::common::{Position, UI_HEIGHT, fov, vocab_enum::VocabEnum},
+    envs::common::{Position, UI_HEIGHT, fov, stamp::stamp_circle, vocab_enum::VocabEnum},
     render::env::{GridRenderSettings, GridRenderState},
     spec::{ActionSpec, ObservationSpec},
     symbols::{
@@ -73,6 +73,7 @@ struct SurvivalState {
     tiles: Array2<SurvivalObs>,      // terrain layer
     objects: Array2<ObjectCell>,     // entity layer on top of the terrain
     render_map: Array2<SurvivalObs>, // the render target for the agent views
+    lighting: Array2<bool>,          // true for a lit tile and false for a dark tile
     free_positions: Vec<Position>,   // these are used to calculate spawn positions
 }
 
@@ -200,6 +201,8 @@ impl Survival {
         let obs_spec = ObservationSpec::new(config.view_width, view_height, obs_vocab.len());
         let action_spec = ActionSpec::new(action_vocab.len());
 
+        let map_dim = (width as usize, height as usize);
+
         Self {
             config: config.clone(),
             state: SurvivalState {
@@ -207,12 +210,10 @@ impl Survival {
                 agent_order: (0..config.num_agents).collect(),
                 entities: SlotMap::with_capacity_and_key(config.num_agents),
                 free_positions: Vec::new(),
-                tiles: Array2::from_elem((width as usize, height as usize), SurvivalObs::TileEmpty),
-                objects: Array2::from_elem((width as usize, height as usize), [None; 2]),
-                render_map: Array2::from_elem(
-                    (width as usize, height as usize),
-                    SurvivalObs::TileEmpty,
-                ),
+                tiles: Array2::from_elem(map_dim, SurvivalObs::TileEmpty),
+                objects: Array2::from_elem(map_dim, [None; 2]),
+                lighting: Array2::from_elem(map_dim, true),
+                render_map: Array2::from_elem(map_dim, SurvivalObs::TileEmpty),
                 rngs: SmallRng::seed_from_u64(0),
                 time: 0,
             },
@@ -255,6 +256,18 @@ impl Survival {
                 *dst = state.entities[id].tile;
             }
         }
+
+        // render lights
+        state.lighting.fill(false);
+        stamp_circle(&mut state.lighting, Position::new(10, 10), 5, true);
+
+        state
+            .render_map
+            .zip_mut_with(&state.lighting, |target, lit| {
+                if !lit {
+                    *target = SurvivalObs::Mask;
+                }
+            });
     }
 
     fn encode_observations(&self, timestep: &mut TimeStepMut) {
