@@ -17,6 +17,10 @@ uv add mapox
 Notes:
 - Video export uses `python-ffmpeg` and requires the `ffmpeg` binary available on your system PATH.
 
+## Rust Migration
+New environment exist in rust, these aren't documented well yet but where the primary focus of the project is now
+Bellow is the older documentation for the jax environments.
+
 ## Quick start
 
 Environments implement a small interface:
@@ -75,79 +79,10 @@ Controls (depending on the environment):
 
 The renderer can show the full map or the focused agent’s POV (a local crop). See `mapox/play.py` for an example of using `GridworldClient` and recording video.
 
-### ASCII observations
-
-`AsciiRenderer` draws an agent’s observation crop as a roguelike text grid and
-resolves legal actions from an action mask:
-
-```python
-from mapox import AsciiRenderer
-
-renderer = AsciiRenderer(env.obs_vocab, env.action_vocab)
-print(renderer.render(ts.obs[0]))
-print(renderer.available_actions(ts.action_mask[0]))
-```
-
-Rows read top down, matching how the graphical renderer paints the same crop,
-and the UI band the Rust envs encode is included as the `-` rows at the top.
-`render_grid` returns the rows as a list instead of one newline-joined string.
-
-The Rust envs also expose the full map for a birds-eye view:
-
-```python
-render_state = env.get_render_state(None)
-print(renderer.render_grid(render_state.tilemap))
-```
-
-`RustEnvJax` and `RustEnvNumpy` expose `get_render_settings()` with the map and
-window sizes (including `ui_height`), and `get_render_state(...)` with the tile
-map, agents already placed on it, and their `(x, y)` positions.
-
-To run a rust env headless in a terminal:
-
-```bash
-uv run -m mapox.rust_play --ascii --env find_return --episodes 2
-```
-
-`--map` prints the full render state instead of the focused agent’s crop, and
-`--every N` throttles printing.
-
-A complete Find & Return explorer — map building, digging, and respawn
-re-localisation — lives in the examples:
-
-```bash
-uv run python examples/find_return_agent.py
-```
 
 ## Observation & action format
 
-All environments share a unified discrete encoding defined in `mapox/envs/constants.py`.
-
-### Actions
-
-The action space is always `DiscreteActionSpec(n=7)` with IDs:
-
-| id | action |
-|---:|--------|
-| 0 | move up |
-| 1 | move right |
-| 2 | move down |
-| 3 | move left |
-| 4 | stay |
-| 5 | primary action |
-| 6 | dig action |
-
-Not every environment uses every action. Always consult `timestep.action_mask` before sampling.
-
-### Observation
-
-Each agent receives a local crop centered on itself:
-`(view_width, view_height, 4)` with channels:
-
-1. `tile_id` (terrain + agent types)
-2. `direction` (0 = none, 1..4 = cardinal direction)
-3. `team_id` (0 = none/neutral, 1 = red, 2 = blue)
-4. `health` (0..2)
+The environments share a observation id format based on the Vocab object which allows dynamic combinations in the multitask wrapper
 
 ## Environments
 
@@ -187,7 +122,3 @@ https://github.com/user-attachments/assets/3483745f-7c53-46e9-b838-3cc76b9e3ee4
   Combines multiple environments into one by concatenating their agents. Adds a per-agent `task_ids` field to the `TimeStep` via `TaskIdWrapper`.
 
 The `EnvironmentFactory` also supports a `MultiTaskConfig` that builds a multitask environment (optionally vectorizing each task) and a `VecConfig` that builds `num` copies of a single environment. Configs that reference only rust environments (`rust_*`) run entirely on the rust side: a `MultiTaskConfig` becomes the rust `MultitaskWrapper` — which is itself the vectorizer — and a `VecConfig` becomes the rust `VectorWrapper`.
-
-## Acknowledgements
-
-Rendering uses a tileset drawn for these environments by `scripts/make_tileset.py`.
