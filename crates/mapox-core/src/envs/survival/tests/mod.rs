@@ -6,6 +6,7 @@ mod clock;
 mod fire;
 mod obs;
 mod plants;
+mod season;
 mod spiders;
 mod survivor;
 mod terrain;
@@ -18,7 +19,7 @@ use super::{
     fire::Fire,
     items::Item,
     metrics::Achievement,
-    obs::CLOCK_COL,
+    obs::{CLOCK_COL, SEASON_COL},
     survivor::Survivor,
     tiles::{
         AROUND, DIRECTIONS,

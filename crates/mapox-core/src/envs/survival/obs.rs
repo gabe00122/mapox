@@ -15,18 +15,21 @@ use super::{
 
 /// Where the UI band puts things. Its top row is the stats, each a label
 /// then a three digit number: health from column 0, hunger from column 5,
-/// and the columns after that kept free for temperature. The row under it is
-/// the inventory, each slot a label then the item, hands from column 0 and
-/// backpack from column 3; then the sun or the moon at column 6.
+/// temperature from column 10. The row under it is the inventory, each slot
+/// a label then the item, hands from column 0 and backpack from column 3;
+/// then the sun or the moon at column 6, and the snowflake through winter
+/// at column 7.
 pub(super) const HEALTH_COL: usize = 0;
 pub(super) const HUNGER_COL: usize = 5;
+pub(super) const TEMPERATURE_COL: usize = 10;
 pub(super) const STAT_DIGITS: usize = 3;
 pub(super) const HANDS_COL: usize = 0;
 pub(super) const BACKPACK_COL: usize = 3;
 pub(super) const CLOCK_COL: usize = 6;
+pub(super) const SEASON_COL: usize = 7;
 /// The narrowest view the band fits in.
-pub(super) const UI_WIDTH: usize = HUNGER_COL + 1 + STAT_DIGITS;
-const _: () = assert!(CLOCK_COL < UI_WIDTH);
+pub(super) const UI_WIDTH: usize = TEMPERATURE_COL + 1 + STAT_DIGITS;
+const _: () = assert!(SEASON_COL < UI_WIDTH);
 
 const DIGIT_TILES: [SurvivalObs; 10] = [
     SurvivalObs::Digit0,
@@ -48,6 +51,7 @@ impl Survival {
         let stats_row = fov_height + UI_HEIGHT - 1;
         let slots_row = fov_height;
         let night = self.is_night(self.state.time);
+        let winter = self.is_winter(self.state.time);
         let sight = self.vision_radius(self.state.time);
         // as `fov::encode_visible` centres the window
         let half_width = self.config.view_width / 2;
@@ -82,6 +86,11 @@ impl Survival {
             for (col, label, value) in [
                 (HEALTH_COL, SurvivalObs::UiHealth, agent.health),
                 (HUNGER_COL, SurvivalObs::UiHunger, agent.hunger),
+                (
+                    TEMPERATURE_COL,
+                    SurvivalObs::UiTemperature,
+                    agent.temperature,
+                ),
             ] {
                 stats[col] = label.into();
                 write_number(
@@ -107,6 +116,9 @@ impl Survival {
                 SurvivalObs::UiDay
             }
             .into();
+            if winter {
+                slots[SEASON_COL] = SurvivalObs::UiWinter.into();
+            }
         }
 
         timestep.time.fill(self.state.time as i32);

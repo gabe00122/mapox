@@ -163,6 +163,7 @@ class RustSurvivalConfig(BaseModel):
     # stats run 0..150
     start_hunger: int = 100
     start_health: int = 150
+    start_temperature: int = 150
     # hunger drops by one every this many steps
     hunger_interval: int = 2
     # health lost each step spent at zero hunger
@@ -171,6 +172,16 @@ class RustSurvivalConfig(BaseModel):
     # least regen_threshold
     regen_threshold: int = 100
     regen_interval: int = 4
+
+    # the episode's last steps are winter: bushes and tall grass die, water
+    # freezes into walkable ice, and nothing regrows
+    winter_length: int = 300
+    # in winter, temperature drops by one every chill_interval steps spent
+    # off firelit ground; firelit ground warms by fire_warmth a step, any
+    # season; at zero temperature health drops by freeze_damage a step
+    chill_interval: int = 1
+    fire_warmth: int = 5
+    freeze_damage: int = 2
 
     berry_food: int = 20
     cooked_berry_food: int = 50

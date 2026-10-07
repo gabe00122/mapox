@@ -8,10 +8,10 @@ use crate::{
         AGENT_GENERIC_DOWN, AGENT_GENERIC_LEFT, AGENT_GENERIC_RIGHT, AGENT_GENERIC_UP,
         AGENT_SPIDER, ITEM_AXE, ITEM_BERRY, ITEM_CAMPFIRE, ITEM_CARROT, ITEM_COOKED_BERRY,
         ITEM_GRASS, ITEM_STICK, ITEM_STONE, ITEM_WOOD, TILE_BERRY_BUSH, TILE_BURIED_CARROT,
-        TILE_BUSH, TILE_DECOR_1, TILE_DECOR_2, TILE_DECOR_3, TILE_DECOR_4, TILE_DESTRUCTIBLE_WALL,
-        TILE_EMPTY, TILE_FIRE, TILE_FIRE_LOW, TILE_MASK, TILE_SPIDER_EGGS, TILE_TALL_GRASS,
-        TILE_TREE, TILE_UI, TILE_WALL, TILE_WATER, UI_BACKPACK, UI_DAY, UI_DIGITS, UI_HANDS,
-        UI_HEALTH, UI_HUNGER, UI_NIGHT,
+        TILE_BUSH, TILE_DEAD_BUSH, TILE_DECOR_1, TILE_DECOR_2, TILE_DECOR_3, TILE_DECOR_4,
+        TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_FIRE, TILE_FIRE_LOW, TILE_ICE, TILE_MASK,
+        TILE_SPIDER_EGGS, TILE_TALL_GRASS, TILE_TREE, TILE_UI, TILE_WALL, TILE_WATER, UI_BACKPACK,
+        UI_DAY, UI_DIGITS, UI_HANDS, UI_HEALTH, UI_HUNGER, UI_NIGHT, UI_TEMPERATURE, UI_WINTER,
     },
     vocab::{VocabId, Vocabulary},
     vocab_enum,
@@ -26,6 +26,7 @@ vocab_enum!(pub(super) SurvivalObs {
     TileWall => TILE_WALL,
     TileDestructibleWall => TILE_DESTRUCTIBLE_WALL,
     TileWater => TILE_WATER,
+    TileIce => TILE_ICE,
     TileDecor1 => TILE_DECOR_1,
     TileDecor2 => TILE_DECOR_2,
     TileDecor3 => TILE_DECOR_3,
@@ -33,6 +34,7 @@ vocab_enum!(pub(super) SurvivalObs {
     TileTree => TILE_TREE,
     TileBerryBush => TILE_BERRY_BUSH,
     TileBush => TILE_BUSH,
+    TileDeadBush => TILE_DEAD_BUSH,
     TileTallGrass => TILE_TALL_GRASS,
     TileBuriedCarrot => TILE_BURIED_CARROT,
     TileFire => TILE_FIRE,
@@ -58,6 +60,8 @@ vocab_enum!(pub(super) SurvivalObs {
     UiBackpack => UI_BACKPACK,
     UiDay => UI_DAY,
     UiNight => UI_NIGHT,
+    UiTemperature => UI_TEMPERATURE,
+    UiWinter => UI_WINTER,
     Digit0 => UI_DIGITS[0],
     Digit1 => UI_DIGITS[1],
     Digit2 => UI_DIGITS[2],
@@ -80,17 +84,35 @@ impl SurvivalObs {
         )
     }
 
-    /// Open ground, bare or with an item lying on it, and low plants: bushes,
-    /// tall grass and buried carrots. An agent standing on one hides it until it steps off;
-    /// trees and fires stand in the way.
+    /// Open ground, bare or with an item lying on it, low plants (bushes, tall
+    /// grass, buried carrots) and ice. An agent standing on one hides it
+    /// until it steps off; trees and fires stand in the way.
     pub(super) fn walkable(self) -> bool {
         use SurvivalObs::*;
         self.is_floor()
             || self.item().is_some()
             || matches!(
                 self,
-                TileBerryBush | TileBush | TileTallGrass | TileBuriedCarrot
+                TileBerryBush
+                    | TileBush
+                    | TileDeadBush
+                    | TileTallGrass
+                    | TileBuriedCarrot
+                    | TileIce
             )
+    }
+
+    /// What winter's cold makes of the tile, if it changes it: bushes die,
+    /// tall grass dies back to bare ground, and water freezes over. Buried
+    /// carrots keep in the ground.
+    pub(super) fn frozen(self) -> Option<SurvivalObs> {
+        use SurvivalObs::*;
+        match self {
+            TileBerryBush | TileBush => Some(TileDeadBush),
+            TileTallGrass => Some(TileEmpty),
+            TileWater => Some(TileIce),
+            _ => None,
+        }
     }
 
     pub(super) fn is_fire(self) -> bool {

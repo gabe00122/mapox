@@ -25,6 +25,9 @@ pub const UI_BACKPACK: &str = "ui/backpack";
 /// The time of day: the sun by day, the moon by night.
 pub const UI_DAY: &str = "ui/day";
 pub const UI_NIGHT: &str = "ui/night";
+pub const UI_TEMPERATURE: &str = "ui/temperature";
+/// Shown through winter.
+pub const UI_WINTER: &str = "ui/winter";
 
 pub const TILE_MASK: &str = "mask";
 pub const TILE_EMPTY: &str = "tile/empty";
@@ -48,6 +51,10 @@ pub const TILE_BUSH: &str = "tile/bush";
 pub const TILE_TALL_GRASS: &str = "tile/tall_grass";
 /// A carrot still in the ground; digging it up leaves an [`ITEM_CARROT`].
 pub const TILE_BURIED_CARROT: &str = "tile/buried_carrot";
+/// Water frozen over in winter: it can be walked on.
+pub const TILE_ICE: &str = "tile/ice";
+/// A bush killed by winter's cold.
+pub const TILE_DEAD_BUSH: &str = "tile/dead_bush";
 pub const TILE_FIRE: &str = "tile/fire";
 /// A fire burning low, near going out.
 pub const TILE_FIRE_LOW: &str = "tile/fire_low";

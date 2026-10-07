@@ -99,6 +99,10 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::ITEM_GRASS, 1, 9),
     (symbols::ITEM_CARROT, 2, 9),
     (symbols::TILE_BURIED_CARROT, 3, 9),
+    (symbols::TILE_ICE, 4, 9),
+    (symbols::TILE_DEAD_BUSH, 5, 9),
+    (symbols::UI_TEMPERATURE, 6, 9),
+    (symbols::UI_WINTER, 7, 9),
 ];
 
 pub(crate) fn resolve_art(vocab: &Vocabulary) -> Vec<(u32, u32)> {

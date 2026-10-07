@@ -24,6 +24,7 @@ pub struct SurvivalConfig {
 
     pub start_hunger: u16,
     pub start_health: u16,
+    pub start_temperature: u16,
     /// Hunger drops by one every this many steps.
     pub hunger_interval: u32,
     /// Health lost on every step spent at zero hunger.
@@ -32,6 +33,17 @@ pub struct SurvivalConfig {
     /// at least `regen_threshold`.
     pub regen_threshold: u16,
     pub regen_interval: u32,
+
+    /// The last steps of the episode are winter. When it sets in, bushes and
+    /// tall grass die and water freezes over into walkable ice, for good.
+    pub winter_length: u32,
+    /// Through winter, temperature drops by one every this many steps an
+    /// agent spends off firelit ground.
+    pub chill_interval: u32,
+    /// Temperature gained on every step spent on firelit ground, any season.
+    pub fire_warmth: u16,
+    /// Health lost on every step spent at zero temperature.
+    pub freeze_damage: u16,
 
     /// Hunger a berry restores, raw and cooked, and a carrot.
     pub berry_food: u16,
@@ -90,10 +102,15 @@ impl Default for SurvivalConfig {
             scrub_fraction: 0.25,
             start_hunger: 100,
             start_health: MAX_STAT,
+            start_temperature: MAX_STAT,
             hunger_interval: 2,
             starve_damage: 1,
             regen_threshold: 100,
             regen_interval: 4,
+            winter_length: 300,
+            chill_interval: 1,
+            fire_warmth: 5,
+            freeze_damage: 2,
             berry_food: 20,
             cooked_berry_food: 50,
             carrot_food: 35,

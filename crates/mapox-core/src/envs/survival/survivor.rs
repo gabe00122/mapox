@@ -23,6 +23,7 @@ pub(super) struct Survivor {
     pub(super) dir: u8,
     pub(super) hunger: u16,
     pub(super) health: u16,
+    pub(super) temperature: u16,
     pub(super) hands: Option<Item>,
     pub(super) backpack: Option<Item>,
     /// Achievements unlocked this life, one bit per `Achievement`.
@@ -38,6 +39,7 @@ impl Survivor {
             dir,
             hunger: config.start_hunger,
             health: config.start_health,
+            temperature: config.start_temperature,
             ..Default::default()
         }
     }
@@ -76,19 +78,32 @@ impl Survival {
         }
     }
 
-    /// Hunger drains, health follows it; returns whether the agent died,
-    /// starved or bitten.
+    /// Hunger drains, and temperature with it in winter off firelit ground;
+    /// health follows them. Returns whether the agent died, starved, frozen
+    /// or bitten.
     pub(super) fn tick_stats(&mut self, agent_id: usize) -> bool {
-        let config = &self.config;
         // counting this step, so the first drain lands after a full interval
         let steps = self.state.time as u32 + 1;
+        let winter = self.is_winter(steps as usize);
+        let config = &self.config;
         let agent = &mut self.state.agents[agent_id];
+        let warm = self.state.lit[agent.position.idx()];
 
         if steps.is_multiple_of(config.hunger_interval) {
             agent.hunger = agent.hunger.saturating_sub(1);
         }
-        if agent.hunger == 0 {
-            agent.health = agent.health.saturating_sub(config.starve_damage);
+        if warm {
+            agent.temperature = (agent.temperature + config.fire_warmth).min(MAX_STAT);
+        } else if winter && steps.is_multiple_of(config.chill_interval) {
+            agent.temperature = agent.temperature.saturating_sub(1);
+        }
+
+        let starving = agent.hunger == 0;
+        let freezing = agent.temperature == 0;
+        if starving || freezing {
+            let damage =
+                starving as u16 * config.starve_damage + freezing as u16 * config.freeze_damage;
+            agent.health = agent.health.saturating_sub(damage);
         } else if agent.health > 0
             && agent.hunger >= config.regen_threshold
             && steps.is_multiple_of(config.regen_interval)

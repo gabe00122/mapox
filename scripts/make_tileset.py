@@ -190,6 +190,11 @@ CARROT_EDGE = hex_color("5a2a08")
 STRAW = hex_color("c9b458")
 STRAW_LIGHT = hex_color("ece08e")
 
+ICE = hex_color("7fa8c8")
+ICE_LIGHT = hex_color("b8d4ea")
+ICE_DARK = hex_color("5a84a8")
+SNOW = hex_color("f2f8ff")
+
 LEATHER = hex_color("8a5a32")
 LEATHER_DARK = hex_color("5e3b1e")
 
@@ -1296,6 +1301,80 @@ BURIED_CARROT = check(
     "buried carrot",
 )
 
+# Water frozen over: the cracks and shine say it bears weight now.
+ICE_TILE = check(
+    [
+        "iiiiiiiiiiii",
+        "iIIiiiiiiiii",
+        "iIiiiiiiDiii",
+        "iiiiiiiDiiii",
+        "iiiiiiDDiiii",
+        "iiiiDDiiDiii",
+        "iiiDiiiiiDii",
+        "iiiiiiiiiiii",
+        "iiiiiiiiiIIi",
+        "iDDiiiiiiiIi",
+        "iiiDiiiiiiii",
+        "iiiiiiiiiiii",
+    ],
+    "ice",
+)
+
+# A bush killed by the cold: bare twigs.
+DEAD_BUSH = check(
+    [
+        "............",
+        "............",
+        "...t...t....",
+        "....t.t..t..",
+        ".t..T.t.t...",
+        "..t.T.TT....",
+        "...TT.T..t..",
+        ".t..TTT.t...",
+        "..T..TT.T...",
+        "...TTTTT....",
+        "....TTTT....",
+        "............",
+    ],
+    "dead bush",
+)
+
+THERMOMETER = check(
+    [
+        "............",
+        ".....OO.....",
+        "....OwwO....",
+        "....OwwO.h..",
+        "....OwwO....",
+        "....ORrO.h..",
+        "....ORrO....",
+        "...ORRRrO...",
+        "...ORRRrO...",
+        "...OOrrOO...",
+        ".....OO.....",
+        "............",
+    ],
+    "thermometer",
+)
+
+SNOWFLAKE = check(
+    [
+        "............",
+        ".....S......",
+        "...S.S.S....",
+        "....SSS.....",
+        ".S..SsS..S..",
+        "..SSsSsSS...",
+        ".S..SsS..S..",
+        "....SSS.....",
+        "...S.S.S....",
+        ".....S......",
+        "............",
+        "............",
+    ],
+    "snowflake",
+)
+
 TREE_PALETTE = {
     "O": LEAF_EDGE,
     "L": LEAF_LIGHT,
@@ -1486,6 +1565,14 @@ def survival_rows() -> list[list[Sprite]]:
                 "d": DIRT_DARK,
             },
         ),
+        stamp(blank(ICE), ICE_TILE, {"i": ICE, "I": ICE_LIGHT, "D": ICE_DARK}),
+        stamp(floor(), DEAD_BUSH, {"T": WOOD, "t": WOOD_LIGHT}),
+        stamp(
+            blank(UI),
+            THERMOMETER,
+            {"O": OUTLINE, "w": SNOW, "R": HEART, "r": HEART_DARK, "h": UI_DOT},
+        ),
+        stamp(blank(UI), SNOWFLAKE, {"S": SNOW, "s": ICE}),
     ]
     return [world, items_and_ui, plants]
 

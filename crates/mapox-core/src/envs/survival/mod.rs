@@ -19,13 +19,14 @@
 //! - [`fire`]: fires burning down, and the light they cast
 //! - [`plants`]: bushes fruiting again (carrots and tall grass don't regrow)
 //! - [`clock`]: day, dusk and night
+//! - [`season`]: summer, and winter at the end
 //! - [`spiders`]: nests and the spiders out of them
 //! - [`terrain`]: map generation
 //! - [`obs`]: what each agent sees
 //!
 //! A step runs them in a fixed order: the agents act, one at a time in a
 //! shuffled order; then the world takes its turn ([`Survival::tick_world`]);
-//! then hunger and health tick, and the dead respawn.
+//! then hunger, temperature and health tick, and the dead respawn.
 
 mod actions;
 mod clock;
@@ -35,6 +36,7 @@ mod items;
 mod metrics;
 mod obs;
 mod plants;
+mod season;
 mod spiders;
 mod survivor;
 mod terrain;
@@ -89,9 +91,10 @@ struct SurvivalState {
 /// A first pass at a survival game: agents keep themselves fed off berry
 /// bushes and carrots, and craft from what lies around.
 ///
-/// Each agent has health and hunger, 0 to [`MAX_STAT`]. Hunger drains with
-/// time; while it is high health grows back, and at zero health drains
-/// instead. An agent whose health runs out drops what it carries where it
+/// Each agent has health, hunger and temperature, 0 to [`MAX_STAT`]. Hunger
+/// drains with time; while it is high health grows back, and at zero health
+/// drains instead. Temperature rises on ground a fire lights, in any season,
+/// and in winter drops everywhere else; at zero it drains health too. An agent whose health runs out drops what it carries where it
 /// stood, is flagged terminated, and respawns with fresh stats elsewhere.
 ///
 /// Everything an agent does to the world it does to the tile in front of it,
@@ -137,18 +140,23 @@ struct SurvivalState {
 /// dirt banks on the heights, diggable walls once a tool can dig them; the
 /// map's edge is solid wall. A moisture field splits the land between into
 /// forest (trees and sticks), meadow (berry bushes, tall grass and buried
-/// carrots)
-/// and scrub (stones), so
-/// where to look for a thing is something to learn. Pockets of open ground
+/// carrots) and scrub (stones), so where to look for a thing is something to
+/// learn. Pockets of open ground
 /// too small to matter are filled in and the rest joined up by paths, so
 /// every agent can reach every other, and agents start out of each other's
 /// sight where the map allows. Spider nests go in the forest.
 ///
+/// The episode ends in winter, its last `winter_length` steps. When it sets
+/// in, every bush and all the tall grass die and the water freezes into ice
+/// that can be walked on, for the rest of the episode; berries stop growing,
+/// and the cold drains temperature away from the fires. Buried carrots keep.
+///
 /// There is no reward yet; the metrics count deaths and per-life
 /// achievements.
 ///
-/// The UI band shows health and hunger as numbers, what is in hands and
-/// backpack, and whether it is day or night (see
+/// The UI band shows health, hunger and temperature as numbers, what is in
+/// hands and backpack, whether it is day or night, and whether it is winter
+/// (see
 /// [`HEALTH_COL`](obs::HEALTH_COL) and friends for the layout).
 #[derive(Debug, Clone)]
 pub struct Survival {
@@ -184,7 +192,9 @@ impl Survival {
             "the map padding has to reach the tile in front of an agent"
         );
         assert!(
-            config.start_hunger <= MAX_STAT && config.start_health <= MAX_STAT,
+            config.start_hunger <= MAX_STAT
+                && config.start_health <= MAX_STAT
+                && config.start_temperature <= MAX_STAT,
             "starting stats run past {MAX_STAT}"
         );
         assert!(
@@ -192,7 +202,7 @@ impl Survival {
             "agents would spawn dead at zero health"
         );
         assert!(
-            config.hunger_interval > 0 && config.regen_interval > 0,
+            config.hunger_interval > 0 && config.regen_interval > 0 && config.chill_interval > 0,
             "stat intervals must be at least one step"
         );
         let share = |fraction: f64| (0.0..=1.0).contains(&fraction);
@@ -293,10 +303,12 @@ impl Survival {
         self.state.map[position.idx()] = self.state.base_map[position.idx()];
     }
 
-    /// The world's own turn, after the agents': fires burn down and picked
-    /// bushes fruit again, the light catches up with the fires lit and gone
-    /// out this step, and the spiders move by it.
+    /// The world's own turn, after the agents': winter sets in if it is
+    /// due, fires burn down and picked bushes fruit again, the light catches
+    /// up with the fires lit and gone out this step, and the spiders move by
+    /// it.
     fn tick_world(&mut self) {
+        self.tick_season(self.state.time + 1);
         self.burn_fires();
         self.regrow_bushes();
         self.light_up();
@@ -321,6 +333,7 @@ impl Environment for Survival {
         self.state.regrowing.clear();
         self.state.lit.fill(false);
         self.state.spiders.clear();
+        self.tick_season(0);
 
         self.state.agents.clear();
         self.calculate_free_positions();

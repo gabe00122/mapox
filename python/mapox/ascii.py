@@ -81,6 +81,8 @@ LEGEND: dict[str, str] = {
     "tile/bush": "b",
     "tile/tall_grass": ";",
     "tile/buried_carrot": "q",
+    "tile/ice": "_",
+    "tile/dead_bush": "d",
     "tile/fire": "&",
     "tile/fire_low": "!",
     "tile/spider_eggs": "e",
@@ -100,6 +102,8 @@ LEGEND: dict[str, str] = {
     "ui/backpack": "k",
     "ui/day": "D",
     "ui/night": "N",
+    "ui/temperature": "t",
+    "ui/winter": "W",
     # UI band numbers draw as themselves
     **{symbol: str(d) for d, symbol in enumerate(SB.UI_DIGITS)},
 }
