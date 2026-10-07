@@ -119,7 +119,7 @@ fn light_fire(env: &mut Survival, position: Position) {
 fn reset_is_reproducible_from_the_seed() {
     let config = SurvivalConfig::default();
     let actions: Vec<SurvivalAction> =
-        [MoveUp, MoveLeft, Grab, MoveDown, Use, Noop, Eat, MoveRight]
+        [MoveUp, MoveLeft, Grab, MoveDown, Use, Noop, Put, MoveRight]
             .into_iter()
             .cycle()
             .take(config.num_agents)

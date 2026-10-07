@@ -63,9 +63,14 @@ pub struct SurvivalConfig {
     pub harvest_steps: u32,
     /// Steps a fire burns before it goes out.
     pub fire_burn_steps: u32,
-    /// The last of those steps it burns low, when wood stokes it back up to
-    /// a full `fire_burn_steps`.
+    /// The last of those steps it burns low, when fuel put on it stokes it
+    /// back up.
     pub fire_low_steps: u32,
+    /// Steps of burning each fuel adds to a low fire, up to a full
+    /// `fire_burn_steps`: wood the most, then sticks, then grass.
+    pub wood_fuel: u32,
+    pub stick_fuel: u32,
+    pub grass_fuel: u32,
     /// How far a fire's light reaches, in cells.
     pub fire_light_radius: i32,
     /// Steps a torch burns held in hand before it is gone, and how far its
@@ -139,6 +144,9 @@ impl Default for SurvivalConfig {
             harvest_steps: 3,
             fire_burn_steps: 200,
             fire_low_steps: 50,
+            wood_fuel: 200,
+            stick_fuel: 60,
+            grass_fuel: 30,
             fire_light_radius: 4,
             torch_burn_steps: 100,
             torch_light_radius: 3,

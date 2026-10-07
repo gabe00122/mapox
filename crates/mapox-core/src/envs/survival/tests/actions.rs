@@ -51,10 +51,10 @@ fn an_agent_walks_over_an_item_and_hides_it() {
 }
 
 /// Grab takes the item in front into empty hands and leaves floor
-/// behind; drop puts it back down in front. Collecting counts once per
+/// behind; put sets it back down in front. Collecting counts once per
 /// life however often the agent picks the same kind of thing up.
 #[test]
-fn grab_and_drop_work_on_the_tile_in_front() {
+fn grab_and_put_work_on_the_tile_in_front() {
     let mut env = empty_env_with(SurvivalConfig {
         num_agents: 1,
         ..Default::default()
@@ -65,16 +65,16 @@ fn grab_and_drop_work_on_the_tile_in_front() {
 
     let buffers = observe(&env);
     assert!(legal(&buffers, 0, Grab));
-    assert!(!legal(&buffers, 0, Drop), "nothing in hand to drop");
+    assert!(!legal(&buffers, 0, Put), "nothing in hand to put");
 
     let mut buffers = TimeStepBuffers::new(&env);
     step(&mut env, &mut buffers, &[Grab]);
     assert_eq!(env.state.agents[0].hands, Some(Item::Stone));
     assert_eq!(env.state.map[(start + UP).idx()], TileEmpty);
     assert!(!legal(&buffers, 0, Grab), "nothing in front to grab");
-    assert!(legal(&buffers, 0, Drop));
+    assert!(legal(&buffers, 0, Put));
 
-    step(&mut env, &mut buffers, &[Drop]);
+    step(&mut env, &mut buffers, &[Put]);
     assert_eq!(env.state.agents[0].hands, None);
     assert_eq!(env.state.map[(start + UP).idx()], ItemStone);
 
@@ -82,10 +82,10 @@ fn grab_and_drop_work_on_the_tile_in_front() {
     assert_eq!(achieved(&env, Achievement::CollectStone), 1.0);
 }
 
-/// Only open ground takes a dropped item: not a tree, an agent, or
+/// Only open ground takes an item put down: not a tree, an agent, or
 /// another item.
 #[test]
-fn drop_needs_open_ground_in_front() {
+fn put_needs_open_ground_in_front() {
     let mut env = empty_env_with(SurvivalConfig {
         num_agents: 2,
         ..Default::default()
@@ -99,8 +99,8 @@ fn drop_needs_open_ground_in_front() {
     agent(&mut env, 1).hands = Some(Item::Stone);
 
     let buffers = observe(&env);
-    assert!(!legal(&buffers, 0, Drop), "a tree is in front");
-    assert!(!legal(&buffers, 1, Drop), "a stick is in front");
+    assert!(!legal(&buffers, 0, Put), "a tree is in front");
+    assert!(!legal(&buffers, 1, Put), "a stick is in front");
 }
 
 /// Two agents reaching for the same item: whoever goes first in the turn

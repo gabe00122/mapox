@@ -67,7 +67,17 @@ impl Item {
         }
     }
 
-    /// What the item cooks into, held to a fire, if it cooks.
+    /// Steps of burning the item adds to a fire, if it burns.
+    pub(super) fn fuel(self, config: &SurvivalConfig) -> Option<u32> {
+        match self {
+            Item::Wood => Some(config.wood_fuel),
+            Item::Stick => Some(config.stick_fuel),
+            Item::Grass => Some(config.grass_fuel),
+            _ => None,
+        }
+    }
+
+    /// What the item cooks into, put to a fire, if it cooks.
     pub(super) fn cooked(self) -> Option<(Item, Achievement)> {
         match self {
             Item::Berry => Some((Item::CookedBerry, Achievement::CookBerry)),
@@ -134,7 +144,7 @@ pub(super) fn recipe(a: Item, b: Item) -> Option<(Item, Achievement)> {
         .map(|&(_, _, made, achievement)| (made, achievement))
 }
 
-/// Slow work. Using a job's tool on its tile in front starts it (with empty
+/// Slow work. Using a job's tool facing its tile starts it (with empty
 /// hands for a job done by hand), and locks the agent in place, able only
 /// to wait, until its steps are done; then the tile becomes what the job
 /// leaves of it. Felling a tree and clearing a bush with an axe, and
@@ -201,31 +211,58 @@ impl Job {
     }
 }
 
-/// What using the item in hand, or bare hands, on the tile in front does.
+/// What using the item in hand, or bare hands, does: food is eaten, and a
+/// tool, or bare hands, starts its job on the tile in front.
 #[derive(Debug, Clone, Copy)]
 pub(super) enum Usage {
-    /// Wood on a fire burning low builds it back up.
-    Stoke,
-    /// A campfire set down on open ground is lit there.
-    Kindle,
-    /// Food held to a fire cooks into the item, in hand.
-    Cook(Item, Achievement),
+    /// Food in hand is eaten, restoring this much hunger.
+    Eat(u16, Achievement),
     /// A tool starts its job, or bare hands one done by hand.
     Work(Job),
 }
 
 impl Usage {
-    pub(super) fn of(held: Option<Item>, tile: SurvivalObs) -> Option<Usage> {
-        match held {
-            Some(Item::Wood) => (tile == SurvivalObs::TileFireLow).then_some(Usage::Stoke),
-            Some(Item::Campfire) => tile.is_floor().then_some(Usage::Kindle),
-            _ => match held.and_then(Item::cooked) {
-                Some((cooked, achievement)) => {
-                    tile.is_fire().then_some(Usage::Cook(cooked, achievement))
-                }
-                None => Job::of(held, tile).map(Usage::Work),
-            },
+    pub(super) fn of(
+        held: Option<Item>,
+        tile: SurvivalObs,
+        config: &SurvivalConfig,
+    ) -> Option<Usage> {
+        match held.and_then(|item| item.food(config)) {
+            Some((food, achievement)) => Some(Usage::Eat(food, achievement)),
+            None => Job::of(held, tile).map(Usage::Work),
         }
+    }
+}
+
+/// What putting the item in hand on the tile in front does.
+#[derive(Debug, Clone, Copy)]
+pub(super) enum Placement {
+    /// Most items are set down on open ground.
+    Lay(Item),
+    /// A campfire put on open ground is lit there.
+    Kindle,
+    /// Fuel put on a fire burning low builds it back up by this many steps.
+    Stoke(u32),
+    /// Raw food put to a fire cooks into the item, in hand.
+    Cook(Item, Achievement),
+}
+
+impl Placement {
+    pub(super) fn of(item: Item, tile: SurvivalObs, config: &SurvivalConfig) -> Option<Placement> {
+        if tile.is_floor() {
+            return Some(match item {
+                Item::Campfire => Placement::Kindle,
+                item => Placement::Lay(item),
+            });
+        }
+        if let Some((cooked, achievement)) = item.cooked() {
+            return tile
+                .is_fire()
+                .then_some(Placement::Cook(cooked, achievement));
+        }
+        item.fuel(config)
+            .filter(|_| tile == SurvivalObs::TileFireLow)
+            .map(Placement::Stoke)
     }
 }
 

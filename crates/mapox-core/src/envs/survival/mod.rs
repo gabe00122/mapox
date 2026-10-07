@@ -111,19 +111,21 @@ struct SurvivalState {
 /// it to pick it up.
 /// The inventory is two slots, hands and backpack. Grab takes the item in
 /// front (or the berries off a bush, or a buried carrot out of the ground)
-/// into empty hands, or into the backpack if the hands are full; drop sets
-/// the hands' item down in front, swap trades hands and backpack. Use invokes
-/// the hand's item on what is in front, or bare hands: the axe sets to
-/// felling a tree or clearing a bush, bare hands to harvesting tall grass, a
-/// campfire is set down lit, and a raw berry or carrot held to a fire cooks
-/// at once.
+/// into empty hands, or into the backpack if the hands are full; swap trades
+/// hands and backpack. Put puts the hand's item on what is in front: on open
+/// ground it is set down, except a campfire, which is lit there; a raw berry
+/// or carrot put to a fire cooks at once, back into hand; and wood, a stick
+/// or grass put on a fire burning low stokes it, wood by `wood_fuel` steps,
+/// a stick by `stick_fuel` and grass by `grass_fuel`.
+/// Use uses the hand's item, or bare hands: food is eaten, a berry or a
+/// carrot, raw or, feeding more, cooked; the axe sets to felling a tree or
+/// clearing a bush in front, bare hands to harvesting tall grass.
 /// Felling is a [`Job`](items::Job), slow work: the agent can only wait until
 /// it is done, `chop_steps` in all, and then a log lies where the tree stood.
 /// Clearing a bush, ripe, bare or dead, is another (`clear_bush_steps`), and
 /// leaves a stick; harvesting tall grass is a third, done by using empty
 /// hands on it: after `harvest_steps` a bundle of grass lies where it grew.
-/// Eat eats the food in hand: a berry or a carrot, raw or, feeding more,
-/// cooked. Carrots are buried at reset and never grow back. Combine turns the
+/// Carrots are buried at reset and never grow back. Combine turns the
 /// hand and backpack items into a new one per [`RECIPES`](items::RECIPES):
 /// stick and stone make an axe, wood and grass a campfire, stick and grass a
 /// torch. A torch in hand lights the ground `torch_light_radius` around its
@@ -136,7 +138,7 @@ struct SurvivalState {
 /// `dusk_length` steps of the day, sight shrinks step by step from the
 /// whole view down to the night's, so the dark is a warning before it is a
 /// danger. Held torches light the dark too. A fire burns `fire_burn_steps`, the last
-/// `fire_low_steps` of them low; using wood on a low fire stokes it back up.
+/// `fire_low_steps` of them low, when fuel stokes it back up.
 /// Spider nests hatch a giant spider each at nightfall, and the spiders hunt
 /// until dawn: each bites an agent next to it, or walks toward the nearest it
 /// can track, or wanders. At dawn they walk back to their nests and burrow in;

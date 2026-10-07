@@ -141,12 +141,11 @@ pub const DIG_ACTION: &str = "dig";
 
 pub const PLACE_PIPE: &str = "place_pipe";
 
-/// Inventory actions. Grab and drop work on the tile in front; use, eat and
-/// combine on the item in hand, use with what is in front and combine with
-/// the backpack's item.
+/// Inventory actions. Grab takes from the tile in front and put puts the
+/// item in hand on it; use and combine work the item in hand, use with what
+/// is in front and combine with the backpack's item.
 pub const GRAB_ACTION: &str = "grab";
-pub const DROP_ACTION: &str = "drop";
+pub const PUT_ACTION: &str = "put";
 pub const SWAP_ACTION: &str = "swap";
 pub const USE_ACTION: &str = "use";
-pub const EAT_ACTION: &str = "eat";
 pub const COMBINE_ACTION: &str = "combine";

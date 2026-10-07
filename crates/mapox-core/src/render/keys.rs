@@ -63,10 +63,9 @@ const ACTION_KEYS: &[(&str, &str, &[Key])] = &[
     (symbols::DIG_ACTION, "dig", &[Key::E]),
     (symbols::PLACE_PIPE, "place pipe", &[Key::Q]),
     (symbols::GRAB_ACTION, "grab", &[Key::G]),
-    (symbols::DROP_ACTION, "drop", &[Key::X]),
+    (symbols::PUT_ACTION, "put", &[Key::X]),
     (symbols::SWAP_ACTION, "swap hands / backpack", &[Key::Z]),
     (symbols::USE_ACTION, "use", &[Key::Space]),
-    (symbols::EAT_ACTION, "eat", &[Key::H]),
     (symbols::COMBINE_ACTION, "combine", &[Key::B]),
 ];
 

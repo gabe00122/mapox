@@ -187,7 +187,7 @@ class RustSurvivalConfig(BaseModel):
     berry_food: int = 20
     cooked_berry_food: int = 50
     # carrots are buried at reset, grabbed straight out of the ground, and
-    # never grow back; held to a fire, a berry or carrot cooks at once
+    # never grow back; put to a fire, a berry or carrot cooks at once
     carrot_food: int = 35
     cooked_carrot_food: int = 70
     bush_regrow_steps: int = 200
@@ -201,8 +201,12 @@ class RustSurvivalConfig(BaseModel):
     # included; a bundle of grass drops at the end
     harvest_steps: int = 3
     fire_burn_steps: int = 200
-    # the last of those steps it burns low; wood stokes a low fire back up
+    # the last of those steps it burns low; fuel put on a low fire adds this
+    # many steps of burning each, up to a full fire_burn_steps
     fire_low_steps: int = 50
+    wood_fuel: int = 200
+    stick_fuel: int = 60
+    grass_fuel: int = 30
     fire_light_radius: int = 4
     # a torch (stick + grass) lights torch_light_radius around whoever holds
     # it, without warming, and is gone after torch_burn_steps held

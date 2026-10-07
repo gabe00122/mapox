@@ -1,6 +1,6 @@
 use super::*;
 
-/// Eating uses the berry up and fills hunger, never past the cap. Only
+/// Using food in hand eats it, filling hunger, never past the cap. Only
 /// food can be eaten.
 #[test]
 fn eating_restores_hunger_up_to_the_cap() {
@@ -13,32 +13,32 @@ fn eating_restores_hunger_up_to_the_cap() {
     });
     let start = center(&env);
     spawn_facing(&mut env, start, 0);
-    assert!(!legal(&observe(&env), 0, Eat), "nothing in hand");
+    assert!(!legal(&observe(&env), 0, Use), "nothing in hand");
     agent(&mut env, 0).hands = Some(Item::Stick);
-    assert!(!legal(&observe(&env), 0, Eat), "a stick is no food");
+    assert!(!legal(&observe(&env), 0, Use), "a stick is no food");
     agent(&mut env, 0).hands = Some(Item::Berry);
 
     let mut buffers = TimeStepBuffers::new(&env);
-    step(&mut env, &mut buffers, &[Eat]);
+    step(&mut env, &mut buffers, &[Use]);
     assert_eq!(env.state.agents[0].hunger, 10 + env.config.berry_food);
     assert_eq!(env.state.agents[0].hands, None);
     assert_eq!(achieved(&env, Achievement::EatBerry), 1.0);
 
     agent(&mut env, 0).hunger = MAX_STAT - 5;
     agent(&mut env, 0).hands = Some(Item::CookedBerry);
-    step(&mut env, &mut buffers, &[Eat]);
+    step(&mut env, &mut buffers, &[Use]);
     assert_eq!(env.state.agents[0].hunger, MAX_STAT);
     assert_eq!(achieved(&env, Achievement::EatCookedBerry), 1.0);
 
     agent(&mut env, 0).hunger = 10;
     agent(&mut env, 0).hands = Some(Item::Carrot);
-    step(&mut env, &mut buffers, &[Eat]);
+    step(&mut env, &mut buffers, &[Use]);
     assert_eq!(env.state.agents[0].hunger, 10 + env.config.carrot_food);
     assert_eq!(achieved(&env, Achievement::EatCarrot), 1.0);
 
     agent(&mut env, 0).hunger = 10;
     agent(&mut env, 0).hands = Some(Item::CookedCarrot);
-    step(&mut env, &mut buffers, &[Eat]);
+    step(&mut env, &mut buffers, &[Use]);
     assert_eq!(
         env.state.agents[0].hunger,
         10 + env.config.cooked_carrot_food

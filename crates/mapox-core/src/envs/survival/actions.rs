@@ -2,12 +2,13 @@
 //! of the agent. [`Survival::effect`] works out what an action does, and both
 //! the action mask and `act` read it, so what a policy may pick and what
 //! `act` carries out never disagree. The rules behind it are the tiles' and
-//! items' own ([`SurvivalObs::gather`], [`Usage::of`], [`recipe`], ...).
+//! items' own ([`SurvivalObs::gather`], [`Usage::of`], [`Placement::of`],
+//! [`recipe`], ...).
 
 use crate::{
     symbols::{
-        COMBINE_ACTION, DROP_ACTION, EAT_ACTION, GRAB_ACTION, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT,
-        MOVE_UP, NOOP, SWAP_ACTION, USE_ACTION,
+        COMBINE_ACTION, GRAB_ACTION, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, NOOP, PUT_ACTION,
+        SWAP_ACTION, USE_ACTION,
     },
     timestep::TimeStepMut,
     vocab::{VocabId, Vocabulary},
@@ -16,7 +17,7 @@ use crate::{
 
 use super::{
     Survival,
-    items::{Item, Job, Usage, Work, recipe},
+    items::{Item, Job, Placement, Usage, Work, recipe},
     metrics::Achievement,
     survivor::Survivor,
     tiles::{Gather, SurvivalObs},
@@ -28,10 +29,9 @@ vocab_enum!(pub(super) SurvivalAction {
     MoveDown => MOVE_DOWN,
     MoveLeft => MOVE_LEFT,
     Grab => GRAB_ACTION,
-    Drop => DROP_ACTION,
+    Put => PUT_ACTION,
     Swap => SWAP_ACTION,
     Use => USE_ACTION,
-    Eat => EAT_ACTION,
     Combine => COMBINE_ACTION,
     Noop => NOOP,
 });
@@ -57,10 +57,9 @@ enum Effect {
     /// Turn to the `DIRECTIONS` index, stepping forward if the way is clear.
     Move(u8),
     Gather(Gather),
-    Drop(Item),
+    Put(Placement),
     Swap,
     Use(Usage),
-    Eat(u16, Achievement),
     Combine(Item, Achievement),
     Wait,
 }
@@ -81,13 +80,12 @@ impl Survival {
                 let room = agent.hands.is_none() || agent.backpack.is_none();
                 ahead.gather().filter(|_| room).map(Effect::Gather)
             }
-            Drop => agent.hands.filter(|_| ahead.is_floor()).map(Effect::Drop),
-            Swap => (agent.hands.is_some() || agent.backpack.is_some()).then_some(Effect::Swap),
-            Use => Usage::of(agent.hands, ahead).map(Effect::Use),
-            Eat => agent
+            Put => agent
                 .hands
-                .and_then(|item| item.food(&self.config))
-                .map(|(food, achievement)| Effect::Eat(food, achievement)),
+                .and_then(|item| Placement::of(item, ahead, &self.config))
+                .map(Effect::Put),
+            Swap => (agent.hands.is_some() || agent.backpack.is_some()).then_some(Effect::Swap),
+            Use => Usage::of(agent.hands, ahead, &self.config).map(Effect::Use),
             Combine => agent
                 .hands
                 .zip(agent.backpack)
@@ -146,31 +144,31 @@ impl Survival {
                     agent.unlock(&mut self.metrics, achievement);
                 }
             }
-            Effect::Drop(item) => {
+            Effect::Put(Placement::Lay(item)) => {
                 agent.hands = None;
                 self.lay(ahead, item);
             }
-            Effect::Swap => std::mem::swap(&mut agent.hands, &mut agent.backpack),
-            Effect::Use(Usage::Stoke) => {
-                self.stoke(ahead);
-                agent.hands = None;
-                agent.unlock(&mut self.metrics, Achievement::RefuelFire);
-            }
-            Effect::Use(Usage::Kindle) => {
+            Effect::Put(Placement::Kindle) => {
                 self.kindle(ahead);
                 agent.hands = None;
                 agent.unlock(&mut self.metrics, Achievement::PlaceFire);
             }
-            Effect::Use(Usage::Cook(cooked, achievement)) => {
+            Effect::Put(Placement::Stoke(fuel)) => {
+                self.stoke(ahead, fuel);
+                agent.hands = None;
+                agent.unlock(&mut self.metrics, Achievement::RefuelFire);
+            }
+            Effect::Put(Placement::Cook(cooked, achievement)) => {
                 agent.hands = Some(cooked);
                 agent.unlock(&mut self.metrics, achievement);
             }
-            Effect::Use(Usage::Work(job)) => self.start(&mut agent, job),
-            Effect::Eat(food, achievement) => {
+            Effect::Swap => std::mem::swap(&mut agent.hands, &mut agent.backpack),
+            Effect::Use(Usage::Eat(food, achievement)) => {
                 agent.eat(food);
                 agent.hands = None;
                 agent.unlock(&mut self.metrics, achievement);
             }
+            Effect::Use(Usage::Work(job)) => self.start(&mut agent, job),
             Effect::Combine(made, achievement) => {
                 agent.hands = Some(made);
                 agent.backpack = None;

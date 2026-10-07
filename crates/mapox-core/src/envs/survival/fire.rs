@@ -1,4 +1,4 @@
-//! Fires: lit from a campfire, burning down, stoked back up with wood, and
+//! Fires: lit from a campfire, burning down, stoked back up with fuel, and
 //! the light they cast; and torches, burning down in hand and lighting the
 //! ground around whoever holds them. Light is the shared `lit` layer other
 //! systems read: agents see lit ground by night, and spiders keep off it.
@@ -32,16 +32,18 @@ impl Survival {
         });
     }
 
-    /// Stokes the fire on `position` back up to a full `fire_burn_steps`.
-    pub(super) fn stoke(&mut self, position: Position) {
-        let burn_left = self.config.fire_burn_steps;
+    /// Stokes the fire on `position` with `fuel` more steps of burning, up
+    /// to a full `fire_burn_steps`.
+    pub(super) fn stoke(&mut self, position: Position, fuel: u32) {
+        let full = self.config.fire_burn_steps;
         let fire = self
             .state
             .fires
             .iter_mut()
             .find(|fire| fire.position == position)
             .expect("only a burning fire can be stoked");
-        fire.burn_left = burn_left;
+        fire.burn_left = (fire.burn_left + fuel).min(full);
+        let burn_left = fire.burn_left;
         self.set_ground(position, self.fire_tile(burn_left));
     }
 
