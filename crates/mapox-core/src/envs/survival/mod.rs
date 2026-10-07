@@ -55,19 +55,11 @@ enum Slot {
 type ObjectCell = [Option<EntityId>; 2];
 
 /// Anything that sits on the objects layer. Only agents for now.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 struct Entity {
     position: Position,
-}
-
-impl Entity {
-    fn tile(&self) -> SurvivalObs {
-        SurvivalObs::AgentGeneric
-    }
-
-    fn slot(&self) -> Slot {
-        Slot::Upper
-    }
+    slot: Slot,
+    tile: SurvivalObs, // what the entity draws as
 }
 
 #[derive(Debug, Clone)]
@@ -90,7 +82,7 @@ impl SurvivalState {
     }
 
     fn spawn(&mut self, entity: Entity) -> EntityId {
-        let (position, slot) = (entity.position, entity.slot());
+        let (position, slot) = (entity.position, entity.slot);
         let id = self.entities.insert(entity);
         self.objects[position.idx()][slot as usize] = Some(id);
         id
@@ -99,7 +91,7 @@ impl SurvivalState {
     /// Move an entity, keeping the objects layer in sync.
     fn move_entity(&mut self, id: EntityId, target: Position) {
         let entity = &mut self.entities[id];
-        let slot = entity.slot() as usize;
+        let slot = entity.slot as usize;
         self.objects[entity.position.idx()][slot] = None;
         entity.position = target;
         self.objects[target.idx()][slot] = Some(id);
@@ -260,7 +252,7 @@ impl Survival {
         state.render_map.assign(&state.tiles);
         for (dst, cell) in state.render_map.iter_mut().zip(&state.objects) {
             if let Some(id) = cell[Slot::Upper as usize].or(cell[Slot::Lower as usize]) {
-                *dst = state.entities[id].tile();
+                *dst = state.entities[id].tile;
             }
         }
     }
@@ -333,7 +325,11 @@ impl Environment for Survival {
 
         for _ in 0..self.num_agents() {
             let position = self.state.free_positions.pop().unwrap();
-            let id = self.state.spawn(Entity { position });
+            let id = self.state.spawn(Entity {
+                position,
+                slot: Slot::Upper,
+                tile: SurvivalObs::AgentGeneric,
+            });
             self.state.agents.push(id);
         }
 
@@ -357,7 +353,7 @@ impl Environment for Survival {
                 // the render map is stale mid-step, so check the layers directly
                 let id = self.state.agents[agent_id];
                 let target = self.state.entities[id].position + action.direction();
-                let slot = self.state.entities[id].slot() as usize;
+                let slot = self.state.entities[id].slot as usize;
                 let occupied = self.state.objects[target.idx()][slot].is_some();
                 if !occupied && !self.state.tiles[target.idx()].move_blocked() {
                     self.state.move_entity(id, target);
