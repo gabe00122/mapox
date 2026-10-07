@@ -15,6 +15,7 @@ from mapox.envs.rust_env_numpy import (
     RustPacmanConfig,
     RustScoutsConfig,
     RustSnakeConfig,
+    RustSurvivalConfig,
     RustVideoConfig,
 )
 from mapox.timestep import TimeStep
@@ -116,6 +117,7 @@ CONFIGS = {
     "scouts": RustScoutsConfig(),
     "snake": RustSnakeConfig(),
     "pacman": RustPacmanConfig(),
+    "survival": RustSurvivalConfig(),
 }
 
 

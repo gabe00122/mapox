@@ -9,6 +9,7 @@ use crate::{
         pacman::{Pacman, PacmanConfig},
         scouts::{Scouts, ScoutsConfig},
         snake::{Snake, SnakeConfig},
+        survival::{Survival, SurvivalConfig},
     },
     error::MapoxResult,
     wrappers::{multitask::MultitaskWrapper, vector::VectorWrapper},
@@ -21,6 +22,7 @@ pub enum EnvConfig {
     RustScouts(Box<ScoutsConfig>),
     RustSnake(Box<SnakeConfig>),
     RustPacman(Box<PacmanConfig>),
+    RustSurvival(Box<SurvivalConfig>),
     #[cfg(not(target_arch = "wasm32"))]
     RustVideo(Box<VideoConfig>),
     RustVec {
@@ -45,6 +47,7 @@ pub fn make(config: &EnvConfig, length: usize) -> MapoxResult<Box<dyn Environmen
         EnvConfig::RustScouts(config) => Ok(Box::new(Scouts::new(config, length))),
         EnvConfig::RustSnake(config) => Ok(Box::new(Snake::new(config, length))),
         EnvConfig::RustPacman(config) => Ok(Box::new(Pacman::new(config, length))),
+        EnvConfig::RustSurvival(config) => Ok(Box::new(Survival::new(config, length))),
         #[cfg(not(target_arch = "wasm32"))]
         EnvConfig::RustVideo(config) => Ok(Box::new(VideoWrapper::new(config, length)?)),
         EnvConfig::RustVec { num, env } => Ok(Box::new(VectorWrapper::new(*num, env, length)?)),

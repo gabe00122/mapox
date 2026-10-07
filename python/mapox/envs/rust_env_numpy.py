@@ -138,6 +138,20 @@ class RustPacmanConfig(BaseModel):
     clear_reward: float = 0.0
 
 
+class RustSurvivalConfig(BaseModel):
+    """An empty walled room: no goal and no reward yet."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    env_type: Literal["rust_survival"] = "rust_survival"
+
+    num_agents: int = 8
+
+    width: int = 40
+    height: int = 40
+    view_width: int = 15
+    view_height: int = 15
+
+
 class RustVecConfig(BaseModel):
     """Vectorized copies of one rust env; the rust side steps them in parallel."""
 
@@ -175,6 +189,7 @@ type RustEnvConfig = (
     | RustScoutsConfig
     | RustSnakeConfig
     | RustPacmanConfig
+    | RustSurvivalConfig
     | RustVideoConfig
     | RustVecConfig
     | RustMultiConfig
