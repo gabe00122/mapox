@@ -51,9 +51,9 @@ struct SurvivalState {
     agent_order: Vec<usize>, // agent turn order
     time: usize,
 
-    base_map: Array2<SurvivalObs>, // the bottom layer of the map without agents
-    map: Array2<SurvivalObs>,      // the base map plus the agents
-    free_positions: Vec<Position>, // these are used to calculate spawn positions
+    map: Array2<SurvivalObs>,        // the base map of tiles without agents
+    render_map: Array2<SurvivalObs>, // the render target for the agent views
+    free_positions: Vec<Position>,   // these are used to calculate spawn positions
 }
 
 // find_return's terrain tiles; the room only uses walls and floor so far
@@ -163,12 +163,12 @@ impl Survival {
             state: SurvivalState {
                 agents: Vec::with_capacity(config.num_agents),
                 agent_order: (0..config.num_agents).collect(),
-                base_map: Array2::from_elem(
+                free_positions: Vec::new(),
+                map: Array2::from_elem((width as usize, height as usize), SurvivalObs::TileEmpty),
+                render_map: Array2::from_elem(
                     (width as usize, height as usize),
                     SurvivalObs::TileEmpty,
                 ),
-                free_positions: Vec::new(),
-                map: Array2::from_elem((width as usize, height as usize), SurvivalObs::TileEmpty),
                 rngs: SmallRng::seed_from_u64(0),
                 time: 0,
             },
@@ -201,6 +201,14 @@ impl Survival {
         self.state.free_positions.shuffle(&mut self.state.rngs);
     }
 
+    /// Rebuild the render map from scratch: terrain first, then agents on top.
+    fn render(&mut self) {
+        self.state.render_map.assign(&self.state.map);
+        for agent in &self.state.agents {
+            self.state.render_map[agent.position.idx()] = SurvivalObs::AgentGeneric;
+        }
+    }
+
     fn encode_observations(&self, timestep: &mut TimeStepMut) {
         let fov_height = self.config.view_height as usize;
 
@@ -208,7 +216,7 @@ impl Survival {
             // wall padding keeps the view window inside the map
             let mut view = timestep.obs.slice_mut(s![agent_id, .., ..fov_height, 0]);
             fov::encode_visible(
-                &self.state.map,
+                &self.state.render_map,
                 agent.position,
                 &mut view,
                 SurvivalObs::Mask,
@@ -230,7 +238,8 @@ impl Survival {
 
             for &action in SurvivalAction::TABLE {
                 mask[action as usize] = !action.is_move()
-                    || !self.state.map[(agent.position + action.direction()).idx()].move_blocked();
+                    || !self.state.render_map[(agent.position + action.direction()).idx()]
+                        .move_blocked();
             }
         }
     }
@@ -243,23 +252,20 @@ impl Environment for Survival {
         self.state.time = 0;
 
         let dim = (self.width as usize, self.height as usize);
-        if self.state.base_map.dim() != dim {
+        if self.state.map.dim() != dim {
             self.state.map = Array2::from_elem(dim, SurvivalObs::TileEmpty);
-            self.state.base_map = Array2::from_elem(dim, SurvivalObs::TileEmpty);
+            self.state.render_map = Array2::from_elem(dim, SurvivalObs::TileEmpty);
         }
 
         // an empty room: wall padding around bare floor
-        self.state.base_map.fill(SurvivalObs::TileWall);
+        self.state.map.fill(SurvivalObs::TileWall);
         self.state
-            .base_map
+            .map
             .slice_mut(s![
                 self.pad_width as usize..(self.width - self.pad_width) as usize,
                 self.pad_height as usize..(self.height - self.pad_height) as usize,
             ])
             .fill(SurvivalObs::TileEmpty);
-
-        // Base map finished
-        self.state.map.assign(&self.state.base_map);
 
         self.state.agents.clear();
         self.calculate_free_positions();
@@ -267,11 +273,11 @@ impl Environment for Survival {
         for _ in 0..self.num_agents() {
             let position = self.state.free_positions.pop().unwrap();
             self.state.agents.push(SurvivalAgent { position });
-            self.state.map[position.idx()] = SurvivalObs::AgentGeneric;
         }
 
         timestep.reward.fill(0.0);
         timestep.last_action.fill(0);
+        self.render();
         self.encode_observations(timestep);
         self.encode_action_mask(timestep);
     }
@@ -280,28 +286,22 @@ impl Environment for Survival {
         self.state.agent_order.shuffle(&mut self.state.rngs);
 
         for &agent_id in &self.state.agent_order {
-            let (agent, map, base_map) = (
-                &mut self.state.agents[agent_id],
-                &mut self.state.map,
-                &self.state.base_map,
-            );
-
             timestep.last_action[agent_id] = actions[agent_id];
             timestep.reward[agent_id] = 0.0;
 
             let action = SurvivalAction::from_id(actions[agent_id]);
             if action.is_move() {
-                let target = agent.position + action.direction();
-                if !map[target.idx()].move_blocked() {
-                    // unpaint the agent because it's moving
-                    map[agent.position.idx()] = base_map[agent.position.idx()];
-                    agent.position = target;
-                    map[agent.position.idx()] = SurvivalObs::AgentGeneric;
+                // the render map is stale mid-step, so check agents directly
+                let target = self.state.agents[agent_id].position + action.direction();
+                let occupied = self.state.agents.iter().any(|a| a.position == target);
+                if !occupied && !self.state.map[target.idx()].move_blocked() {
+                    self.state.agents[agent_id].position = target;
                 }
             }
         }
 
         self.state.time += 1;
+        self.render();
         self.encode_observations(timestep);
         self.encode_action_mask(timestep);
     }
@@ -347,7 +347,7 @@ impl Environment for Survival {
         if tilemap.dim() != dim {
             *tilemap = Array2::zeros(dim);
         }
-        let interior = self.state.map.slice(s![
+        let interior = self.state.render_map.slice(s![
             self.pad_width as usize..(self.width - self.pad_width) as usize,
             self.pad_height as usize..(self.height - self.pad_height) as usize,
         ]);
