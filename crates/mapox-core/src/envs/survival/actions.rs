@@ -1,6 +1,8 @@
 //! What agents can do, and doing it. Every action works on the tile in front
-//! of the agent; the action mask is [`Survival::can`], so what a policy may
-//! pick and what `act` carries out never disagree.
+//! of the agent. [`Survival::effect`] works out what an action does, and both
+//! the action mask and `act` read it, so what a policy may pick and what
+//! `act` carries out never disagree. The rules behind it are the tiles' and
+//! items' own ([`SurvivalObs::gather`], [`Usage::of`], [`recipe`], ...).
 
 use crate::{
     symbols::{
@@ -14,10 +16,10 @@ use crate::{
 
 use super::{
     Survival,
-    items::{Item, Job, Work, recipe},
+    items::{Item, Job, Usage, Work, recipe},
     metrics::Achievement,
     survivor::Survivor,
-    tiles::SurvivalObs,
+    tiles::{Gather, SurvivalObs},
 };
 
 vocab_enum!(pub(super) SurvivalAction {
@@ -48,39 +50,50 @@ impl SurvivalAction {
     }
 }
 
+/// What an action comes to for an agent, worked out in full before any of
+/// it is carried out.
+#[derive(Debug, Clone, Copy)]
+enum Effect {
+    /// Turn to the `DIRECTIONS` index, stepping forward if the way is clear.
+    Move(u8),
+    Gather(Gather),
+    Drop(Item),
+    Swap,
+    Use(Usage),
+    Eat(u16, Achievement),
+    Combine(Item, Achievement),
+    Wait,
+}
+
 impl Survival {
-    fn can(&self, agent: &Survivor, action: SurvivalAction) -> bool {
+    /// What `action` does for `agent` right now, or `None` if it is not
+    /// legal: the mask and [`Survival::act`] both read it, so they agree.
+    fn effect(&self, agent: &Survivor, action: SurvivalAction) -> Option<Effect> {
         use SurvivalAction::*;
         if agent.work.is_some() {
-            return action == Noop;
+            // a busy agent can only wait its job out
+            return (action == Noop).then_some(Effect::Wait);
         }
         let ahead = self.state.map[agent.ahead().idx()];
         match action {
-            MoveUp | MoveRight | MoveDown | MoveLeft | Noop => true,
+            MoveUp | MoveRight | MoveDown | MoveLeft => action.heading().map(Effect::Move),
             Grab => {
-                (agent.hands.is_none() || agent.backpack.is_none())
-                    && (ahead.item().is_some()
-                        || matches!(
-                            ahead,
-                            SurvivalObs::TileBerryBush | SurvivalObs::TileBuriedCarrot
-                        ))
+                let room = agent.hands.is_none() || agent.backpack.is_none();
+                ahead.gather().filter(|_| room).map(Effect::Gather)
             }
-            Drop => agent.hands.is_some() && ahead.is_floor(),
-            Swap => agent.hands.is_some() || agent.backpack.is_some(),
-            Use => match agent.hands {
-                Some(Item::Wood) => ahead == SurvivalObs::TileFireLow,
-                Some(Item::Campfire) => ahead.is_floor(),
-                Some(food) if food.cooked().is_some() => ahead.is_fire(),
-                // a tool's job, or with empty hands one done by hand
-                tool => Job::of(tool, ahead).is_some(),
-            },
+            Drop => agent.hands.filter(|_| ahead.is_floor()).map(Effect::Drop),
+            Swap => (agent.hands.is_some() || agent.backpack.is_some()).then_some(Effect::Swap),
+            Use => Usage::of(agent.hands, ahead).map(Effect::Use),
             Eat => agent
                 .hands
-                .is_some_and(|item| item.food(&self.config).is_some()),
-            Combine => match (agent.hands, agent.backpack) {
-                (Some(a), Some(b)) => recipe(a, b).is_some(),
-                _ => false,
-            },
+                .and_then(|item| item.food(&self.config))
+                .map(|(food, achievement)| Effect::Eat(food, achievement)),
+            Combine => agent
+                .hands
+                .zip(agent.backpack)
+                .and_then(|(a, b)| recipe(a, b))
+                .map(|(made, achievement)| Effect::Combine(made, achievement)),
+            Noop => Some(Effect::Wait),
         }
     }
 
@@ -95,17 +108,14 @@ impl Survival {
             self.state.agents[agent_id] = agent;
             return;
         }
-        if !self.can(&agent, action) {
+        let Some(effect) = self.effect(&agent, action) else {
             return;
-        }
+        };
 
         let ahead = agent.ahead();
-        match action {
-            SurvivalAction::MoveUp
-            | SurvivalAction::MoveRight
-            | SurvivalAction::MoveDown
-            | SurvivalAction::MoveLeft => {
-                agent.dir = action.heading().expect("moves have a heading");
+        match effect {
+            Effect::Move(dir) => {
+                agent.dir = dir;
                 let target = agent.ahead();
                 if self.state.map[target.idx()].walkable() {
                     self.remove_creature(agent.position);
@@ -113,17 +123,17 @@ impl Survival {
                 }
                 self.place_creature(agent.position, agent.tile());
             }
-            SurvivalAction::Grab => {
-                let item = match self.state.map[ahead.idx()] {
-                    SurvivalObs::TileBerryBush => {
+            Effect::Gather(gather) => {
+                let item = match gather {
+                    Gather::PickBerry => {
                         self.pick_bush(ahead);
                         Item::Berry
                     }
-                    SurvivalObs::TileBuriedCarrot => {
+                    Gather::PullCarrot => {
                         self.set_ground(ahead, SurvivalObs::TileEmpty);
                         Item::Carrot
                     }
-                    _ => self.take(ahead),
+                    Gather::TakeUp => self.take(ahead),
                 };
                 // full hands spill over into an empty backpack
                 let slot = if agent.hands.is_none() {
@@ -136,56 +146,37 @@ impl Survival {
                     agent.unlock(&mut self.metrics, achievement);
                 }
             }
-            SurvivalAction::Drop => {
-                let item = agent
-                    .hands
-                    .take()
-                    .expect("drop is legal only holding something");
+            Effect::Drop(item) => {
+                agent.hands = None;
                 self.lay(ahead, item);
             }
-            SurvivalAction::Swap => std::mem::swap(&mut agent.hands, &mut agent.backpack),
-            SurvivalAction::Use => match agent.hands {
-                Some(Item::Wood) => {
-                    self.stoke(ahead);
-                    agent.hands = None;
-                    agent.unlock(&mut self.metrics, Achievement::RefuelFire);
-                }
-                Some(Item::Campfire) => {
-                    self.kindle(ahead);
-                    agent.hands = None;
-                    agent.unlock(&mut self.metrics, Achievement::PlaceFire);
-                }
-                Some(food) if food.cooked().is_some() => {
-                    let (cooked, achievement) = food.cooked().expect("matched on cooking");
-                    agent.hands = Some(cooked);
-                    agent.unlock(&mut self.metrics, achievement);
-                }
-                tool => {
-                    let job = Job::of(tool, self.state.map[ahead.idx()])
-                        .expect("use is legal only where there is a job to do");
-                    self.start(&mut agent, job);
-                }
-            },
-            SurvivalAction::Eat => {
-                let (food, achievement) = agent
-                    .hands
-                    .and_then(|item| item.food(&self.config))
-                    .expect("eat is legal only holding food");
+            Effect::Swap => std::mem::swap(&mut agent.hands, &mut agent.backpack),
+            Effect::Use(Usage::Stoke) => {
+                self.stoke(ahead);
+                agent.hands = None;
+                agent.unlock(&mut self.metrics, Achievement::RefuelFire);
+            }
+            Effect::Use(Usage::Kindle) => {
+                self.kindle(ahead);
+                agent.hands = None;
+                agent.unlock(&mut self.metrics, Achievement::PlaceFire);
+            }
+            Effect::Use(Usage::Cook(cooked, achievement)) => {
+                agent.hands = Some(cooked);
+                agent.unlock(&mut self.metrics, achievement);
+            }
+            Effect::Use(Usage::Work(job)) => self.start(&mut agent, job),
+            Effect::Eat(food, achievement) => {
                 agent.eat(food);
                 agent.hands = None;
                 agent.unlock(&mut self.metrics, achievement);
             }
-            SurvivalAction::Combine => {
-                let (hands, backpack) = (agent.hands, agent.backpack);
-                let (made, achievement) = hands
-                    .zip(backpack)
-                    .and_then(|(a, b)| recipe(a, b))
-                    .expect("combine is legal only for a recipe");
+            Effect::Combine(made, achievement) => {
                 agent.hands = Some(made);
                 agent.backpack = None;
                 agent.unlock(&mut self.metrics, achievement);
             }
-            SurvivalAction::Noop => {}
+            Effect::Wait => {}
         }
 
         self.state.agents[agent_id] = agent;
@@ -226,7 +217,7 @@ impl Survival {
         for (agent_id, agent) in self.state.agents.iter().enumerate() {
             let mut mask = timestep.action_mask.row_mut(agent_id);
             for &action in SurvivalAction::TABLE {
-                mask[action as usize] = self.can(agent, action);
+                mask[action as usize] = self.effect(agent, action).is_some();
             }
         }
     }

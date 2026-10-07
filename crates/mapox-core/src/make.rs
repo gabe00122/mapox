@@ -116,7 +116,7 @@ mod tests {
     fn a_survival_config_dump_parses() {
         let json = r#"{"env_type":"rust_survival","num_agents":8,"width":80,"height":70,
             "view_width":15,"view_height":15,"water_fraction":0.1,"rock_fraction":0.15,
-            "forest_fraction":0.35,"scrub_fraction":0.25,"start_hunger":100,
+            "forest_fraction":0.25,"scrub_fraction":0.25,"start_hunger":100,
             "start_health":150,"start_temperature":150,"hunger_interval":2,
             "starve_damage":1,"regen_threshold":100,"regen_interval":4,"winter_length":300,
             "chill_interval":1,"fire_warmth":5,"freeze_damage":2,"berry_food":20,

@@ -157,7 +157,7 @@ class RustSurvivalConfig(BaseModel):
     # shares of the land between that are forest (trees, sticks) and scrub
     # (stones): its wettest and driest ground. The rest is meadow (berries,
     # tall grass, buried carrots).
-    forest_fraction: float = 0.35
+    forest_fraction: float = 0.25
     scrub_fraction: float = 0.25
 
     # stats run 0..150

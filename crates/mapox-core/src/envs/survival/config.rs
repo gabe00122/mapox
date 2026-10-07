@@ -103,7 +103,7 @@ impl Default for SurvivalConfig {
             view_height: 15,
             water_fraction: 0.10,
             rock_fraction: 0.15,
-            forest_fraction: 0.35,
+            forest_fraction: 0.25,
             scrub_fraction: 0.25,
             start_hunger: 100,
             start_health: MAX_STAT,

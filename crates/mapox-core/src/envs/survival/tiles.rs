@@ -118,6 +118,17 @@ impl SurvivalObs {
         }
     }
 
+    /// What grabbing at the tile gets, if anything.
+    pub(super) fn gather(self) -> Option<Gather> {
+        use SurvivalObs::*;
+        match self {
+            TileBerryBush => Some(Gather::PickBerry),
+            TileBuriedCarrot => Some(Gather::PullCarrot),
+            tile if tile.item().is_some() => Some(Gather::TakeUp),
+            _ => None,
+        }
+    }
+
     pub(super) fn is_fire(self) -> bool {
         matches!(self, SurvivalObs::TileFire | SurvivalObs::TileFireLow)
     }
@@ -154,6 +165,17 @@ impl SurvivalObs {
             _ => return None,
         })
     }
+}
+
+/// Where a grab gets its item from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Gather {
+    /// A berry off a ripe bush, leaving it bare to fruit again.
+    PickBerry,
+    /// A buried carrot, pulled out of the ground for good.
+    PullCarrot,
+    /// The item lying there.
+    TakeUp,
 }
 
 /// The agent's tile by facing, in `DIRECTIONS` order.

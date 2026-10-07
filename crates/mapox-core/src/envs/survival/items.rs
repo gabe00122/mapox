@@ -201,6 +201,34 @@ impl Job {
     }
 }
 
+/// What using the item in hand, or bare hands, on the tile in front does.
+#[derive(Debug, Clone, Copy)]
+pub(super) enum Usage {
+    /// Wood on a fire burning low builds it back up.
+    Stoke,
+    /// A campfire set down on open ground is lit there.
+    Kindle,
+    /// Food held to a fire cooks into the item, in hand.
+    Cook(Item, Achievement),
+    /// A tool starts its job, or bare hands one done by hand.
+    Work(Job),
+}
+
+impl Usage {
+    pub(super) fn of(held: Option<Item>, tile: SurvivalObs) -> Option<Usage> {
+        match held {
+            Some(Item::Wood) => (tile == SurvivalObs::TileFireLow).then_some(Usage::Stoke),
+            Some(Item::Campfire) => tile.is_floor().then_some(Usage::Kindle),
+            _ => match held.and_then(Item::cooked) {
+                Some((cooked, achievement)) => {
+                    tile.is_fire().then_some(Usage::Cook(cooked, achievement))
+                }
+                None => Job::of(held, tile).map(Usage::Work),
+            },
+        }
+    }
+}
+
 /// A job under way.
 #[derive(Debug, Clone, Copy)]
 pub(super) struct Work {
