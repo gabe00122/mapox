@@ -111,3 +111,63 @@ fn starving_agents_die_drop_their_things_and_respawn() {
     assert_eq!(metrics["deaths"], 1.0);
     assert_eq!(metrics["achievements"]["make_axe"], 0.0);
 }
+
+/// A well agent earns the alive reward and nothing more; each stat short of
+/// where it should be costs its penalty, in proportion to the shortfall.
+#[test]
+fn reward_pays_for_living_less_what_is_missing() {
+    let mut env = empty_env_with(SurvivalConfig {
+        num_agents: 2,
+        // no stat moves this step, so the sums are the setup's
+        hunger_interval: 1000,
+        regen_threshold: MAX_STAT,
+        freeze_damage: 0,
+        alive_reward: 1.0,
+        health_penalty: 0.1,
+        hunger_penalty: 0.2,
+        hunger_threshold: 40,
+        temperature_penalty: 0.4,
+        temperature_threshold: 60,
+        ..Default::default()
+    });
+    let start = center(&env);
+    spawn_facing(&mut env, start, 0);
+    spawn_facing(&mut env, start + RIGHT * 4, 0);
+    let unwell = agent(&mut env, 1);
+    unwell.health = MAX_STAT / 2;
+    unwell.hunger = 10;
+    unwell.temperature = 0;
+
+    let mut buffers = TimeStepBuffers::new(&env);
+    step(&mut env, &mut buffers, &[Noop, Noop]);
+    let unwell_reward = 1.0 - 0.1 * 0.5 - 0.2 * 0.75 - 0.4;
+    assert_eq!(buffers.reward[0], 1.0);
+    assert!((buffers.reward[1] - unwell_reward).abs() < 1e-6);
+
+    let metrics = env.consume_metrics();
+    let mean = (1.0 + f64::from(unwell_reward)) / 2.0;
+    assert!((metrics["reward"].as_f64().unwrap() - mean).abs() < 1e-6);
+}
+
+/// The step an agent dies earns nothing for living and the full health
+/// penalty, judged on the stats it died with rather than its respawn's.
+#[test]
+fn dying_forfeits_the_alive_reward() {
+    let mut env = empty_env_with(SurvivalConfig {
+        num_agents: 1,
+        start_hunger: 0,
+        start_health: 1,
+        alive_reward: 1.0,
+        health_penalty: 0.5,
+        hunger_penalty: 0.25,
+        temperature_penalty: 0.0,
+        ..Default::default()
+    });
+    let start = center(&env);
+    spawn_facing(&mut env, start, 0);
+
+    let mut buffers = TimeStepBuffers::new(&env);
+    step(&mut env, &mut buffers, &[Noop]);
+    assert!(buffers.terminated[0]);
+    assert_eq!(buffers.reward[0], -0.75);
+}

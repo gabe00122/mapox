@@ -140,7 +140,8 @@ class RustPacmanConfig(BaseModel):
 
 class RustSurvivalConfig(BaseModel):
     """A first pass at a survival game: health, hunger, a two-slot inventory
-    and crafting. No reward yet; see the rust env's docs for the rules."""
+    and crafting, rewarded for staying alive and well; see the rust env's
+    docs for the rules."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
     env_type: Literal["rust_survival"] = "rust_survival"
@@ -222,6 +223,17 @@ class RustSurvivalConfig(BaseModel):
     spider_damage: int = 15
     # how far, walking, a spider tracks an agent
     spider_hunt_radius: int = 12
+
+    # paid every step an agent ends alive
+    alive_reward: float = 0.01
+    # taken every step, each scaled by the stat's shortfall: health_penalty in
+    # full at zero health and none at 150; hunger_penalty in full at zero
+    # hunger and none from hunger_threshold up; temperature likewise
+    health_penalty: float = 0.01
+    hunger_penalty: float = 0.01
+    hunger_threshold: int = 50
+    temperature_penalty: float = 0.01
+    temperature_threshold: int = 50
 
 
 class RustVecConfig(BaseModel):

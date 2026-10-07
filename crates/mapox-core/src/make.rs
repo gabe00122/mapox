@@ -125,7 +125,9 @@ mod tests {
             "fire_burn_steps":200,"fire_low_steps":50,"fire_light_radius":4,
             "torch_burn_steps":100,"torch_light_radius":3,"day_length":200,"night_length":100,
             "night_vision_radius":2,"dusk_length":50,"num_spider_eggs":4,"spider_damage":15,
-            "spider_hunt_radius":12}"#;
+            "spider_hunt_radius":12,"alive_reward":0.01,"health_penalty":0.01,
+            "hunger_penalty":0.01,"hunger_threshold":50,"temperature_penalty":0.01,
+            "temperature_threshold":50}"#;
 
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();
         assert_eq!(parsed, EnvConfig::RustSurvival(Box::default()));

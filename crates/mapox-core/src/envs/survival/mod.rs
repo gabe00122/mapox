@@ -27,7 +27,8 @@
 //!
 //! A step runs them in a fixed order: the agents act, one at a time in a
 //! shuffled order; then the world takes its turn ([`Survival::tick_world`]);
-//! then hunger, temperature and health tick, and the dead respawn.
+//! then hunger, temperature and health tick, each agent is rewarded by
+//! them, and the dead respawn.
 
 mod actions;
 mod clock;
@@ -159,8 +160,10 @@ struct SurvivalState {
 /// that can be walked on, for the rest of the episode; berries stop growing,
 /// and the cold drains temperature away from the fires. Buried carrots keep.
 ///
-/// There is no reward yet; the metrics count deaths and per-life
-/// achievements.
+/// Every step an agent ends alive earns it `alive_reward`, less penalties
+/// for missing health, for hunger below `hunger_threshold` and for
+/// temperature below `temperature_threshold`, each growing as its stat
+/// falls. The metrics count reward, deaths and per-life achievements.
 ///
 /// The UI band shows health, hunger and temperature as numbers, what is in
 /// hands and backpack, whether it is day or night, and whether it is winter
@@ -372,15 +375,21 @@ impl Environment for Survival {
         for i in 0..self.state.agent_order.len() {
             let agent_id = self.state.agent_order[i];
             timestep.last_action[agent_id] = actions[agent_id];
-            timestep.reward[agent_id] = 0.0;
             self.act(agent_id, SurvivalAction::from_id(actions[agent_id]));
         }
 
         self.tick_world();
 
-        let dead: Vec<usize> = (0..self.num_agents())
-            .filter(|&agent_id| self.tick_stats(agent_id))
-            .collect();
+        let mut dead = Vec::new();
+        for agent_id in 0..self.num_agents() {
+            if self.tick_stats(agent_id) {
+                dead.push(agent_id);
+            }
+            // judged on the stats it ends the step with, before a respawn
+            let reward = self.state.agents[agent_id].reward(&self.config);
+            timestep.reward[agent_id] = reward;
+            self.metrics.reward += f64::from(reward);
+        }
         for &agent_id in &dead {
             self.kill(agent_id);
         }

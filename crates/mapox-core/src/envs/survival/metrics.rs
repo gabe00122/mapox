@@ -1,4 +1,4 @@
-//! What an episode reports: deaths, bites, and per-life achievements.
+//! What an episode reports: reward, deaths, bites, and per-life achievements.
 
 /// Declares the achievements with their metric names side by side, so the two
 /// can't fall out of step.
@@ -51,6 +51,7 @@ achievements! {
 
 #[derive(Debug, Default, Clone)]
 pub(super) struct SurvivalMetrics {
+    pub(super) reward: f64,
     pub(super) deaths: f64,
     pub(super) spider_bites: f64,
     /// Unlocks of each achievement, in `Achievement` order.
@@ -67,6 +68,7 @@ impl SurvivalMetrics {
             .map(|(a, count)| (a.name().to_owned(), serde_json::Value::from(count / agents)))
             .collect();
         serde_json::json!({
+            "reward": self.reward / agents,
             "deaths": self.deaths / agents,
             "spider_bites": self.spider_bites / agents,
             "achievements": achievements,

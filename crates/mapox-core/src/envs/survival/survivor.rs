@@ -56,6 +56,25 @@ impl Survivor {
         self.hunger = self.hunger.saturating_add(food).min(MAX_STAT);
     }
 
+    /// This step's reward: `alive_reward` if it lives, less a penalty for
+    /// each stat short of where it should be (see
+    /// [`SurvivalConfig::alive_reward`]).
+    pub(super) fn reward(&self, config: &SurvivalConfig) -> f32 {
+        // how far below `threshold` the stat is, as a share of it
+        let shortfall = |stat: u16, threshold: u16| {
+            threshold.saturating_sub(stat) as f32 / threshold.max(1) as f32
+        };
+        let alive = if self.health > 0 {
+            config.alive_reward
+        } else {
+            0.0
+        };
+        alive
+            - config.health_penalty * shortfall(self.health, MAX_STAT)
+            - config.hunger_penalty * shortfall(self.hunger, config.hunger_threshold)
+            - config.temperature_penalty * shortfall(self.temperature, config.temperature_threshold)
+    }
+
     pub(super) fn unlock(&mut self, metrics: &mut SurvivalMetrics, achievement: Achievement) {
         let bit = 1 << achievement as u32;
         if self.unlocked & bit == 0 {

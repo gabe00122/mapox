@@ -91,6 +91,19 @@ pub struct SurvivalConfig {
     pub spider_damage: u16,
     /// How far, walking, a spider tracks an agent.
     pub spider_hunt_radius: u32,
+
+    /// Reward for every step an agent ends alive.
+    pub alive_reward: f32,
+    /// Penalties taken every step, each scaled by how far a stat falls
+    /// short: `health_penalty` in full at zero health and none at
+    /// [`MAX_STAT`]; `hunger_penalty` in full at zero hunger and none from
+    /// `hunger_threshold` up; `temperature_penalty` likewise below
+    /// `temperature_threshold`.
+    pub health_penalty: f32,
+    pub hunger_penalty: f32,
+    pub hunger_threshold: u16,
+    pub temperature_penalty: f32,
+    pub temperature_threshold: u16,
 }
 
 impl Default for SurvivalConfig {
@@ -136,6 +149,12 @@ impl Default for SurvivalConfig {
             num_spider_eggs: 4,
             spider_damage: 15,
             spider_hunt_radius: 12,
+            alive_reward: 0.01,
+            health_penalty: 0.01,
+            hunger_penalty: 0.01,
+            hunger_threshold: 50,
+            temperature_penalty: 0.01,
+            temperature_threshold: 50,
         }
     }
 }
