@@ -33,14 +33,21 @@ pub struct SurvivalConfig {
     pub regen_threshold: u16,
     pub regen_interval: u32,
 
-    /// Hunger a berry restores, raw and cooked.
+    /// Hunger a berry restores, raw and cooked, and a carrot.
     pub berry_food: u16,
     pub cooked_berry_food: u16,
+    pub carrot_food: u16,
     /// Steps a picked bush takes to fruit again.
     pub bush_regrow_steps: u32,
     /// Steps felling a tree takes, the use that starts it included. See
     /// [`Job`](super::items::Job).
     pub chop_steps: u32,
+    /// Steps harvesting tall grass by hand takes, the use that starts it
+    /// included.
+    pub harvest_steps: u32,
+    /// Steps digging up a buried carrot by hand takes, the use that starts
+    /// it included.
+    pub dig_carrot_steps: u32,
     /// Steps a fire burns before it goes out.
     pub fire_burn_steps: u32,
     /// The last of those steps it burns low, when wood stokes it back up to
@@ -89,8 +96,11 @@ impl Default for SurvivalConfig {
             regen_interval: 4,
             berry_food: 20,
             cooked_berry_food: 50,
+            carrot_food: 35,
             bush_regrow_steps: 200,
             chop_steps: 6,
+            harvest_steps: 3,
+            dig_carrot_steps: 1,
             fire_burn_steps: 200,
             fire_low_steps: 50,
             fire_light_radius: 4,

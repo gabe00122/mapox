@@ -44,6 +44,10 @@ pub const TILE_TREE: &str = "tile/tree";
 /// A bush with ripe berries on it. [`TILE_BUSH`] is the same bush picked bare.
 pub const TILE_BERRY_BUSH: &str = "tile/berry_bush";
 pub const TILE_BUSH: &str = "tile/bush";
+/// Tall grass: walked through, and harvested slowly for [`ITEM_GRASS`].
+pub const TILE_TALL_GRASS: &str = "tile/tall_grass";
+/// A carrot still in the ground; digging it up leaves an [`ITEM_CARROT`].
+pub const TILE_BURIED_CARROT: &str = "tile/buried_carrot";
 pub const TILE_FIRE: &str = "tile/fire";
 /// A fire burning low, near going out.
 pub const TILE_FIRE_LOW: &str = "tile/fire_low";
@@ -57,6 +61,9 @@ pub const ITEM_STONE: &str = "item/stone";
 pub const ITEM_WOOD: &str = "item/wood";
 pub const ITEM_BERRY: &str = "item/berry";
 pub const ITEM_COOKED_BERRY: &str = "item/cooked_berry";
+pub const ITEM_CARROT: &str = "item/carrot";
+/// A bundle of cut grass.
+pub const ITEM_GRASS: &str = "item/grass";
 pub const ITEM_AXE: &str = "item/axe";
 /// An unlit campfire, carried; using it sets down a [`TILE_FIRE`].
 pub const ITEM_CAMPFIRE: &str = "item/campfire";

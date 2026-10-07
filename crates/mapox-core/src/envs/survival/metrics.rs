@@ -31,7 +31,11 @@ achievements! {
     CollectStone => "collect_stone",
     CollectWood => "collect_wood",
     CollectBerry => "collect_berry",
+    CollectCarrot => "collect_carrot",
+    CollectGrass => "collect_grass",
     ChopTree => "chop_tree",
+    HarvestGrass => "harvest_grass",
+    DigCarrot => "dig_carrot",
     MakeAxe => "make_axe",
     MakeCampfire => "make_campfire",
     PlaceFire => "place_fire",
@@ -39,6 +43,7 @@ achievements! {
     CookBerry => "cook_berry",
     EatBerry => "eat_berry",
     EatCookedBerry => "eat_cooked_berry",
+    EatCarrot => "eat_carrot",
 }
 
 #[derive(Debug, Default, Clone)]

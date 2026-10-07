@@ -155,7 +155,8 @@ class RustSurvivalConfig(BaseModel):
     water_fraction: float = 0.10
     rock_fraction: float = 0.15
     # shares of the land between that are forest (trees, sticks) and scrub
-    # (stones): its wettest and driest ground. The rest is meadow (berries).
+    # (stones): its wettest and driest ground. The rest is meadow (berries,
+    # tall grass, buried carrots).
     forest_fraction: float = 0.35
     scrub_fraction: float = 0.25
 
@@ -173,10 +174,17 @@ class RustSurvivalConfig(BaseModel):
 
     berry_food: int = 20
     cooked_berry_food: int = 50
+    # carrots are buried at reset and never grow back
+    carrot_food: int = 35
     bush_regrow_steps: int = 200
     # steps felling a tree takes, the axe use included; the agent can only
     # wait meanwhile, and a log drops at the end
     chop_steps: int = 6
+    # steps harvesting tall grass takes, the empty-handed use that starts it
+    # included; a bundle of grass drops at the end
+    harvest_steps: int = 3
+    # steps digging up a buried carrot takes, likewise; the carrot drops
+    dig_carrot_steps: int = 1
     fire_burn_steps: int = 200
     # the last of those steps it burns low; wood stokes a low fire back up
     fire_low_steps: int = 50

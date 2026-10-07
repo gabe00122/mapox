@@ -17,7 +17,7 @@
 //! - [`survivor`]: the agents' stats, life and death
 //! - [`items`]: items, recipes and jobs
 //! - [`fire`]: fires burning down, and the light they cast
-//! - [`plants`]: bushes fruiting again
+//! - [`plants`]: bushes fruiting again (carrots and tall grass don't regrow)
 //! - [`clock`]: day, dusk and night
 //! - [`spiders`]: nests and the spiders out of them
 //! - [`terrain`]: map generation
@@ -87,7 +87,7 @@ struct SurvivalState {
 }
 
 /// A first pass at a survival game: agents keep themselves fed off berry
-/// bushes, and craft from what lies around.
+/// bushes and carrots, and craft from what lies around.
 ///
 /// Each agent has health and hunger, 0 to [`MAX_STAT`]. Hunger drains with
 /// time; while it is high health grows back, and at zero health drains
@@ -97,17 +97,23 @@ struct SurvivalState {
 /// Everything an agent does to the world it does to the tile in front of it,
 /// and its tile shows which way that is. Moving turns the agent to face the
 /// move even when the way is blocked, so turning in place is a blocked move.
-/// Items on the ground don't block: an agent walks over them, hiding the one
-/// it stands on, and has to step off and face it to pick it up.
+/// Items on the ground don't block, nor do bushes and tall grass: an agent
+/// walks over them, hiding the one it stands on, and has to step off and face
+/// it to pick it up.
 /// The inventory is two slots, hands and backpack. Grab takes the item in
 /// front (or the berries off a bush) into empty hands, or into the backpack
 /// if the hands are full; drop sets the hands' item down in front, swap
 /// trades hands and backpack. Use invokes the hand's item on what is in
-/// front: the axe sets to felling a tree, a campfire is set down lit, and a
+/// front, or bare hands: the axe sets to felling a tree, bare hands to
+/// harvesting tall grass or digging up a carrot, a campfire is set down lit, and a
 /// raw berry held to a fire cooks at once.
 /// Felling is a [`Job`](items::Job), slow work: the agent can only wait until
 /// it is done, `chop_steps` in all, and then a log lies where the tree stood.
-/// Eat eats the food in hand, cooked berries feeding more than raw. Combine
+/// Harvesting tall grass is another, done by using empty hands on it: after
+/// `harvest_steps` a bundle of grass lies where it grew.
+/// Eat eats the food in hand: a raw berry, a cooked one feeding more, or a
+/// carrot. Carrots start buried, and using bare hands on one digs it up
+/// (`dig_carrot_steps`); they are buried at reset and never grow back. Combine
 /// turns the hand and backpack items into a new one per
 /// [`RECIPES`](items::RECIPES): stick and stone make an axe, wood and stone a
 /// campfire.
@@ -130,7 +136,9 @@ struct SurvivalState {
 /// The map is biomes. An elevation field floods the low ground and raises
 /// dirt banks on the heights, diggable walls once a tool can dig them; the
 /// map's edge is solid wall. A moisture field splits the land between into
-/// forest (trees and sticks), meadow (berry bushes) and scrub (stones), so
+/// forest (trees and sticks), meadow (berry bushes, tall grass and buried
+/// carrots)
+/// and scrub (stones), so
 /// where to look for a thing is something to learn. Pockets of open ground
 /// too small to matter are filled in and the rest joined up by paths, so
 /// every agent can reach every other, and agents start out of each other's

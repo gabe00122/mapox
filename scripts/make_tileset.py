@@ -182,6 +182,14 @@ WEB = hex_color("7d8494")
 MOON = hex_color("e8ecf4")
 MOON_EDGE = hex_color("8a93a4")
 
+CARROT = hex_color("f08c24")
+CARROT_DARK = hex_color("b85c12")
+CARROT_LIGHT = hex_color("ffc27a")
+CARROT_EDGE = hex_color("5a2a08")
+
+STRAW = hex_color("c9b458")
+STRAW_LIGHT = hex_color("ece08e")
+
 LEATHER = hex_color("8a5a32")
 LEATHER_DARK = hex_color("5e3b1e")
 
@@ -1213,6 +1221,81 @@ BACKPACK = check(
     "backpack",
 )
 
+# Taller and denser than the lush grass tile, with seed heads, so it reads as
+# a plant to harvest rather than ground.
+TALL_GRASS = check(
+    [
+        ".s.......s..",
+        ".S...s...S..",
+        ".L.s.S.L.L.s",
+        "LG.S.L.G.G.S",
+        "GG.L.G.GLG.L",
+        "Gg.GLG.gGg.G",
+        "gGLgGg.GgGLg",
+        "gGGgGgLgGgGg",
+        "ggGggGGgggGg",
+        "gggggggggggg",
+        ".g.g.gg.g.g.",
+        "............",
+    ],
+    "tall grass",
+)
+
+GRASS_BUNDLE = check(
+    [
+        "............",
+        "..s..s..s...",
+        "..S.sS.sS...",
+        "...SSSsSS...",
+        "....SSSS....",
+        "....OkkO....",
+        "....SSSS....",
+        "...SSsSSS...",
+        "..SSs.SSsS..",
+        "..S...S..S..",
+        "............",
+        "............",
+    ],
+    "grass bundle",
+)
+
+CARROT_ITEM = check(
+    [
+        "........L.G.",
+        ".......LGG..",
+        "........GL.G",
+        "......OOGGG.",
+        ".....OhCCO..",
+        "....OhCCcO..",
+        "...OhCCcO...",
+        "...OCCcO....",
+        "..OCcCO.....",
+        "..OccO......",
+        ".OcO........",
+        "..O.........",
+    ],
+    "carrot",
+)
+
+# Only the leaves and the top of the root show above a mound of turned earth.
+BURIED_CARROT = check(
+    [
+        "............",
+        "............",
+        ".....L.G....",
+        "....LG.GL...",
+        "...G.GGL.G..",
+        ".....LGG....",
+        "......G.....",
+        ".....hCC....",
+        "...dOCcCOd..",
+        "..ddDDDDDdd.",
+        ".dDDdDDdDDd.",
+        "............",
+    ],
+    "buried carrot",
+)
+
 TREE_PALETTE = {
     "O": LEAF_EDGE,
     "L": LEAF_LIGHT,
@@ -1369,7 +1452,42 @@ def survival_rows() -> list[list[Sprite]]:
             {"O": MOON_EDGE, "M": MOON, "s": GOLD_LIGHT},
         ),
     ]
-    return [world, items_and_ui]
+    leaves = {"g": LEAF_DARK, "G": LEAF, "L": GRASS_LIGHT}
+    plants = [
+        stamp(floor(), TALL_GRASS, {**leaves, "s": STRAW_LIGHT, "S": STRAW}),
+        stamp(
+            floor(),
+            GRASS_BUNDLE,
+            {"s": STRAW_LIGHT, "S": STRAW, "O": OUTLINE, "k": LEATHER},
+        ),
+        stamp(
+            floor(),
+            CARROT_ITEM,
+            {
+                "O": CARROT_EDGE,
+                "C": CARROT,
+                "c": CARROT_DARK,
+                "h": CARROT_LIGHT,
+                "G": LEAF,
+                "L": GRASS_LIGHT,
+            },
+        ),
+        stamp(
+            floor(),
+            BURIED_CARROT,
+            {
+                "O": CARROT_EDGE,
+                "C": CARROT,
+                "c": CARROT_DARK,
+                "h": CARROT_LIGHT,
+                "G": LEAF,
+                "L": GRASS_LIGHT,
+                "D": DIRT,
+                "d": DIRT_DARK,
+            },
+        ),
+    ]
+    return [world, items_and_ui, plants]
 
 
 # --- sheet -----------------------------------------------------------------

@@ -6,11 +6,12 @@ use crate::{
     envs::common::Position,
     symbols::{
         AGENT_GENERIC_DOWN, AGENT_GENERIC_LEFT, AGENT_GENERIC_RIGHT, AGENT_GENERIC_UP,
-        AGENT_SPIDER, ITEM_AXE, ITEM_BERRY, ITEM_CAMPFIRE, ITEM_COOKED_BERRY, ITEM_STICK,
-        ITEM_STONE, ITEM_WOOD, TILE_BERRY_BUSH, TILE_BUSH, TILE_DECOR_1, TILE_DECOR_2,
-        TILE_DECOR_3, TILE_DECOR_4, TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_FIRE, TILE_FIRE_LOW,
-        TILE_MASK, TILE_SPIDER_EGGS, TILE_TREE, TILE_UI, TILE_WALL, TILE_WATER, UI_BACKPACK,
-        UI_DAY, UI_DIGITS, UI_HANDS, UI_HEALTH, UI_HUNGER, UI_NIGHT,
+        AGENT_SPIDER, ITEM_AXE, ITEM_BERRY, ITEM_CAMPFIRE, ITEM_CARROT, ITEM_COOKED_BERRY,
+        ITEM_GRASS, ITEM_STICK, ITEM_STONE, ITEM_WOOD, TILE_BERRY_BUSH, TILE_BURIED_CARROT,
+        TILE_BUSH, TILE_DECOR_1, TILE_DECOR_2, TILE_DECOR_3, TILE_DECOR_4, TILE_DESTRUCTIBLE_WALL,
+        TILE_EMPTY, TILE_FIRE, TILE_FIRE_LOW, TILE_MASK, TILE_SPIDER_EGGS, TILE_TALL_GRASS,
+        TILE_TREE, TILE_UI, TILE_WALL, TILE_WATER, UI_BACKPACK, UI_DAY, UI_DIGITS, UI_HANDS,
+        UI_HEALTH, UI_HUNGER, UI_NIGHT,
     },
     vocab::{VocabId, Vocabulary},
     vocab_enum,
@@ -32,6 +33,8 @@ vocab_enum!(pub(super) SurvivalObs {
     TileTree => TILE_TREE,
     TileBerryBush => TILE_BERRY_BUSH,
     TileBush => TILE_BUSH,
+    TileTallGrass => TILE_TALL_GRASS,
+    TileBuriedCarrot => TILE_BURIED_CARROT,
     TileFire => TILE_FIRE,
     TileFireLow => TILE_FIRE_LOW,
     TileSpiderEggs => TILE_SPIDER_EGGS,
@@ -40,6 +43,8 @@ vocab_enum!(pub(super) SurvivalObs {
     ItemWood => ITEM_WOOD,
     ItemBerry => ITEM_BERRY,
     ItemCookedBerry => ITEM_COOKED_BERRY,
+    ItemCarrot => ITEM_CARROT,
+    ItemGrass => ITEM_GRASS,
     ItemAxe => ITEM_AXE,
     ItemCampfire => ITEM_CAMPFIRE,
     AgentUp => AGENT_GENERIC_UP,
@@ -75,11 +80,17 @@ impl SurvivalObs {
         )
     }
 
-    /// Open ground, bare or with an item lying on it. An agent standing on an
-    /// item hides it until it steps off; bushes, trees and fires stand in the
-    /// way.
+    /// Open ground, bare or with an item lying on it, and low plants: bushes,
+    /// tall grass and buried carrots. An agent standing on one hides it until it steps off;
+    /// trees and fires stand in the way.
     pub(super) fn walkable(self) -> bool {
-        self.is_floor() || self.item().is_some()
+        use SurvivalObs::*;
+        self.is_floor()
+            || self.item().is_some()
+            || matches!(
+                self,
+                TileBerryBush | TileBush | TileTallGrass | TileBuriedCarrot
+            )
     }
 
     pub(super) fn is_fire(self) -> bool {
@@ -107,6 +118,8 @@ impl SurvivalObs {
             ItemWood => Item::Wood,
             ItemBerry => Item::Berry,
             ItemCookedBerry => Item::CookedBerry,
+            ItemCarrot => Item::Carrot,
+            ItemGrass => Item::Grass,
             ItemAxe => Item::Axe,
             ItemCampfire => Item::Campfire,
             _ => return None,

@@ -30,8 +30,10 @@ pub(super) enum Biome {
 
 impl Biome {
     /// What the biome's ground grows, one roll per cell: dense trees with
-    /// sticks under them in forest, berry bushes in meadow, stones in scrub.
-    /// Each also has its own decor, so bare ground shows which biome it is.
+    /// sticks under them in forest, berry bushes, tall grass and buried
+    /// carrots in meadow, stones in scrub. Each also has its own decor, so
+    /// bare ground shows which biome it is. Carrots are only ever what reset
+    /// buries: once dug up they are gone.
     pub(super) fn growth(self) -> &'static [(SurvivalObs, f64)] {
         use SurvivalObs::*;
         match self {
@@ -39,10 +41,13 @@ impl Biome {
                 (TileTree, 0.30),
                 (ItemStick, 0.04),
                 (TileBerryBush, 0.004),
+                (TileTallGrass, 0.02),
                 (TileDecor4, 0.08),
             ],
             Biome::Meadow => &[
                 (TileBerryBush, 0.02),
+                (TileTallGrass, 0.08),
+                (TileBuriedCarrot, 0.006),
                 (TileTree, 0.015),
                 (ItemStick, 0.008),
                 (ItemStone, 0.004),
@@ -50,6 +55,8 @@ impl Biome {
             ],
             Biome::Scrub => &[
                 (ItemStone, 0.05),
+                (TileTallGrass, 0.03),
+                (TileBuriedCarrot, 0.002),
                 (TileTree, 0.008),
                 (ItemStick, 0.008),
                 (TileDecor2, 0.08),
@@ -60,8 +67,8 @@ impl Biome {
 }
 
 /// What map generation pays to dig a path through `tile` when it joins up
-/// open ground; 0 for ground already open. Paths would rather cut through
-/// forest than tunnel rock or bridge water, and fell a bush last of all.
+/// open ground; 0 for ground already open, bushes and grass included. Paths
+/// would rather cut through forest than tunnel rock or bridge water.
 fn dig_cost(tile: SurvivalObs) -> u32 {
     use SurvivalObs::*;
     match tile {

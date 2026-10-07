@@ -29,6 +29,12 @@ fn eating_restores_hunger_up_to_the_cap() {
     step(&mut env, &mut buffers, &[Eat]);
     assert_eq!(env.state.agents[0].hunger, MAX_STAT);
     assert_eq!(achieved(&env, Achievement::EatCookedBerry), 1.0);
+
+    agent(&mut env, 0).hunger = 10;
+    agent(&mut env, 0).hands = Some(Item::Carrot);
+    step(&mut env, &mut buffers, &[Eat]);
+    assert_eq!(env.state.agents[0].hunger, 10 + env.config.carrot_food);
+    assert_eq!(achieved(&env, Achievement::EatCarrot), 1.0);
 }
 
 /// Hunger drains one point per `hunger_interval` steps, and while it

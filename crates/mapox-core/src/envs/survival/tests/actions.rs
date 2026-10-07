@@ -1,8 +1,8 @@
 use super::*;
 
 /// A move into something solid turns the agent to face it without
-/// moving, which is how an agent lines up on a tree or a bush. Moves are
-/// never masked for that reason.
+/// moving, which is how an agent lines up on a tree. Moves are never masked
+/// for that reason.
 #[test]
 fn a_blocked_move_turns_the_agent_in_place() {
     let mut env = empty_env_with(SurvivalConfig {

@@ -27,6 +27,8 @@ fn reset_spawns_agents_on_open_ground_among_the_scatter() {
     for tile in [
         TileTree,
         TileBerryBush,
+        TileTallGrass,
+        TileBuriedCarrot,
         ItemStick,
         ItemStone,
         TileDestructibleWall,

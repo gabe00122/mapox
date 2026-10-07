@@ -67,10 +67,12 @@ impl Survival {
                 Some(Item::Berry) => ahead.is_fire(),
                 Some(Item::Wood) => ahead == SurvivalObs::TileFireLow,
                 Some(Item::Campfire) => ahead.is_floor(),
-                Some(tool) => Job::of(tool, ahead).is_some(),
-                None => false,
+                // a tool's job, or with empty hands one done by hand
+                tool => Job::of(tool, ahead).is_some(),
             },
-            Eat => matches!(agent.hands, Some(Item::Berry | Item::CookedBerry)),
+            Eat => agent
+                .hands
+                .is_some_and(|item| item.food(&self.config).is_some()),
             Combine => match (agent.hands, agent.backpack) {
                 (Some(a), Some(b)) => recipe(a, b).is_some(),
                 _ => false,
@@ -151,27 +153,17 @@ impl Survival {
                     agent.hands = None;
                     agent.unlock(&mut self.metrics, Achievement::PlaceFire);
                 }
-                Some(tool) => {
+                tool => {
                     let job = Job::of(tool, self.state.map[ahead.idx()])
-                        .expect("use is legal only for items that have one");
-                    agent.work = Some(Work {
-                        job,
-                        target: ahead,
-                        steps_left: job.steps(&self.config),
-                    });
-                    // the use is the job's first step
-                    self.work(&mut agent);
+                        .expect("use is legal only where there is a job to do");
+                    self.start(&mut agent, job);
                 }
-                None => unreachable!("use is legal only holding something"),
             },
             SurvivalAction::Eat => {
-                let (food, achievement) = match agent.hands {
-                    Some(Item::Berry) => (self.config.berry_food, Achievement::EatBerry),
-                    Some(Item::CookedBerry) => {
-                        (self.config.cooked_berry_food, Achievement::EatCookedBerry)
-                    }
-                    _ => unreachable!("eat is legal only holding food"),
-                };
+                let (food, achievement) = agent
+                    .hands
+                    .and_then(|item| item.food(&self.config))
+                    .expect("eat is legal only holding food");
                 agent.eat(food);
                 agent.hands = None;
                 agent.unlock(&mut self.metrics, achievement);
@@ -190,6 +182,17 @@ impl Survival {
         }
 
         self.state.agents[agent_id] = agent;
+    }
+
+    /// Sets the agent to `job` on the tile in front of it.
+    fn start(&mut self, agent: &mut Survivor, job: Job) {
+        agent.work = Some(Work {
+            job,
+            target: agent.ahead(),
+            steps_left: job.steps(&self.config),
+        });
+        // the action that starts the job is its first step
+        self.work(agent);
     }
 
     /// Puts a step into the agent's job, finishing it once its steps run out.

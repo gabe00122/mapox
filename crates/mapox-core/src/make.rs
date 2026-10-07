@@ -119,7 +119,8 @@ mod tests {
             "forest_fraction":0.35,"scrub_fraction":0.25,"start_hunger":100,
             "start_health":150,"hunger_interval":2,"starve_damage":1,"regen_threshold":100,
             "regen_interval":4,"berry_food":20,"cooked_berry_food":50,
-            "bush_regrow_steps":200,"chop_steps":6,"fire_burn_steps":200,"fire_low_steps":50,
+            "carrot_food":35,"bush_regrow_steps":200,"chop_steps":6,"harvest_steps":3,"dig_carrot_steps":1,
+            "fire_burn_steps":200,"fire_low_steps":50,
             "fire_light_radius":4,"day_length":200,"night_length":100,
             "night_vision_radius":2,"dusk_length":50,"num_spider_eggs":4,"spider_damage":15,
             "spider_hunt_radius":12}"#;

@@ -12,6 +12,8 @@ pub(super) enum Item {
     Wood,
     Berry,
     CookedBerry,
+    Carrot,
+    Grass,
     Axe,
     Campfire,
 }
@@ -24,6 +26,8 @@ impl Item {
             Item::Wood => SurvivalObs::ItemWood,
             Item::Berry => SurvivalObs::ItemBerry,
             Item::CookedBerry => SurvivalObs::ItemCookedBerry,
+            Item::Carrot => SurvivalObs::ItemCarrot,
+            Item::Grass => SurvivalObs::ItemGrass,
             Item::Axe => SurvivalObs::ItemAxe,
             Item::Campfire => SurvivalObs::ItemCampfire,
         }
@@ -36,6 +40,18 @@ impl Item {
             Item::Stone => Some(Achievement::CollectStone),
             Item::Wood => Some(Achievement::CollectWood),
             Item::Berry => Some(Achievement::CollectBerry),
+            Item::Carrot => Some(Achievement::CollectCarrot),
+            Item::Grass => Some(Achievement::CollectGrass),
+            _ => None,
+        }
+    }
+
+    /// Hunger the item restores eaten, if it is food.
+    pub(super) fn food(self, config: &SurvivalConfig) -> Option<(u16, Achievement)> {
+        match self {
+            Item::Berry => Some((config.berry_food, Achievement::EatBerry)),
+            Item::CookedBerry => Some((config.cooked_berry_food, Achievement::EatCookedBerry)),
+            Item::Carrot => Some((config.carrot_food, Achievement::EatCarrot)),
             _ => None,
         }
     }
@@ -60,28 +76,33 @@ pub(super) fn recipe(a: Item, b: Item) -> Option<(Item, Achievement)> {
         .map(|&(_, _, made, achievement)| (made, achievement))
 }
 
-/// Slow work. Using a job's tool on its tile in front starts it, and locks the
-/// agent in place, able only to wait, until its steps are done; then the
-/// tile becomes what the job leaves of it. Felling a tree with an axe is the
-/// first; digging and mining are meant to join it.
+/// Slow work. Using a job's tool on its tile in front starts it (with empty
+/// hands for a job done by hand), and locks the agent in place, able only
+/// to wait, until its steps are done; then the tile becomes what the job
+/// leaves of it. Felling a tree with an axe, and by hand harvesting tall grass
+/// and digging up carrots, are the first; digging walls and mining are meant
+/// to join them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Job {
     Chop,
+    Harvest,
+    DigCarrot,
 }
 
 impl Job {
-    const ALL: [Job; 1] = [Job::Chop];
+    const ALL: [Job; 3] = [Job::Chop, Job::Harvest, Job::DigCarrot];
 
-    /// The job `tool` does on `tile`, if any.
-    pub(super) fn of(tool: Item, tile: SurvivalObs) -> Option<Job> {
+    /// The job `tool` does on `tile`, if any; `None` is bare hands.
+    pub(super) fn of(tool: Option<Item>, tile: SurvivalObs) -> Option<Job> {
         Self::ALL
             .into_iter()
             .find(|job| job.tool() == tool && job.works() == tile)
     }
 
-    fn tool(self) -> Item {
+    fn tool(self) -> Option<Item> {
         match self {
-            Job::Chop => Item::Axe,
+            Job::Chop => Some(Item::Axe),
+            Job::Harvest | Job::DigCarrot => None,
         }
     }
 
@@ -89,6 +110,8 @@ impl Job {
     pub(super) fn works(self) -> SurvivalObs {
         match self {
             Job::Chop => SurvivalObs::TileTree,
+            Job::Harvest => SurvivalObs::TileTallGrass,
+            Job::DigCarrot => SurvivalObs::TileBuriedCarrot,
         }
     }
 
@@ -96,19 +119,25 @@ impl Job {
     pub(super) fn leaves(self) -> SurvivalObs {
         match self {
             Job::Chop => SurvivalObs::ItemWood,
+            Job::Harvest => SurvivalObs::ItemGrass,
+            Job::DigCarrot => SurvivalObs::ItemCarrot,
         }
     }
 
-    /// Steps the job takes, the use that starts it included.
+    /// Steps the job takes, the action that starts it included.
     pub(super) fn steps(self, config: &SurvivalConfig) -> u32 {
         match self {
             Job::Chop => config.chop_steps,
+            Job::Harvest => config.harvest_steps,
+            Job::DigCarrot => config.dig_carrot_steps,
         }
     }
 
     pub(super) fn achievement(self) -> Achievement {
         match self {
             Job::Chop => Achievement::ChopTree,
+            Job::Harvest => Achievement::HarvestGrass,
+            Job::DigCarrot => Achievement::DigCarrot,
         }
     }
 }

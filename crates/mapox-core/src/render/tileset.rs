@@ -20,9 +20,9 @@ pub(crate) const TILE_SIZE: f32 = 12.0;
 /// Separator between tiles. It is also a border, so tile (0, 0) starts at (1, 1).
 const TILE_PAD: f32 = 1.0;
 
-/// Sheet is 157x118 px = `COLS * 13 + 1` by `ROWS * 13 + 1`.
+/// Sheet is 157x131 px = `COLS * 13 + 1` by `ROWS * 13 + 1`.
 pub const TILESET_COLS: u32 = 12;
-pub const TILESET_ROWS: u32 = 9;
+pub const TILESET_ROWS: u32 = 10;
 
 /// The sheet, uploaded once and sampled per tile.
 pub struct Tileset {
