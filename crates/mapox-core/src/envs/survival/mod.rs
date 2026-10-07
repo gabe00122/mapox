@@ -100,10 +100,11 @@ struct SurvivalState {
 /// Items on the ground don't block: an agent walks over them, hiding the one
 /// it stands on, and has to step off and face it to pick it up.
 /// The inventory is two slots, hands and backpack. Grab takes the item in
-/// front (or the berries off a bush) into empty hands, drop sets the hands'
-/// item down in front, swap trades hands and backpack. Use invokes the
-/// hand's item on what is in front: the axe sets to felling a tree, a
-/// campfire is set down lit, and a raw berry held to a fire cooks at once.
+/// front (or the berries off a bush) into empty hands, or into the backpack
+/// if the hands are full; drop sets the hands' item down in front, swap
+/// trades hands and backpack. Use invokes the hand's item on what is in
+/// front: the axe sets to felling a tree, a campfire is set down lit, and a
+/// raw berry held to a fire cooks at once.
 /// Felling is a [`Job`](items::Job), slow work: the agent can only wait until
 /// it is done, `chop_steps` in all, and then a log lies where the tree stood.
 /// Eat eats the food in hand, cooked berries feeding more than raw. Combine

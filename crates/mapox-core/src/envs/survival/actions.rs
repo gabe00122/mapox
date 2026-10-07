@@ -58,7 +58,7 @@ impl Survival {
         match action {
             MoveUp | MoveRight | MoveDown | MoveLeft | Noop => true,
             Grab => {
-                agent.hands.is_none()
+                (agent.hands.is_none() || agent.backpack.is_none())
                     && (ahead.item().is_some() || ahead == SurvivalObs::TileBerryBush)
             }
             Drop => agent.hands.is_some() && ahead.is_floor(),
@@ -117,7 +117,13 @@ impl Survival {
                     tile.item()
                         .expect("grab is legal only facing an item or a bush")
                 };
-                agent.hands = Some(item);
+                // full hands spill over into an empty backpack
+                let slot = if agent.hands.is_none() {
+                    &mut agent.hands
+                } else {
+                    &mut agent.backpack
+                };
+                *slot = Some(item);
                 if let Some(achievement) = item.collected() {
                     agent.unlock(&mut self.metrics, achievement);
                 }

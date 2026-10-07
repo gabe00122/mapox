@@ -127,6 +127,32 @@ fn two_agents_cannot_take_the_same_item() {
     assert_eq!(env.state.map[(start + RIGHT).idx()], TileEmpty);
 }
 
+/// With full hands, grab fills an empty backpack instead; with both
+/// slots full it is masked.
+#[test]
+fn grab_with_full_hands_goes_into_the_backpack() {
+    let mut env = empty_env_with(SurvivalConfig {
+        num_agents: 1,
+        ..Default::default()
+    });
+    let start = center(&env);
+    env.set_ground(start + UP, ItemStone);
+    spawn_facing(&mut env, start, 0);
+    agent(&mut env, 0).hands = Some(Item::Stick);
+
+    let mut buffers = TimeStepBuffers::new(&env);
+    step(&mut env, &mut buffers, &[Grab]);
+    let survivor = env.state.agents[0];
+    assert_eq!(
+        (survivor.hands, survivor.backpack),
+        (Some(Item::Stick), Some(Item::Stone))
+    );
+    assert_eq!(achieved(&env, Achievement::CollectStone), 1.0);
+
+    env.set_ground(start + UP, ItemStick);
+    assert!(!legal(&observe(&env), 0, Grab), "both slots are full");
+}
+
 #[test]
 fn swap_trades_hands_and_backpack() {
     let mut env = empty_env_with(SurvivalConfig {
