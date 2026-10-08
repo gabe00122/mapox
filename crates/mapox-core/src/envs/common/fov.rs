@@ -1,15 +1,16 @@
 //! Field of view: which cells a viewer standing on a grid can actually see.
 //!
-//! [`shadowcast`] sweeps a grid from a source and hands every cell it reaches
-//! to a callback, so an env reads opacity straight off whatever it stores and
-//! does whatever it likes with what is seen: fill an observation, light the
+//! [`shadowcast`] sweeps a grid from a source, asking one callback whether a
+//! cell lets sight through and handing every cell it reaches to another, so an
+//! env reads opacity straight off whatever it stores and does whatever it
+//! likes with what is seen: fill an observation, light the
 //! map, remember what was explored. [`observe`] is the common case built on
 //! it: fill an agent's observation window with what it can see.
 //!
 //! Neither takes a radius. A consumer that wants one sweeps with
-//! [`shadowcast`] and checks it in its callback (with [`within`], say),
-//! answering that a cell past it blocks sight: the cell is left out, so is
-//! everything behind it, and the sweep stops there.
+//! [`shadowcast`] and checks it in both callbacks (with [`within`], say),
+//! answering that a cell past it blocks sight and leaving it out when it is
+//! revealed: everything behind it is left out too, and the sweep stops there.
 
 use ndarray::{Array2, ArrayView2, ArrayViewMut2, s};
 
@@ -43,11 +44,17 @@ struct Octant {
     yy: i32,
     max_depth: i32,
     max_lateral: i32,
+    /// Whether this wedge reveals the cells on its two edges, the centre line
+    /// (`lateral == 0`) and the diagonal (`lateral == depth`). Each edge is
+    /// shared with a neighbouring wedge that reaches exactly the same cells
+    /// along it, so only one of the two reveals them.
+    owns_edges: bool,
 }
 
 impl Octant {
     fn new(
         (xx, xy, yx, yy): (i32, i32, i32, i32),
+        owns_edges: bool,
         source: Position,
         (width, height): (i32, i32),
     ) -> Self {
@@ -80,7 +87,12 @@ impl Octant {
             yy,
             max_depth,
             max_lateral,
+            owns_edges,
         }
+    }
+
+    fn reveals(&self, lateral: i32, depth: i32) -> bool {
+        self.owns_edges || (lateral != 0 && lateral != depth)
     }
 
     fn cell(&self, lateral: i32, depth: i32) -> Position {
@@ -93,14 +105,16 @@ impl Octant {
 }
 
 /// Visits every cell of a `width` x `height` grid that a viewer at `source`
-/// can see, calling `reveal` with each one. `reveal` answers whether the cell
-/// it was handed blocks sight of what lies behind it. Cells handed out are
+/// can see, calling `reveal` with each one exactly once. `is_transparent`
+/// answers whether a cell lets sight through to what lies behind it, and may
+/// be asked about the same cell more than once. Cells handed to either are
 /// always on the grid.
 ///
-/// To stop at a radius, have `reveal` leave a cell past it alone and answer
-/// that it blocks: nothing behind a cell is any nearer the source than it, so
-/// the sweep reaches exactly the disk and goes no further. Any disk works, the
-/// one [`within`] draws or the one [`stamp_circle`] fills.
+/// To stop at a radius, have `is_transparent` answer that a cell past it
+/// blocks, and `reveal` leave such a cell alone: nothing behind a cell is any
+/// nearer the source than it, so the sweep reaches exactly the disk and goes
+/// no further. Any disk works, the one [`within`] draws or the one
+/// [`stamp_circle`] fills.
 ///
 /// What a revealed cell means is up to the caller: copy a tile into an
 /// observation, light a cell, remember it. For a viewer's observation window,
@@ -111,8 +125,11 @@ impl Octant {
 /// by row carrying the slope range still lit, and every time a wall interrupts
 /// that range, recurse on the slice above it and keep scanning below it. A
 /// sweep costs O(cells in range) rather than tracing a ray per cell. Cells on
-/// the boundary between two octants (the axes and diagonals) can be revealed
-/// twice, so `reveal` should be idempotent.
+/// the boundary between two octants (the axes and diagonals) are reached by
+/// both, always alike, so only every other octant reveals them; within an
+/// octant the beams split around a wall never overlap. So each cell is
+/// revealed once without keeping track of which have been, and a sweep
+/// allocates nothing.
 ///
 /// Cells whose corner is exactly tangent to a wall's corner count as seen, so a
 /// lone wall never casts a perfectly clean shadow at 45°.
@@ -121,7 +138,8 @@ impl Octant {
 pub fn shadowcast(
     source: Position,
     (width, height): (usize, usize),
-    mut reveal: impl FnMut(Position) -> bool,
+    mut is_transparent: impl FnMut(Position) -> bool,
+    mut reveal: impl FnMut(Position),
 ) {
     let dim = (width as i32, height as i32);
     debug_assert!(
@@ -131,9 +149,10 @@ pub fn shadowcast(
     // the viewer always sees the cell it stands on; the sweep starts a ring out
     reveal(source);
 
-    for &transform in &OCTANTS {
-        let octant = Octant::new(transform, source, dim);
-        cast_light(&octant, 1, 1.0, 0.0, &mut reveal);
+    // neighbouring octants share an edge, so every other one reveals them all
+    for (i, &transform) in OCTANTS.iter().enumerate() {
+        let octant = Octant::new(transform, i % 2 == 0, source, dim);
+        cast_light(&octant, 1, 1.0, 0.0, &mut is_transparent, &mut reveal);
     }
 }
 
@@ -172,11 +191,12 @@ pub fn observe<T: ViewTile + Into<V>, V: Copy>(
     let origin = viewer - center;
 
     view.fill(T::MASK.into());
-    shadowcast(center, (width, height), |cell| {
-        let tile = map[(origin + cell).idx()];
-        view[cell.idx()] = tile.into();
-        tile.opaque()
-    });
+    shadowcast(
+        center,
+        (width, height),
+        |cell| !map[(origin + cell).idx()].opaque(),
+        |cell| view[cell.idx()] = map[(origin + cell).idx()].into(),
+    );
 }
 
 pub fn window<T>(
@@ -196,7 +216,8 @@ fn cast_light(
     first_depth: i32,
     start_slope: f32,
     end_slope: f32,
-    reveal: &mut impl FnMut(Position) -> bool,
+    is_transparent: &mut impl FnMut(Position) -> bool,
+    reveal: &mut impl FnMut(Position),
 ) {
     if start_slope < end_slope {
         return;
@@ -222,7 +243,11 @@ fn cast_light(
             if end_slope > outer_slope {
                 break; // past the beam, and so is the rest of this row
             }
-            let opaque = reveal(octant.cell(lateral, depth));
+            let cell = octant.cell(lateral, depth);
+            if octant.reveals(lateral, depth) {
+                reveal(cell);
+            }
+            let opaque = !is_transparent(cell);
 
             if blocked {
                 if opaque {
@@ -236,7 +261,14 @@ fn cast_light(
                 // split the beam: recurse on the slice above the wall and carry
                 // on under it in this scan
                 blocked = true;
-                cast_light(octant, depth + 1, start_slope, outer_slope, reveal);
+                cast_light(
+                    octant,
+                    depth + 1,
+                    start_slope,
+                    outer_slope,
+                    is_transparent,
+                    reveal,
+                );
                 next_start = inner_slope;
             }
         }
@@ -250,7 +282,6 @@ fn cast_light(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::envs::common::stamp::stamp_circle;
     use crate::vocab::VocabId;
 
     const CLEAR: VocabId = 0;
@@ -287,10 +318,12 @@ mod tests {
         let (width, height) = map.dim();
 
         let mut view = Array2::from_elem(map.dim(), MASK);
-        shadowcast(viewer, map.dim(), |cell| {
-            view[cell.idx()] = map[cell.idx()];
-            map[cell.idx()] == WALL
-        });
+        shadowcast(
+            viewer,
+            map.dim(),
+            |cell| map[cell.idx()] != WALL,
+            |cell| view[cell.idx()] = map[cell.idx()],
+        );
 
         (0..height)
             .map(|row| {
@@ -437,10 +470,8 @@ mod tests {
             Position::new(3, 4),
         ] {
             let mut seen = Array2::from_elem((9, 5), false);
-            shadowcast(source, seen.dim(), |cell| {
-                seen[cell.idx()] = true;
-                false
-            });
+            let dim = seen.dim();
+            shadowcast(source, dim, |_| true, |cell| seen[cell.idx()] = true);
             assert!(seen.iter().all(|&seen| seen), "from {source:?}");
         }
     }
@@ -454,53 +485,53 @@ mod tests {
         in_range: impl Fn(Position) -> bool,
         lit: &mut Array2<bool>,
     ) {
-        shadowcast(source, transparent.dim(), |cell| {
-            if !in_range(cell - source) {
-                return true;
-            }
-            lit[cell.idx()] = true;
-            !transparent[cell.idx()]
-        });
+        shadowcast(
+            source,
+            transparent.dim(),
+            |cell| in_range(cell - source) && transparent[cell.idx()],
+            |cell| {
+                if in_range(cell - source) {
+                    lit[cell.idx()] = true;
+                }
+            },
+        );
     }
 
-    /// Blocking at the radius loses nothing inside it: in open ground a light
-    /// reaches exactly its disk, from anywhere on the grid, up against its
-    /// edges included, for either way of drawing a disk.
+    /// However the octants meet on the axes and diagonals and however walls
+    /// split the beam, every cell the sweep reaches is revealed exactly once
+    /// and nothing else is.
     #[test]
-    fn an_open_light_reaches_exactly_its_disk() {
-        let transparent = Array2::from_elem((41, 33), true);
-        let sources = [
-            Position::new(20, 16),
-            Position::new(3, 5),
-            Position::new(40, 0),
-        ];
+    fn each_cell_reached_is_revealed_once() {
+        use rand::{RngExt, SeedableRng, rngs::SmallRng};
 
-        for source in sources {
-            for radius in -1..=25 {
-                let mut lit = Array2::from_elem(transparent.dim(), false);
-                light(
-                    &transparent,
-                    source,
-                    |offset| within(offset, radius),
-                    &mut lit,
-                );
-                let disk = Array2::from_shape_fn(transparent.dim(), |(x, y)| {
-                    within(Position::new(x as i32, y as i32) - source, radius)
-                });
-                assert_eq!(lit, disk, "within {radius} of {source:?}");
+        let mut rng = SmallRng::seed_from_u64(0);
+        for _ in 0..2000 {
+            let dim = (rng.random_range(1..24), rng.random_range(1..24));
+            let density = rng.random_range(0.0..0.6);
+            let opaque = Array2::from_shape_fn(dim, |_| rng.random_bool(density));
+            let source = Position::new(
+                rng.random_range(0..dim.0 as i32),
+                rng.random_range(0..dim.1 as i32),
+            );
 
-                let squared = radius * radius;
-                let mut lit = Array2::from_elem(transparent.dim(), false);
-                light(
-                    &transparent,
-                    source,
-                    |offset| radius >= 0 && offset.x * offset.x + offset.y * offset.y <= squared,
-                    &mut lit,
-                );
-                let mut stamped = Array2::from_elem(transparent.dim(), false);
-                stamp_circle(&mut stamped, source, radius, true);
-                assert_eq!(lit, stamped, "stamped {radius} at {source:?}");
-            }
+            let mut reached = Array2::from_elem(dim, false);
+            reached[source.idx()] = true;
+            let mut reveals = Array2::from_elem(dim, 0);
+            shadowcast(
+                source,
+                dim,
+                |cell| {
+                    reached[cell.idx()] = true;
+                    !opaque[cell.idx()]
+                },
+                |cell| reveals[cell.idx()] += 1,
+            );
+
+            assert_eq!(
+                reveals,
+                reached.mapv(u32::from),
+                "from {source:?} over {opaque:?}"
+            );
         }
     }
 

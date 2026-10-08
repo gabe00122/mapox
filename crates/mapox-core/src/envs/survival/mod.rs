@@ -1,7 +1,7 @@
 pub mod action;
 pub mod obs;
 
-use ndarray::{Array2, s};
+use ndarray::{Array2, ArrayViewMut2, s};
 use rand::{SeedableRng, rngs::SmallRng, seq::SliceRandom};
 use serde::{Deserialize, Serialize};
 use slotmap::{SlotMap, new_key_type};
@@ -11,7 +11,7 @@ use crate::{
     envs::{
         common::{
             Position, UI_HEIGHT,
-            fov::{self, ViewTile, window},
+            fov::{self, ViewTile},
             vocab_enum::VocabEnum,
         },
         survival::{action::SurvivalAction, obs::SurvivalObs},
@@ -30,6 +30,9 @@ pub struct SurvivalConfig {
     pub height: i32,
     pub view_width: i32,
     pub view_height: i32,
+    /// How far an agent sees around itself in the dark. Past it, only lit
+    /// ground shows.
+    pub vision_radius: i32,
 }
 
 impl Default for SurvivalConfig {
@@ -40,6 +43,7 @@ impl Default for SurvivalConfig {
             height: 40,
             view_width: 15,
             view_height: 15,
+            vision_radius: 2,
         }
     }
 }
@@ -183,13 +187,19 @@ impl Survival {
         state.lighting.fill(false);
         let (lighting, render_map) = (&mut state.lighting, &state.render_map);
         let light = Position::new(10, 10);
-        fov::shadowcast(light, lighting.dim(), |cell| {
-            if !fov::within(cell - light, 5) {
-                return true; // past the light's reach, and so is all behind it
-            }
-            lighting[cell.idx()] = true;
-            render_map[cell.idx()].opaque()
-        });
+        // past the light's reach a cell stays dark and blocks, and so is all
+        // behind it
+        let in_reach = |cell: Position| fov::within(cell - light, 5);
+        fov::shadowcast(
+            light,
+            lighting.dim(),
+            |cell| in_reach(cell) && !render_map[cell.idx()].opaque(),
+            |cell| {
+                if in_reach(cell) {
+                    lighting[cell.idx()] = true;
+                }
+            },
+        );
     }
 
     fn encode_observations(&self, timestep: &mut TimeStepMut) {
@@ -198,14 +208,13 @@ impl Survival {
             let agent = self.state.agent(agent_id);
             // wall padding keeps the view window inside the map
             let mut view = timestep.obs.slice_mut(s![agent_id, .., ..fov_height, 0]);
-            fov::observe(&self.state.render_map, agent.position, &mut view);
-
-            let lightning_window = window(&self.state.lighting, agent.position, view.dim());
-            view.zip_mut_with(&lightning_window, |target, light| {
-                if !light {
-                    *target = SurvivalObs::Mask.into();
-                }
-            });
+            encode_view(
+                &self.state.render_map,
+                &self.state.lighting,
+                agent.position,
+                self.config.vision_radius,
+                &mut view,
+            );
 
             let mut ui = timestep.obs.slice_mut(s![agent_id, .., fov_height.., 0]);
             ui.fill(SurvivalObs::UI as VocabId);
@@ -356,5 +365,114 @@ impl Environment for Survival {
 
     fn num_tasks(&self) -> usize {
         1
+    }
+}
+
+/// Fills `view`, an observation window centred on `viewer`, with what the
+/// viewer sees of `map`: anything in its line of sight that is within
+/// `vision_radius` of it or lit, and mask everywhere else.
+///
+/// The sweep runs over the whole window, since dark ground hides nothing
+/// behind it, so lit ground far off still shows through the dark between. Only
+/// opaque tiles block sight, lit or not.
+fn encode_view(
+    map: &Array2<SurvivalObs>,
+    lighting: &Array2<bool>,
+    viewer: Position,
+    vision_radius: i32,
+    view: &mut ArrayViewMut2<VocabId>,
+) {
+    let (width, height) = view.dim();
+    // the sweep runs over the window itself, with the viewer at its centre
+    let center = Position::new(width as i32 / 2, height as i32 / 2);
+    let origin = viewer - center;
+
+    view.fill(SurvivalObs::MASK.into());
+    fov::shadowcast(
+        center,
+        (width, height),
+        |cell| !map[(origin + cell).idx()].opaque(),
+        |cell| {
+            let position = origin + cell;
+            if fov::within(cell - center, vision_radius) || lighting[position.idx()] {
+                view[cell.idx()] = map[position.idx()].into();
+            }
+        },
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Draws back what a viewer at the centre of `rows` sees with the given
+    /// lit cells: `#` wall, `.` floor, `?` hidden. `rows` read top down, `#`
+    /// a wall and anything else floor, and its middle is the viewer.
+    fn seen(rows: &[&str], lit: &[(i32, i32)], vision_radius: i32) -> String {
+        let (width, height) = (rows[0].len(), rows.len());
+        let mut map = Array2::from_elem((width, height), SurvivalObs::TileEmpty);
+        for (row, line) in rows.iter().enumerate() {
+            for (x, glyph) in line.chars().enumerate() {
+                if glyph == '#' {
+                    map[[x, height - 1 - row]] = SurvivalObs::TileWall;
+                }
+            }
+        }
+        let mut lighting = Array2::from_elem(map.dim(), false);
+        for &(x, y) in lit {
+            lighting[[x as usize, y as usize]] = true;
+        }
+
+        let viewer = Position::new(width as i32 / 2, height as i32 / 2);
+        let mut view = Array2::from_elem(map.dim(), 0);
+        encode_view(&map, &lighting, viewer, vision_radius, &mut view.view_mut());
+
+        (0..height)
+            .map(|row| {
+                (0..width)
+                    .map(|x| match view[[x, height - 1 - row]] {
+                        id if id == SurvivalObs::TileWall as VocabId => '#',
+                        id if id == SurvivalObs::Mask as VocabId => '?',
+                        _ => '.',
+                    })
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// In the dark the viewer sees only its vision disk.
+    #[test]
+    fn the_dark_shows_only_the_vision_radius() {
+        let view = seen(
+            &[
+                ".......", ".......", ".......", ".......", ".......", ".......", ".......",
+            ],
+            &[],
+            1,
+        );
+        assert_eq!(
+            view,
+            "???????\n???????\n??...??\n??...??\n??...??\n???????\n???????"
+        );
+    }
+
+    /// Lit ground far off shows through the dark between, but not from
+    /// behind a wall.
+    #[test]
+    fn lit_ground_shows_in_line_of_sight() {
+        let view = seen(
+            &[
+                ".......", ".......", ".......", ".......", ".......", "...#...", ".......",
+            ],
+            // the top-left corner, in the open; the wall; and the cell
+            // straight under the wall, behind it
+            &[(0, 6), (3, 1), (3, 0)],
+            0,
+        );
+        assert_eq!(
+            view,
+            ".??????\n???????\n???????\n???.???\n???????\n???#???\n???????"
+        );
     }
 }

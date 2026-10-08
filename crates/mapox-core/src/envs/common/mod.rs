@@ -1,7 +1,6 @@
 pub mod fov;
 pub mod map_gen;
 mod position;
-pub mod stamp;
 pub mod ui;
 pub mod vocab_enum;
 
