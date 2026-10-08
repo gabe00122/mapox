@@ -17,7 +17,7 @@ macro_rules! vocab_enum {
         }
 
         impl $name {
-            const TABLE: &[$name] = &[$($name::$variant),+];
+            $vis const TABLE: &[$name] = &[$($name::$variant),+];
         }
 
         impl $crate::envs::common::vocab_enum::VocabEnum for $name {

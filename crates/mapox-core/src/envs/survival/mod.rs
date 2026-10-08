@@ -1,3 +1,6 @@
+pub mod action;
+pub mod obs;
+
 use ndarray::{Array2, s};
 use rand::{SeedableRng, rngs::SmallRng, seq::SliceRandom};
 use serde::{Deserialize, Serialize};
@@ -5,17 +8,14 @@ use slotmap::{SlotMap, new_key_type};
 
 use crate::{
     env::Environment,
-    envs::common::{Position, UI_HEIGHT, fov, stamp::stamp_circle, vocab_enum::VocabEnum},
+    envs::{
+        common::{Position, UI_HEIGHT, fov, stamp::stamp_circle, vocab_enum::VocabEnum},
+        survival::{action::SurvivalAction, obs::SurvivalObs},
+    },
     render::env::{GridRenderSettings, GridRenderState},
     spec::{ActionSpec, ObservationSpec},
-    symbols::{
-        AGENT_GENERIC, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, NOOP, TILE_DECOR_1, TILE_DECOR_2,
-        TILE_DECOR_3, TILE_DECOR_4, TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_MASK, TILE_UI,
-        TILE_WALL, TILE_WATER,
-    },
     timestep::TimeStepMut,
     vocab::{VocabId, Vocabulary},
-    vocab_enum,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -72,9 +72,8 @@ struct SurvivalState {
 
     tiles: Array2<SurvivalObs>,      // terrain layer
     objects: Array2<ObjectCell>,     // entity layer on top of the terrain
-    render_map: Array2<SurvivalObs>, // the render target for the agent views
     lighting: Array2<bool>,          // true for a lit tile and false for a dark tile
-    free_positions: Vec<Position>,   // these are used to calculate spawn positions
+    render_map: Array2<SurvivalObs>, // the render target for the agent views
 }
 
 impl SurvivalState {
@@ -96,70 +95,6 @@ impl SurvivalState {
         self.objects[entity.position.idx()][slot] = None;
         entity.position = target;
         self.objects[target.idx()][slot] = Some(id);
-    }
-}
-
-// find_return's terrain tiles; the room only uses walls and floor so far
-vocab_enum!(SurvivalObs {
-    UI => TILE_UI,
-    Mask => TILE_MASK,
-    TileEmpty => TILE_EMPTY,
-    TileDestructibleWall => TILE_DESTRUCTIBLE_WALL,
-    TileWall => TILE_WALL,
-    TileWater => TILE_WATER,
-    TileDecor1 => TILE_DECOR_1,
-    TileDecor2 => TILE_DECOR_2,
-    TileDecor3 => TILE_DECOR_3,
-    TileDecor4 => TILE_DECOR_4,
-    AgentGeneric => AGENT_GENERIC,
-});
-
-impl SurvivalObs {
-    fn move_blocked(self) -> bool {
-        use SurvivalObs::*;
-        matches!(
-            self,
-            TileWall | TileDestructibleWall | TileWater | AgentGeneric
-        )
-    }
-
-    fn spawnable(self) -> bool {
-        use SurvivalObs::*;
-        matches!(
-            self,
-            TileEmpty | TileDecor1 | TileDecor2 | TileDecor3 | TileDecor4
-        )
-    }
-
-    /// Water is the one blocking tile an agent can see straight over.
-    fn opaque(self) -> bool {
-        use SurvivalObs::*;
-        matches!(self, TileWall | TileDestructibleWall)
-    }
-}
-
-vocab_enum!(SurvivalAction {
-    MoveUp => MOVE_UP,
-    MoveRight => MOVE_RIGHT,
-    MoveDown => MOVE_DOWN,
-    MoveLeft => MOVE_LEFT,
-    Noop => NOOP,
-});
-
-impl SurvivalAction {
-    fn direction(self) -> Position {
-        use SurvivalAction::*;
-        match self {
-            MoveUp => Position::new(0, 1),
-            MoveRight => Position::new(1, 0),
-            MoveDown => Position::new(0, -1),
-            MoveLeft => Position::new(-1, 0),
-            Noop => Position::new(0, 0),
-        }
-    }
-
-    fn is_move(self) -> bool {
-        !matches!(self, SurvivalAction::Noop)
     }
 }
 
@@ -209,7 +144,6 @@ impl Survival {
                 agents: Vec::with_capacity(config.num_agents),
                 agent_order: (0..config.num_agents).collect(),
                 entities: SlotMap::with_capacity_and_key(config.num_agents),
-                free_positions: Vec::new(),
                 tiles: Array2::from_elem(map_dim, SurvivalObs::TileEmpty),
                 objects: Array2::from_elem(map_dim, [None; 2]),
                 lighting: Array2::from_elem(map_dim, true),
@@ -232,23 +166,7 @@ impl Survival {
         }
     }
 
-    fn calculate_free_positions(&mut self) {
-        self.state.free_positions.clear();
-        for x in self.pad_width..self.width - self.pad_width {
-            for y in self.pad_height..self.height - self.pad_height {
-                let position = Position::new(x, y);
-                if self.state.tiles[position.idx()].spawnable() {
-                    self.state.free_positions.push(position);
-                }
-            }
-        }
-
-        self.state.free_positions.shuffle(&mut self.state.rngs);
-    }
-
-    /// Rebuild the render map from scratch: the tile layer, then the objects layer on top
-    /// (the upper slot wins over the lower one).
-    fn render(&mut self) {
+    fn prepare_render(&mut self) {
         let state = &mut self.state;
         state.render_map.assign(&state.tiles);
         for (dst, cell) in state.render_map.iter_mut().zip(&state.objects) {
@@ -257,33 +175,29 @@ impl Survival {
             }
         }
 
-        // render lights
+        // render lights, this should be a seperate function
         state.lighting.fill(false);
         stamp_circle(&mut state.lighting, Position::new(10, 10), 5, true);
-
-        state
-            .render_map
-            .zip_mut_with(&state.lighting, |target, lit| {
-                if !lit {
-                    *target = SurvivalObs::Mask;
-                }
-            });
     }
 
     fn encode_observations(&self, timestep: &mut TimeStepMut) {
         let fov_height = self.config.view_height as usize;
+        // shared by every agent, so a step allocates these once rather than
+        // once per agent
+        let transparent = self.state.render_map.mapv(|tile| !tile.opaque());
+        let mut visible = Array2::from_elem((self.config.view_width as usize, fov_height), false);
 
         for agent_id in 0..self.num_agents() {
             let agent = self.state.agent(agent_id);
             // wall padding keeps the view window inside the map
             let mut view = timestep.obs.slice_mut(s![agent_id, .., ..fov_height, 0]);
-            fov::encode_visible(
-                &self.state.render_map,
-                agent.position,
-                &mut view,
-                SurvivalObs::Mask,
-                |tile| tile.opaque(),
+            let window = fov::window(&self.state.render_map, agent.position, view.dim());
+            view.zip_mut_with(&window, |cell, &tile| *cell = tile.into());
+            fov::cast_visible(
+                fov::window(&transparent, agent.position, view.dim()),
+                &mut visible.view_mut(),
             );
+            fov::apply_mask(&mut view, visible.view(), SurvivalObs::Mask.into());
 
             let mut ui = timestep.obs.slice_mut(s![agent_id, .., fov_height.., 0]);
             ui.fill(SurvivalObs::UI as VocabId);
@@ -318,7 +232,6 @@ impl Environment for Survival {
         if self.state.tiles.dim() != dim {
             self.state.tiles = Array2::from_elem(dim, SurvivalObs::TileEmpty);
             self.state.objects = Array2::from_elem(dim, [None; 2]);
-            self.state.render_map = Array2::from_elem(dim, SurvivalObs::TileEmpty);
         }
 
         // an empty room: wall padding around bare floor
@@ -334,12 +247,10 @@ impl Environment for Survival {
         self.state.objects.fill([None; 2]);
         self.state.entities.clear();
         self.state.agents.clear();
-        self.calculate_free_positions();
 
-        for _ in 0..self.num_agents() {
-            let position = self.state.free_positions.pop().unwrap();
+        for i in 0..self.num_agents() {
             let id = self.state.spawn(Entity {
-                position,
+                position: Position::new(20, 20 + i as i32),
                 slot: Slot::Upper,
                 tile: SurvivalObs::AgentGeneric,
             });
@@ -348,7 +259,7 @@ impl Environment for Survival {
 
         timestep.reward.fill(0.0);
         timestep.last_action.fill(0);
-        self.render();
+        self.prepare_render();
         self.encode_observations(timestep);
         self.encode_action_mask(timestep);
     }
@@ -375,7 +286,7 @@ impl Environment for Survival {
         }
 
         self.state.time += 1;
-        self.render();
+        self.prepare_render();
         self.encode_observations(timestep);
         self.encode_action_mask(timestep);
     }

@@ -1,14 +1,14 @@
 //! Field of view: which cells a viewer standing on a grid can actually see.
 //!
 //! [`shadowcast`] is the algorithm on its own, over nothing but offsets and a
-//! callback, so an env can point it at whatever it stores. [`encode_visible`]
-//! is the wrapper every grid env with a centred observation window wants: copy
-//! what is visible out of the map, leave the rest masked.
+//! callback, so an env can point it at whatever it stores. [`cast_visible`] is
+//! what every grid env with a centred observation window wants: from the
+//! [`window`] of transparency around the viewer, mark which cells it sees, then
+//! [`apply_mask`] to whatever was copied into its observation.
 
-use ndarray::{Array2, ArrayViewMut2};
+use ndarray::{Array2, ArrayView2, ArrayViewMut2, s};
 
 use super::Position;
-use crate::vocab::VocabId;
 
 /// The eight `(xx, xy, yx, yy)` transforms a shadowcast sweeps, one per
 /// half-quadrant: a cell `depth` rows out and `lateral` columns off the centre
@@ -150,47 +150,69 @@ fn cast_light(
     }
 }
 
-/// Copies the tiles a viewer at `center` can see out of `map` into `view`,
-/// leaving everything hidden behind a wall as `mask`. `view` is the viewer's
-/// observation window, centred on it, and `opaque` decides which tiles block
-/// sight.
+/// The `width` x `height` window of `map` centred on `center`, the same cells
+/// a viewer there has in its observation window: slice tiles out of the map to
+/// copy into the observation, or transparency to hand to [`cast_visible`].
 ///
-/// `map` must have at least half a window of padding around `center`, which is
-/// the wall border the envs already keep.
-pub fn encode_visible<T>(
+/// An even-sized window runs `[-half, half - 1]` around `center`. `map` must
+/// have at least half a window of padding around `center`, which is the wall
+/// border the envs already keep.
+pub fn window<T>(
     map: &Array2<T>,
     center: Position,
-    view: &mut ArrayViewMut2<VocabId>,
-    mask: T,
-    opaque: impl Fn(T) -> bool,
-) where
-    T: Copy + Into<VocabId>,
-{
-    view.fill(mask.into());
+    (width, height): (usize, usize),
+) -> ArrayView2<'_, T> {
+    let x0 = center.x as usize - width / 2;
+    let y0 = center.y as usize - height / 2;
+    map.slice(s![x0..x0 + width, y0..y0 + height])
+}
 
-    let (width, height) = view.dim();
+/// Marks in `visible` which cells of a window the viewer at its centre can
+/// see, judging line of sight from `transparent`, the window's cells that let
+/// sight through (see [`window`]). Both are window-sized; every cell of
+/// `visible` is written, so it can be reused from one viewer to the next.
+///
+/// Nothing is masked here, so the caller owns every buffer and decides what a
+/// hidden cell turns into: hand `visible` to [`apply_mask`] for each layer of
+/// the observation.
+pub fn cast_visible(transparent: ArrayView2<bool>, visible: &mut ArrayViewMut2<bool>) {
+    debug_assert_eq!(transparent.dim(), visible.dim());
+    visible.fill(false);
+
+    let (width, height) = visible.dim();
     let half_width = width as i32 / 2;
     let half_height = height as i32 / 2;
 
     shadowcast(half_width, half_height, |offset| {
-        let tile = map[(center + offset).idx()];
-
-        // an even-sized window runs [-half, half - 1], so the far row and
-        // column fall outside it; those tiles still shadow what is behind them
         let x = (half_width + offset.x) as usize;
         let y = (half_height + offset.y) as usize;
-        if let Some(cell) = view.get_mut([x, y]) {
-            *cell = tile.into();
-        }
 
-        opaque(tile)
+        // an even-sized window runs [-half, half - 1], so the sweep reaches one
+        // row and column past it. Those cells could only shadow what lies
+        // further out still, so treating them as clear changes nothing inside.
+        match transparent.get([x, y]) {
+            Some(&clear) => {
+                visible[[x, y]] = true;
+                !clear
+            }
+            None => false,
+        }
+    });
+}
+
+/// Overwrites with `mask` every cell of `view` that `visible` marks hidden.
+pub fn apply_mask<T: Copy>(view: &mut ArrayViewMut2<T>, visible: ArrayView2<bool>, mask: T) {
+    view.zip_mut_with(&visible, |cell, &seen| {
+        if !seen {
+            *cell = mask;
+        }
     });
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ndarray::s;
+    use crate::vocab::VocabId;
 
     const CLEAR: VocabId = 0;
     const WALL: VocabId = 1;
@@ -231,10 +253,15 @@ mod tests {
             "the viewer has to sit at the centre of the window"
         );
 
-        let mut view = Array2::from_elem((width, height), MASK);
-        encode_visible(&map, viewer, &mut view.view_mut(), MASK, |tile| {
-            tile == WALL
-        });
+        let transparent = map.mapv(|tile| tile != WALL);
+        let mut visible = Array2::from_elem((width, height), false);
+        cast_visible(
+            window(&transparent, viewer, (width, height)),
+            &mut visible.view_mut(),
+        );
+
+        let mut view = window(&map, viewer, (width, height)).to_owned();
+        apply_mask(&mut view.view_mut(), visible.view(), MASK);
 
         (0..height)
             .map(|row| {
@@ -342,17 +369,46 @@ mod tests {
     fn an_open_view_matches_a_plain_window_copy() {
         // every cell distinct, so a misplaced one cannot pass unnoticed
         let map = Array2::from_shape_fn((32, 32), |(x, y)| (x * 32 + y) as VocabId);
+        let transparent = Array2::from_elem(map.dim(), true);
         let center = Position::new(16, 16);
 
         for (width, height) in [(11, 11), (10, 8), (5, 9)] {
-            let mut view = Array2::from_elem((width, height), MASK);
-            encode_visible(&map, center, &mut view.view_mut(), MASK, |_| false);
+            let mut visible = Array2::from_elem((width, height), false);
+            cast_visible(
+                window(&transparent, center, (width, height)),
+                &mut visible.view_mut(),
+            );
 
-            let x0 = center.x as usize - width / 2;
-            let y0 = center.y as usize - height / 2;
-            let window = map.slice(s![x0..x0 + width, y0..y0 + height]);
+            let window = window(&map, center, (width, height));
+            let mut view = window.to_owned();
+            apply_mask(&mut view.view_mut(), visible.view(), MASK);
 
             assert_eq!(view, window, "{width}x{height} window");
         }
+    }
+
+    /// The visibility buffer is scratch shared between viewers, so whatever the
+    /// last one saw must not leak into the next.
+    #[test]
+    fn a_reused_visibility_buffer_starts_clean() {
+        let (map, viewer) = parse(&[
+            ".......", //
+            ".......", "...#...", "...@...", ".......", ".......", ".......",
+        ]);
+        let transparent = map.mapv(|tile| tile != WALL);
+
+        let mut fresh = Array2::from_elem(map.dim(), false);
+        cast_visible(
+            window(&transparent, viewer, map.dim()),
+            &mut fresh.view_mut(),
+        );
+
+        let mut reused = Array2::from_elem(map.dim(), true);
+        cast_visible(
+            window(&transparent, viewer, map.dim()),
+            &mut reused.view_mut(),
+        );
+
+        assert_eq!(reused, fresh);
     }
 }
