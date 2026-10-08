@@ -9,7 +9,11 @@ use slotmap::{SlotMap, new_key_type};
 use crate::{
     env::Environment,
     envs::{
-        common::{Position, UI_HEIGHT, fov, stamp::stamp_circle, vocab_enum::VocabEnum},
+        common::{
+            Position, UI_HEIGHT,
+            fov::{self, ViewTile, window},
+            vocab_enum::VocabEnum,
+        },
         survival::{action::SurvivalAction, obs::SurvivalObs},
     },
     render::env::{GridRenderSettings, GridRenderState},
@@ -177,27 +181,31 @@ impl Survival {
 
         // render lights, this should be a seperate function
         state.lighting.fill(false);
-        stamp_circle(&mut state.lighting, Position::new(10, 10), 5, true);
+        let (lighting, render_map) = (&mut state.lighting, &state.render_map);
+        let light = Position::new(10, 10);
+        fov::shadowcast(light, lighting.dim(), |cell| {
+            if !fov::within(cell - light, 5) {
+                return true; // past the light's reach, and so is all behind it
+            }
+            lighting[cell.idx()] = true;
+            render_map[cell.idx()].opaque()
+        });
     }
 
     fn encode_observations(&self, timestep: &mut TimeStepMut) {
         let fov_height = self.config.view_height as usize;
-        // shared by every agent, so a step allocates these once rather than
-        // once per agent
-        let transparent = self.state.render_map.mapv(|tile| !tile.opaque());
-        let mut visible = Array2::from_elem((self.config.view_width as usize, fov_height), false);
-
         for agent_id in 0..self.num_agents() {
             let agent = self.state.agent(agent_id);
             // wall padding keeps the view window inside the map
             let mut view = timestep.obs.slice_mut(s![agent_id, .., ..fov_height, 0]);
-            let window = fov::window(&self.state.render_map, agent.position, view.dim());
-            view.zip_mut_with(&window, |cell, &tile| *cell = tile.into());
-            fov::cast_visible(
-                fov::window(&transparent, agent.position, view.dim()),
-                &mut visible.view_mut(),
-            );
-            fov::apply_mask(&mut view, visible.view(), SurvivalObs::Mask.into());
+            fov::observe(&self.state.render_map, agent.position, &mut view);
+
+            let lightning_window = window(&self.state.lighting, agent.position, view.dim());
+            view.zip_mut_with(&lightning_window, |target, light| {
+                if !light {
+                    *target = SurvivalObs::Mask.into();
+                }
+            });
 
             let mut ui = timestep.obs.slice_mut(s![agent_id, .., fov_height.., 0]);
             ui.fill(SurvivalObs::UI as VocabId);

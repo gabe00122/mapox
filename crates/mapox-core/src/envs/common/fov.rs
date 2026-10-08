@@ -1,10 +1,15 @@
 //! Field of view: which cells a viewer standing on a grid can actually see.
 //!
-//! [`shadowcast`] is the algorithm on its own, over nothing but offsets and a
-//! callback, so an env can point it at whatever it stores. [`cast_visible`] is
-//! what every grid env with a centred observation window wants: from the
-//! [`window`] of transparency around the viewer, mark which cells it sees, then
-//! [`apply_mask`] to whatever was copied into its observation.
+//! [`shadowcast`] sweeps a grid from a source and hands every cell it reaches
+//! to a callback, so an env reads opacity straight off whatever it stores and
+//! does whatever it likes with what is seen: fill an observation, light the
+//! map, remember what was explored. [`observe`] is the common case built on
+//! it: fill an agent's observation window with what it can see.
+//!
+//! Neither takes a radius. A consumer that wants one sweeps with
+//! [`shadowcast`] and checks it in its callback (with [`within`], say),
+//! answering that a cell past it blocks sight: the cell is left out, so is
+//! everything behind it, and the sweep stops there.
 
 use ndarray::{Array2, ArrayView2, ArrayViewMut2, s};
 
@@ -27,9 +32,11 @@ const OCTANTS: [(i32, i32, i32, i32); 8] = [
 ];
 
 /// One wedge of a sweep: how to place a `(lateral, depth)` pair on the grid,
-/// and how far the window reaches along each of those axes.
+/// and how far the grid reaches along each of those axes in this wedge's
+/// direction.
 #[derive(Debug, Clone, Copy)]
 struct Octant {
+    source: Position,
     xx: i32,
     xy: i32,
     yx: i32,
@@ -39,15 +46,34 @@ struct Octant {
 }
 
 impl Octant {
-    fn new((xx, xy, yx, yy): (i32, i32, i32, i32), half_width: i32, half_height: i32) -> Self {
-        // depth runs along x exactly when the depth term feeds the x offset
-        let (max_depth, max_lateral) = if xy != 0 {
-            (half_width, half_height)
-        } else {
-            (half_height, half_width)
+    fn new(
+        (xx, xy, yx, yy): (i32, i32, i32, i32),
+        source: Position,
+        (width, height): (i32, i32),
+    ) -> Self {
+        // how far the grid runs from the source along an axis, given which way
+        let reach_x = |sign: i32| {
+            if sign > 0 {
+                width - 1 - source.x
+            } else {
+                source.x
+            }
+        };
+        let reach_y = |sign: i32| {
+            if sign > 0 {
+                height - 1 - source.y
+            } else {
+                source.y
+            }
         };
 
+        // depth runs along x exactly when the depth term feeds the x offset,
+        // and lateral along x exactly when the lateral term does
+        let max_depth = if xy != 0 { reach_x(xy) } else { reach_y(yy) };
+        let max_lateral = if xx != 0 { reach_x(xx) } else { reach_y(yx) };
+
         Self {
+            source,
             xx,
             xy,
             yx,
@@ -57,38 +83,110 @@ impl Octant {
         }
     }
 
-    fn offset(&self, lateral: i32, depth: i32) -> Position {
-        Position::new(
-            lateral * self.xx + depth * self.xy,
-            lateral * self.yx + depth * self.yy,
-        )
+    fn cell(&self, lateral: i32, depth: i32) -> Position {
+        self.source
+            + Position::new(
+                lateral * self.xx + depth * self.xy,
+                lateral * self.yx + depth * self.yy,
+            )
     }
 }
 
-/// Visits every cell a viewer can see inside the box reaching `half_width` and
-/// `half_height` around it, calling `reveal` once per visible cell with that
-/// cell's offset from the viewer. `reveal` answers whether the cell it was
-/// handed blocks sight of what lies behind it.
+/// Visits every cell of a `width` x `height` grid that a viewer at `source`
+/// can see, calling `reveal` with each one. `reveal` answers whether the cell
+/// it was handed blocks sight of what lies behind it. Cells handed out are
+/// always on the grid.
+///
+/// To stop at a radius, have `reveal` leave a cell past it alone and answer
+/// that it blocks: nothing behind a cell is any nearer the source than it, so
+/// the sweep reaches exactly the disk and goes no further. Any disk works, the
+/// one [`within`] draws or the one [`stamp_circle`] fills.
+///
+/// What a revealed cell means is up to the caller: copy a tile into an
+/// observation, light a cell, remember it. For a viewer's observation window,
+/// sweep the window itself with the viewer at its centre, `(width / 2,
+/// height / 2)`, and offset into the map from there.
 ///
 /// This is recursive shadowcasting (Björn Bergström's algorithm): walk out row
 /// by row carrying the slope range still lit, and every time a wall interrupts
-/// that range, recurse on the slice above it and keep scanning below it. Each
-/// visible cell is visited once, so a sweep costs O(cells in the box) rather
-/// than tracing a ray per cell.
+/// that range, recurse on the slice above it and keep scanning below it. A
+/// sweep costs O(cells in range) rather than tracing a ray per cell. Cells on
+/// the boundary between two octants (the axes and diagonals) can be revealed
+/// twice, so `reveal` should be idempotent.
 ///
-/// Two things the callers inherit. Cells whose corner is exactly tangent to a
-/// wall's corner count as seen, so a lone wall never casts a perfectly clean
-/// shadow at 45°. And the offsets handed out can reach `half_width` and
-/// `half_height` in either direction, so a viewer near the edge of a map needs
-/// that much padding around it (the envs get this from their wall border).
-pub fn shadowcast(half_width: i32, half_height: i32, mut reveal: impl FnMut(Position) -> bool) {
+/// Cells whose corner is exactly tangent to a wall's corner count as seen, so a
+/// lone wall never casts a perfectly clean shadow at 45°.
+///
+/// [`stamp_circle`]: super::stamp::stamp_circle
+pub fn shadowcast(
+    source: Position,
+    (width, height): (usize, usize),
+    mut reveal: impl FnMut(Position) -> bool,
+) {
+    let dim = (width as i32, height as i32);
+    debug_assert!(
+        (0..dim.0).contains(&source.x) && (0..dim.1).contains(&source.y),
+        "the source {source:?} has to be on the {width}x{height} grid"
+    );
     // the viewer always sees the cell it stands on; the sweep starts a ring out
-    reveal(Position::new(0, 0));
+    reveal(source);
 
     for &transform in &OCTANTS {
-        let octant = Octant::new(transform, half_width, half_height);
+        let octant = Octant::new(transform, source, dim);
         cast_light(&octant, 1, 1.0, 0.0, &mut reveal);
     }
+}
+
+/// Whether `offset` lies within `radius` of the origin, on the disk
+/// `x² + y² <= r² + r`. That is the disk of cells whose centres lie within
+/// `r + ½`, which reads rounder on a grid than `x² + y² <= r²` and its lone
+/// cells poking out at the four tips. A negative radius takes in nothing.
+pub fn within(offset: Position, radius: i32) -> bool {
+    radius >= 0 && offset.x * offset.x + offset.y * offset.y <= radius * radius + radius
+}
+
+/// A tile an agent's view is drawn in: whether it blocks sight, and what an
+/// observation shows in place of a tile out of sight.
+pub trait ViewTile: Copy {
+    /// What a hidden cell of an observation reads as.
+    const MASK: Self;
+
+    /// Whether the tile hides what lies behind it.
+    fn opaque(self) -> bool;
+}
+
+/// Fills `view`, an observation window centred on `viewer`, with the tiles of
+/// `map` the viewer can see, and [`ViewTile::MASK`] everywhere else.
+///
+/// An even-sized window runs `[-half, half - 1]` around `viewer`. `map` must
+/// have at least half a window of padding around `viewer`, which is the wall
+/// border the envs already keep.
+pub fn observe<T: ViewTile + Into<V>, V: Copy>(
+    map: &Array2<T>,
+    viewer: Position,
+    view: &mut ArrayViewMut2<V>,
+) {
+    let (width, height) = view.dim();
+    // the sweep runs over the window itself, with the viewer at its centre
+    let center = Position::new(width as i32 / 2, height as i32 / 2);
+    let origin = viewer - center;
+
+    view.fill(T::MASK.into());
+    shadowcast(center, (width, height), |cell| {
+        let tile = map[(origin + cell).idx()];
+        view[cell.idx()] = tile.into();
+        tile.opaque()
+    });
+}
+
+pub fn window<T>(
+    map: &Array2<T>,
+    center: Position,
+    (width, height): (usize, usize),
+) -> ArrayView2<'_, T> {
+    let x0 = center.x as usize - width / 2;
+    let y0 = center.y as usize - height / 2;
+    map.slice(s![x0..x0 + width, y0..y0 + height])
 }
 
 /// Sweeps one octant over the slope range `end_slope..=start_slope`, starting
@@ -111,8 +209,8 @@ fn cast_light(
         let mut next_start = start_slope;
 
         // scan from the outer edge of the wedge inwards, i.e. from the steepest
-        // slope down. Cells past the side of the window are left out: whatever
-        // they would shadow is outside the window too.
+        // slope down. Cells past the side of the grid are left out: whatever
+        // they would shadow is off the grid too.
         for lateral in (0..=depth.min(octant.max_lateral)).rev() {
             // slopes of this cell's outer and inner corners
             let outer_slope = (lateral as f32 + 0.5) / (depth as f32 - 0.5);
@@ -124,8 +222,7 @@ fn cast_light(
             if end_slope > outer_slope {
                 break; // past the beam, and so is the rest of this row
             }
-
-            let opaque = reveal(octant.offset(lateral, depth));
+            let opaque = reveal(octant.cell(lateral, depth));
 
             if blocked {
                 if opaque {
@@ -150,68 +247,10 @@ fn cast_light(
     }
 }
 
-/// The `width` x `height` window of `map` centred on `center`, the same cells
-/// a viewer there has in its observation window: slice tiles out of the map to
-/// copy into the observation, or transparency to hand to [`cast_visible`].
-///
-/// An even-sized window runs `[-half, half - 1]` around `center`. `map` must
-/// have at least half a window of padding around `center`, which is the wall
-/// border the envs already keep.
-pub fn window<T>(
-    map: &Array2<T>,
-    center: Position,
-    (width, height): (usize, usize),
-) -> ArrayView2<'_, T> {
-    let x0 = center.x as usize - width / 2;
-    let y0 = center.y as usize - height / 2;
-    map.slice(s![x0..x0 + width, y0..y0 + height])
-}
-
-/// Marks in `visible` which cells of a window the viewer at its centre can
-/// see, judging line of sight from `transparent`, the window's cells that let
-/// sight through (see [`window`]). Both are window-sized; every cell of
-/// `visible` is written, so it can be reused from one viewer to the next.
-///
-/// Nothing is masked here, so the caller owns every buffer and decides what a
-/// hidden cell turns into: hand `visible` to [`apply_mask`] for each layer of
-/// the observation.
-pub fn cast_visible(transparent: ArrayView2<bool>, visible: &mut ArrayViewMut2<bool>) {
-    debug_assert_eq!(transparent.dim(), visible.dim());
-    visible.fill(false);
-
-    let (width, height) = visible.dim();
-    let half_width = width as i32 / 2;
-    let half_height = height as i32 / 2;
-
-    shadowcast(half_width, half_height, |offset| {
-        let x = (half_width + offset.x) as usize;
-        let y = (half_height + offset.y) as usize;
-
-        // an even-sized window runs [-half, half - 1], so the sweep reaches one
-        // row and column past it. Those cells could only shadow what lies
-        // further out still, so treating them as clear changes nothing inside.
-        match transparent.get([x, y]) {
-            Some(&clear) => {
-                visible[[x, y]] = true;
-                !clear
-            }
-            None => false,
-        }
-    });
-}
-
-/// Overwrites with `mask` every cell of `view` that `visible` marks hidden.
-pub fn apply_mask<T: Copy>(view: &mut ArrayViewMut2<T>, visible: ArrayView2<bool>, mask: T) {
-    view.zip_mut_with(&visible, |cell, &seen| {
-        if !seen {
-            *cell = mask;
-        }
-    });
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::envs::common::stamp::stamp_circle;
     use crate::vocab::VocabId;
 
     const CLEAR: VocabId = 0;
@@ -242,26 +281,16 @@ mod tests {
     }
 
     /// Sweeps a parsed map and draws back what the viewer sees: `#` wall, `.`
-    /// floor, `?` hidden. The window is the whole map, so `rows` has to be odd
-    /// sized with the viewer dead centre.
+    /// floor, `?` hidden.
     fn seen(rows: &[&str]) -> String {
         let (map, viewer) = parse(rows);
         let (width, height) = map.dim();
-        assert_eq!(
-            (viewer.x, viewer.y),
-            (width as i32 / 2, height as i32 / 2),
-            "the viewer has to sit at the centre of the window"
-        );
 
-        let transparent = map.mapv(|tile| tile != WALL);
-        let mut visible = Array2::from_elem((width, height), false);
-        cast_visible(
-            window(&transparent, viewer, (width, height)),
-            &mut visible.view_mut(),
-        );
-
-        let mut view = window(&map, viewer, (width, height)).to_owned();
-        apply_mask(&mut view.view_mut(), visible.view(), MASK);
+        let mut view = Array2::from_elem(map.dim(), MASK);
+        shadowcast(viewer, map.dim(), |cell| {
+            view[cell.idx()] = map[cell.idx()];
+            map[cell.idx()] == WALL
+        });
 
         (0..height)
             .map(|row| {
@@ -361,54 +390,136 @@ mod tests {
         );
     }
 
-    /// With nothing in the way the sweep has to hand back exactly the window a
-    /// plain slice of the map would, whatever its shape — including an
-    /// even-sized one, whose window runs `[-half, half - 1]` and so has no
-    /// centre cell to sit on.
+    /// Floor that never blocks sight, each cell telling its id.
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    struct Floor(VocabId);
+
+    impl ViewTile for Floor {
+        const MASK: Self = Floor(MASK);
+
+        fn opaque(self) -> bool {
+            false
+        }
+    }
+
+    impl From<Floor> for VocabId {
+        fn from(Floor(id): Floor) -> Self {
+            id
+        }
+    }
+
+    /// With nothing in the way an observation has to be exactly what a plain
+    /// slice of the map would be, whatever its shape — including an even-sized
+    /// one, whose window runs `[-half, half - 1]` and so has no centre cell to
+    /// sit on.
     #[test]
     fn an_open_view_matches_a_plain_window_copy() {
         // every cell distinct, so a misplaced one cannot pass unnoticed
-        let map = Array2::from_shape_fn((32, 32), |(x, y)| (x * 32 + y) as VocabId);
-        let transparent = Array2::from_elem(map.dim(), true);
-        let center = Position::new(16, 16);
+        let map = Array2::from_shape_fn((32, 32), |(x, y)| Floor((x * 32 + y) as VocabId));
+        let viewer = Position::new(16, 16);
 
         for (width, height) in [(11, 11), (10, 8), (5, 9)] {
-            let mut visible = Array2::from_elem((width, height), false);
-            cast_visible(
-                window(&transparent, center, (width, height)),
-                &mut visible.view_mut(),
-            );
+            let mut view = Array2::from_elem((width, height), MASK);
+            observe(&map, viewer, &mut view.view_mut());
 
-            let window = window(&map, center, (width, height));
-            let mut view = window.to_owned();
-            apply_mask(&mut view.view_mut(), visible.view(), MASK);
-
+            let window = window(&map, viewer, (width, height)).mapv(|Floor(id)| id);
             assert_eq!(view, window, "{width}x{height} window");
         }
     }
 
-    /// The visibility buffer is scratch shared between viewers, so whatever the
-    /// last one saw must not leak into the next.
+    /// The viewer does not have to be central: off centre, the sweep still
+    /// reaches every corner of the grid and never steps off it.
     #[test]
-    fn a_reused_visibility_buffer_starts_clean() {
-        let (map, viewer) = parse(&[
-            ".......", //
-            ".......", "...#...", "...@...", ".......", ".......", ".......",
+    fn an_off_centre_viewer_sees_the_whole_open_grid() {
+        for source in [
+            Position::new(0, 0),
+            Position::new(8, 1),
+            Position::new(3, 4),
+        ] {
+            let mut seen = Array2::from_elem((9, 5), false);
+            shadowcast(source, seen.dim(), |cell| {
+                seen[cell.idx()] = true;
+                false
+            });
+            assert!(seen.iter().all(|&seen| seen), "from {source:?}");
+        }
+    }
+
+    /// Lights `lit` with what a light at `source` reaches over `transparent`,
+    /// out to the disk `in_range` draws around it, enforced the way any
+    /// consumer would: a cell past it is left dark and blocks.
+    fn light(
+        transparent: &Array2<bool>,
+        source: Position,
+        in_range: impl Fn(Position) -> bool,
+        lit: &mut Array2<bool>,
+    ) {
+        shadowcast(source, transparent.dim(), |cell| {
+            if !in_range(cell - source) {
+                return true;
+            }
+            lit[cell.idx()] = true;
+            !transparent[cell.idx()]
+        });
+    }
+
+    /// Blocking at the radius loses nothing inside it: in open ground a light
+    /// reaches exactly its disk, from anywhere on the grid, up against its
+    /// edges included, for either way of drawing a disk.
+    #[test]
+    fn an_open_light_reaches_exactly_its_disk() {
+        let transparent = Array2::from_elem((41, 33), true);
+        let sources = [
+            Position::new(20, 16),
+            Position::new(3, 5),
+            Position::new(40, 0),
+        ];
+
+        for source in sources {
+            for radius in -1..=25 {
+                let mut lit = Array2::from_elem(transparent.dim(), false);
+                light(
+                    &transparent,
+                    source,
+                    |offset| within(offset, radius),
+                    &mut lit,
+                );
+                let disk = Array2::from_shape_fn(transparent.dim(), |(x, y)| {
+                    within(Position::new(x as i32, y as i32) - source, radius)
+                });
+                assert_eq!(lit, disk, "within {radius} of {source:?}");
+
+                let squared = radius * radius;
+                let mut lit = Array2::from_elem(transparent.dim(), false);
+                light(
+                    &transparent,
+                    source,
+                    |offset| radius >= 0 && offset.x * offset.x + offset.y * offset.y <= squared,
+                    &mut lit,
+                );
+                let mut stamped = Array2::from_elem(transparent.dim(), false);
+                stamp_circle(&mut stamped, source, radius, true);
+                assert_eq!(lit, stamped, "stamped {radius} at {source:?}");
+            }
+        }
+    }
+
+    /// A light against a wall lights the wall but nothing behind it.
+    #[test]
+    fn a_wall_stops_a_light() {
+        let (map, source) = parse(&[
+            "...#...", //
+            "...#...", "...#...", ".@.#...", "...#...", "...#...", "...#...",
         ]);
         let transparent = map.mapv(|tile| tile != WALL);
 
-        let mut fresh = Array2::from_elem(map.dim(), false);
-        cast_visible(
-            window(&transparent, viewer, map.dim()),
-            &mut fresh.view_mut(),
-        );
+        let mut lit = Array2::from_elem(map.dim(), false);
+        light(&transparent, source, |offset| within(offset, 3), &mut lit);
 
-        let mut reused = Array2::from_elem(map.dim(), true);
-        cast_visible(
-            window(&transparent, viewer, map.dim()),
-            &mut reused.view_mut(),
+        assert!(lit[[3, 3]], "the wall itself is lit");
+        assert!(
+            (4..7).all(|x| (0..7).all(|y| !lit[[x, y]])),
+            "behind the wall is dark"
         );
-
-        assert_eq!(reused, fresh);
     }
 }

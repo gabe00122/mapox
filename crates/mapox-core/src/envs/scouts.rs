@@ -116,13 +116,17 @@ impl ScoutsObs {
         matches!(self, TileWall | TileWater)
     }
 
-    fn opaque(self) -> bool {
-        matches!(self, ScoutsObs::TileWall)
-    }
-
     fn spawnable(self) -> bool {
         use ScoutsObs::*;
         !self.blocked() && !matches!(self, TileFlag | TileFlagUnlocked)
+    }
+}
+
+impl fov::ViewTile for ScoutsObs {
+    const MASK: Self = ScoutsObs::Mask;
+
+    fn opaque(self) -> bool {
+        matches!(self, ScoutsObs::TileWall)
     }
 }
 
@@ -282,20 +286,10 @@ impl Scouts {
 
     fn encode_observations(&self, timestep: &mut TimeStepMut) {
         let fov_height = self.config.view_height as usize;
-        // shared by every agent, so a step allocates these once rather than
-        // once per agent
-        let transparent = self.state.map.mapv(|tile| !tile.opaque());
-        let mut visible = Array2::from_elem((self.config.view_width as usize, fov_height), false);
-
         for (agent_id, agent) in self.state.agents.iter().enumerate() {
+            // wall padding keeps the view window inside the map
             let mut view = timestep.obs.slice_mut(s![agent_id, .., ..fov_height, 0]);
-            let window = fov::window(&self.state.map, agent.position, view.dim());
-            view.zip_mut_with(&window, |cell, &tile| *cell = tile.into());
-            fov::cast_visible(
-                fov::window(&transparent, agent.position, view.dim()),
-                &mut visible.view_mut(),
-            );
-            fov::apply_mask(&mut view, visible.view(), ScoutsObs::Mask.into());
+            fov::observe(&self.state.map, agent.position, &mut view);
 
             let mut ui = timestep.obs.slice_mut(s![agent_id, .., fov_height.., 0]);
             ui.fill(ScoutsObs::UI as VocabId);

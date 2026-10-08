@@ -1,4 +1,5 @@
 use crate::{
+    envs::common::fov::ViewTile,
     symbols::{
         AGENT_GENERIC, TILE_DECOR_1, TILE_DECOR_2, TILE_DECOR_3, TILE_DECOR_4,
         TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_MASK, TILE_UI, TILE_WALL, TILE_WATER,
@@ -37,9 +38,13 @@ impl SurvivalObs {
             TileEmpty | TileDecor1 | TileDecor2 | TileDecor3 | TileDecor4
         )
     }
+}
+
+impl ViewTile for SurvivalObs {
+    const MASK: Self = SurvivalObs::Mask;
 
     /// Water is the one blocking tile an agent can see straight over.
-    pub(super) fn opaque(self) -> bool {
+    fn opaque(self) -> bool {
         use SurvivalObs::*;
         matches!(self, TileWall | TileDestructibleWall)
     }
