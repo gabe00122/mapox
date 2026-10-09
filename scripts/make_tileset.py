@@ -139,6 +139,15 @@ GHOST_FRIGHTENED_FACE = hex_color("ffd9c7")
 GHOST_EYE = hex_color("f2f2ee")
 GHOST_PUPIL = hex_color("2121c4")
 
+HEART = hex_color("e5383f")
+HEART_DARK = hex_color("8f1d22")
+HEART_LIGHT = hex_color("ff8a8f")
+
+MEAT = hex_color("c8763c")
+MEAT_DARK = hex_color("8c4a20")
+MEAT_LIGHT = hex_color("f0a769")
+BONE = hex_color("f2efe6")
+
 TEAM_RED = hex_color("e5383f")
 TEAM_BLUE = hex_color("3a78ff")
 TEAM_NEUTRAL = hex_color("d6dbe4")
@@ -840,6 +849,45 @@ def ghost(body: Color) -> Sprite:
     )
 
 
+# --- survival --------------------------------------------------------------
+
+HEART_ICON = check(
+    [
+        "............",
+        "............",
+        "..OOO..OOO..",
+        ".OhRROORRrO.",
+        ".OhRRRRRRrO.",
+        ".ORRRRRRRrO.",
+        "..ORRRRRrO..",
+        "...ORRRrO...",
+        "....ORrO....",
+        ".....OO.....",
+        "............",
+        "............",
+    ],
+    "heart",
+)
+
+DRUMSTICK = check(
+    [
+        "............",
+        "............",
+        "....OOOO....",
+        "...OMMmmO...",
+        "..OMhMMmmO..",
+        "..OMMMMmmO..",
+        "..OmMMmmmO..",
+        "...OmmmmO...",
+        "....OOBO....",
+        ".....OBO....",
+        "....OBBBO...",
+        "....OOOOO...",
+    ],
+    "drumstick",
+)
+
+
 # --- sheet -----------------------------------------------------------------
 
 
@@ -888,7 +936,20 @@ def build_sheet() -> list[list[Sprite]]:
         archers = [soldier(ARCHER, team, direction, False) for direction in range(4)]
         return knights + archers
 
-    digits = [digit(value) for value in range(10)]
+    # The digits leave two slots free, which the survival stat labels fill.
+    digits = [
+        *(digit(value) for value in range(10)),
+        stamp(
+            blank(UI),
+            HEART_ICON,
+            {"O": OUTLINE, "R": HEART, "r": HEART_DARK, "h": HEART_LIGHT},
+        ),
+        stamp(
+            blank(UI),
+            DRUMSTICK,
+            {"O": OUTLINE, "M": MEAT, "m": MEAT_DARK, "h": MEAT_LIGHT, "B": BONE},
+        ),
+    ]
     pacman_row = [
         pellet(),
         power_pellet(),

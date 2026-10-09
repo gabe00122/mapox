@@ -8,22 +8,18 @@ mod prototypes;
 mod world;
 
 use hecs::{Entity, World};
-use ndarray::{Array2, ArrayViewMut2, s};
+use ndarray::{Array2, s};
 use rand::{SeedableRng, rngs::SmallRng, seq::SliceRandom};
 
 use crate::{
     env::Environment,
     envs::{
-        common::{
-            Position, UI_HEIGHT,
-            fov::{self, ViewTile},
-            vocab_enum::VocabEnum,
-        },
+        common::{Position, UI_HEIGHT, vocab_enum::VocabEnum},
         survival::{
             action::SurvivalAction,
             config::SurvivalConfig,
-            obs::{SurvivalObs, encode_view},
-            world::{Agent, EntityCell, Slot},
+            obs::{SurvivalObs, UI_WIDTH},
+            world::{EntityCell, Slot},
         },
     },
     render::env::{GridRenderSettings, GridRenderState},
@@ -68,6 +64,11 @@ pub struct Survival {
 
 impl Survival {
     pub fn new(config: &SurvivalConfig, length: usize) -> Self {
+        assert!(
+            config.view_width as usize >= UI_WIDTH,
+            "the UI band needs a view at least {UI_WIDTH} wide"
+        );
+
         let action_vocab = SurvivalAction::vocab();
         let obs_vocab = SurvivalObs::vocab();
 
@@ -134,30 +135,6 @@ impl Survival {
 
         // render lights, this should be a seperate function
         self.prepare_lights();
-    }
-
-    fn encode_observations(&mut self, timestep: &mut TimeStepMut) {
-        let fov_height = self.config.view_height as usize;
-        for (&position, agent) in self.state.world.query_mut::<(&Position, &Agent)>() {
-            let agent_id = agent.agent_index;
-
-            // wall padding keeps the view window inside the map
-            let mut view = timestep.obs.slice_mut(s![agent_id, .., ..fov_height, 0]);
-            encode_view(
-                &self.state.render_map,
-                &self.state.lighting,
-                position,
-                self.config.night_vision_radius,
-                &mut view,
-            );
-
-            let mut ui = timestep.obs.slice_mut(s![agent_id, .., fov_height.., 0]);
-            ui.fill(SurvivalObs::UI as VocabId);
-        }
-
-        timestep.time.fill(self.state.time as i32);
-        timestep.terminated.fill(self.state.time == self.length);
-        timestep.task_ids.fill(0);
     }
 
     fn encode_action_mask(&self, timestep: &mut TimeStepMut) {

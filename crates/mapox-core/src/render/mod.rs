@@ -16,7 +16,8 @@ use crate::{symbols, vocab::Vocabulary};
 
 /// Symbol -> (col, row) on the sheet `scripts/make_tileset.py` draws. Row 0
 /// is terrain, row 1 items and characters, row 2 the snake colours, rows 3
-/// and 4 the soldiers, row 5 the UI digits, and row 6 pac-man.
+/// and 4 the soldiers, row 5 the UI digits and stat labels, and row 6
+/// pac-man.
 const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::TILE_UI, 0, 0),
     (symbols::TILE_MASK, 1, 0),
@@ -58,6 +59,8 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::UI_DIGITS[7], 7, 5),
     (symbols::UI_DIGITS[8], 8, 5),
     (symbols::UI_DIGITS[9], 9, 5),
+    (symbols::UI_HEALTH, 10, 5),
+    (symbols::UI_HUNGER, 11, 5),
     (symbols::TILE_PELLET, 0, 6),
     (symbols::TILE_POWER_PELLET, 1, 6),
     (symbols::AGENT_PACMAN_UP, 2, 6),
@@ -94,6 +97,7 @@ mod tests {
     use crate::envs::pacman::{Pacman, PacmanConfig};
     use crate::envs::scouts::{Scouts, ScoutsConfig};
     use crate::envs::snake::{Snake, SnakeConfig};
+    use crate::envs::survival::{Survival, config::SurvivalConfig};
     use crate::make::{EnvConfig, MultiEnvSpec};
     use crate::render::env::GridRenderState;
     use crate::symbols::AGENT_SNAKE_RED;
@@ -108,6 +112,7 @@ mod tests {
             Box::new(Scouts::new(&ScoutsConfig::default(), 512)),
             Box::new(Snake::new(&SnakeConfig::default(), 512)),
             Box::new(Pacman::new(&PacmanConfig::default(), 512)),
+            Box::new(Survival::new(&SurvivalConfig::default(), 512)),
         ]
     }
 

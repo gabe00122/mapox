@@ -17,6 +17,10 @@ pub const UI_DIGITS: [&str; 10] = [
     "ui/digit_9",
 ];
 
+/// Survival stat labels, each drawn in front of the number it labels.
+pub const UI_HEALTH: &str = "ui/health";
+pub const UI_HUNGER: &str = "ui/hunger";
+
 pub const TILE_MASK: &str = "mask";
 pub const TILE_EMPTY: &str = "tile/empty";
 pub const TILE_WALL: &str = "tile/wall";
