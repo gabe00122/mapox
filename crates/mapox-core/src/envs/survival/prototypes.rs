@@ -4,6 +4,7 @@ use crate::envs::{
     common::Position,
     survival::{
         SurvivalObs, SurvivalState,
+        needs::{Health, Hunger},
         world::{Agent, Slot},
     },
 };
@@ -20,6 +21,8 @@ impl SurvivalState {
                 position,
                 Slot::Upper,
                 SurvivalObs::AgentGeneric,
+                Health { amount: 100 },
+                Hunger { amount: 100 },
             )),
         }
     }

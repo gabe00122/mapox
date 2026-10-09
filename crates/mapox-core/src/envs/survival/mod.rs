@@ -3,6 +3,7 @@ pub mod config;
 pub mod obs;
 
 mod lightning;
+mod needs;
 mod prototypes;
 mod world;
 
@@ -213,6 +214,9 @@ impl Environment for Survival {
     }
 
     fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
+        self.state.tick_starvation();
+        self.state.tick_hunger();
+
         self.state.agent_order.shuffle(&mut self.state.rngs);
 
         for turn in 0..self.num_agents() {
