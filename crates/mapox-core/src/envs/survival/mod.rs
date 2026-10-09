@@ -2,6 +2,7 @@ pub mod action;
 pub mod config;
 pub mod obs;
 
+mod fire;
 mod lightning;
 mod needs;
 mod prototypes;
@@ -19,6 +20,7 @@ use crate::{
             action::SurvivalAction,
             config::SurvivalConfig,
             obs::{SurvivalObs, UI_WIDTH},
+            prototypes::Prototype,
             world::{EntityCell, Slot},
         },
     },
@@ -177,11 +179,14 @@ impl Environment for Survival {
 
         for i in 0..self.num_agents() {
             let id = self.state.spawn_prototype(
-                prototypes::Prototype::Survivor { agent_index: i },
+                Prototype::Survivor { agent_index: i },
                 Position::new(20, 20 + i as i32),
             );
             self.state.agents.push(id);
         }
+
+        self.state
+            .spawn_prototype(Prototype::Fire, Position::new(20, 20));
 
         timestep.reward.fill(0.0);
         timestep.last_action.fill(0);
@@ -193,6 +198,7 @@ impl Environment for Survival {
     fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
         self.state.tick_starvation();
         self.state.tick_hunger();
+        self.state.tick_fire();
 
         self.state.agent_order.shuffle(&mut self.state.rngs);
 

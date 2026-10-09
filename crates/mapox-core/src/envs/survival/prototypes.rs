@@ -4,6 +4,8 @@ use crate::envs::{
     common::Position,
     survival::{
         SurvivalObs, SurvivalState,
+        fire::Fire,
+        lightning::LightEmitter,
         needs::{Health, Hunger},
         world::{Agent, Slot},
     },
@@ -11,6 +13,7 @@ use crate::envs::{
 
 pub(super) enum Prototype {
     Survivor { agent_index: usize },
+    Fire,
 }
 
 impl SurvivalState {
@@ -23,6 +26,12 @@ impl SurvivalState {
                 SurvivalObs::AgentGeneric,
                 Health { amount: 100 },
                 Hunger { amount: 100 },
+            )),
+            Prototype::Fire => self.spawn((
+                position,
+                Slot::Lower,
+                LightEmitter { radius: 7 },
+                Fire { fuel: 50 },
             )),
         }
     }

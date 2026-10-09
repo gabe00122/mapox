@@ -25,6 +25,14 @@ impl SurvivalState {
         id
     }
 
+    pub(super) fn despawn(&mut self, id: Entity) {
+        if let Ok((position, &slot)) = self.world.query_one_mut::<(&Position, &Slot)>(id) {
+            self.spatial_index[position.idx()][slot as usize] = None;
+        }
+
+        let _ = self.world.despawn(id);
+    }
+
     /// Move an entity, keeping the objects layer in sync.
     pub(super) fn move_entity(&mut self, id: Entity, target: Position) {
         let (position, &slot) = self
