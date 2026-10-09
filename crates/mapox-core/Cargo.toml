@@ -29,3 +29,4 @@ egui.workspace = true
 image.workspace = true
 bytemuck.workspace = true
 thiserror = "2.0.20"
+hecs = "0.11.2"

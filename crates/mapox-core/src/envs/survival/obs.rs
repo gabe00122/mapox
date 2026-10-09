@@ -1,9 +1,15 @@
+use ndarray::{Array2, ArrayViewMut2};
+
 use crate::{
-    envs::common::fov::ViewTile,
+    envs::common::{
+        Position,
+        fov::{self, ViewTile},
+    },
     symbols::{
         AGENT_GENERIC, TILE_DECOR_1, TILE_DECOR_2, TILE_DECOR_3, TILE_DECOR_4,
         TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_MASK, TILE_UI, TILE_WALL, TILE_WATER,
     },
+    vocab::VocabId,
     vocab_enum,
 };
 
@@ -47,4 +53,30 @@ impl ViewTile for SurvivalObs {
         use SurvivalObs::*;
         matches!(self, TileWall | TileDestructibleWall)
     }
+}
+
+pub(super) fn encode_view(
+    map: &Array2<SurvivalObs>,
+    lighting: &Array2<bool>,
+    viewer: Position,
+    vision_radius: i32,
+    view: &mut ArrayViewMut2<VocabId>,
+) {
+    let (width, height) = view.dim();
+    // the sweep runs over the window itself, with the viewer at its centre
+    let center = Position::new(width as i32 / 2, height as i32 / 2);
+    let origin = viewer - center;
+
+    view.fill(SurvivalObs::MASK.into());
+    fov::shadowcast(
+        center,
+        (width, height),
+        |cell| !map[(origin + cell).idx()].opaque(),
+        |cell| {
+            let position = origin + cell;
+            if lighting[position.idx()] || fov::within(cell - center, vision_radius) {
+                view[cell.idx()] = map[position.idx()].into();
+            }
+        },
+    );
 }

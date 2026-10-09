@@ -2,9 +2,13 @@ pub mod action;
 pub mod config;
 pub mod obs;
 
+mod lightning;
+mod prototypes;
+mod world;
+
+use hecs::{Entity, World};
 use ndarray::{Array2, ArrayViewMut2, s};
 use rand::{SeedableRng, rngs::SmallRng, seq::SliceRandom};
-use slotmap::{SlotMap, new_key_type};
 
 use crate::{
     env::Environment,
@@ -14,7 +18,12 @@ use crate::{
             fov::{self, ViewTile},
             vocab_enum::VocabEnum,
         },
-        survival::{action::SurvivalAction, config::SurvivalConfig, obs::SurvivalObs},
+        survival::{
+            action::SurvivalAction,
+            config::SurvivalConfig,
+            obs::{SurvivalObs, encode_view},
+            world::{Agent, EntityCell, Slot},
+        },
     },
     render::env::{GridRenderSettings, GridRenderState},
     spec::{ActionSpec, ObservationSpec},
@@ -22,62 +31,19 @@ use crate::{
     vocab::{VocabId, Vocabulary},
 };
 
-new_key_type! {
-    struct EntityId;
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Slot {
-    Lower = 0,
-    Upper = 1,
-}
-
-type ObjectCell = [Option<EntityId>; 2];
-
-#[derive(Debug, Clone)]
-struct Entity {
-    position: Position,
-    slot: Slot,
-    tile: SurvivalObs,
-}
-
-#[derive(Debug, Clone)]
 struct SurvivalState {
     rngs: SmallRng,
-    entities: SlotMap<EntityId, Entity>, // owns every entity; the layers refer into it by id
-    agents: Vec<EntityId>,               // agent_id -> entity
-    agent_order: Vec<usize>,             // agent turn order
+    world: World,
+    agents: Vec<Entity>,     // agent_id -> entity
+    agent_order: Vec<usize>, // agent turn order
     time: usize,
 
-    tiles: Array2<SurvivalObs>,      // terrain layer
-    objects: Array2<ObjectCell>,     // entity layer on top of the terrain
-    lighting: Array2<bool>,          // true for a lit tile and false for a dark tile
-    render_map: Array2<SurvivalObs>, // the render target for the agent views
+    tiles: Array2<SurvivalObs>,        // terrain layer
+    spatial_index: Array2<EntityCell>, // fast special entity lookup index
+    lighting: Array2<bool>,            // true for a lit tile and false for a dark tile
+    render_map: Array2<SurvivalObs>,   // the render target for the agent views
 }
 
-impl SurvivalState {
-    fn agent(&self, agent_id: usize) -> &Entity {
-        &self.entities[self.agents[agent_id]]
-    }
-
-    fn spawn(&mut self, entity: Entity) -> EntityId {
-        let (position, slot) = (entity.position, entity.slot);
-        let id = self.entities.insert(entity);
-        self.objects[position.idx()][slot as usize] = Some(id);
-        id
-    }
-
-    /// Move an entity, keeping the objects layer in sync.
-    fn move_entity(&mut self, id: EntityId, target: Position) {
-        let entity = &mut self.entities[id];
-        let slot = entity.slot as usize;
-        self.objects[entity.position.idx()][slot] = None;
-        entity.position = target;
-        self.objects[target.idx()][slot] = Some(id);
-    }
-}
-
-#[derive(Debug, Clone)]
 pub struct Survival {
     pub config: SurvivalConfig,
     state: SurvivalState,
@@ -122,9 +88,9 @@ impl Survival {
             state: SurvivalState {
                 agents: Vec::with_capacity(config.num_agents),
                 agent_order: (0..config.num_agents).collect(),
-                entities: SlotMap::with_capacity_and_key(config.num_agents),
+                world: World::new(),
                 tiles: Array2::from_elem(map_dim, SurvivalObs::TileEmpty),
-                objects: Array2::from_elem(map_dim, [None; 2]),
+                spatial_index: Array2::from_elem(map_dim, [None; 2]),
                 lighting: Array2::from_elem(map_dim, true),
                 render_map: Array2::from_elem(map_dim, SurvivalObs::TileEmpty),
                 rngs: SmallRng::seed_from_u64(0),
@@ -146,43 +112,40 @@ impl Survival {
     }
 
     fn prepare_render(&mut self) {
-        let state = &mut self.state;
-        state.render_map.assign(&state.tiles);
-        for (dst, cell) in state.render_map.iter_mut().zip(&state.objects) {
-            if let Some(id) = cell[Slot::Upper as usize].or(cell[Slot::Lower as usize]) {
-                *dst = state.entities[id].tile;
+        let (world, render_map, tiles) = (
+            &mut self.state.world,
+            &mut self.state.render_map,
+            &self.state.tiles,
+        );
+        render_map.assign(tiles);
+
+        for (position, &slot, &tile) in world.query_mut::<(&Position, &Slot, &SurvivalObs)>() {
+            if slot == Slot::Lower {
+                render_map[position.idx()] = tile;
+            }
+        }
+
+        for (position, &slot, &tile) in world.query_mut::<(&Position, &Slot, &SurvivalObs)>() {
+            if slot == Slot::Upper {
+                render_map[position.idx()] = tile;
             }
         }
 
         // render lights, this should be a seperate function
-        state.lighting.fill(false);
-        let (lighting, render_map) = (&mut state.lighting, &state.render_map);
-        let light = Position::new(10, 10);
-        // past the light's reach a cell stays dark and blocks, and so is all
-        // behind it
-        let in_reach = |cell: Position| fov::within(cell - light, 5);
-        fov::shadowcast(
-            light,
-            lighting.dim(),
-            |cell| in_reach(cell) && !render_map[cell.idx()].opaque(),
-            |cell| {
-                if in_reach(cell) {
-                    lighting[cell.idx()] = true;
-                }
-            },
-        );
+        self.prepare_lights();
     }
 
-    fn encode_observations(&self, timestep: &mut TimeStepMut) {
+    fn encode_observations(&mut self, timestep: &mut TimeStepMut) {
         let fov_height = self.config.view_height as usize;
-        for agent_id in 0..self.num_agents() {
-            let agent = self.state.agent(agent_id);
+        for (&position, agent) in self.state.world.query_mut::<(&Position, &Agent)>() {
+            let agent_id = agent.agent_index;
+
             // wall padding keeps the view window inside the map
             let mut view = timestep.obs.slice_mut(s![agent_id, .., ..fov_height, 0]);
             encode_view(
                 &self.state.render_map,
                 &self.state.lighting,
-                agent.position,
+                position,
                 self.config.vision_radius,
                 &mut view,
             );
@@ -198,13 +161,11 @@ impl Survival {
 
     fn encode_action_mask(&self, timestep: &mut TimeStepMut) {
         for agent_id in 0..self.num_agents() {
-            let agent = self.state.agent(agent_id);
             let mut mask = timestep.action_mask.row_mut(agent_id);
 
+            mask.fill(false);
             for &action in SurvivalAction::TABLE {
-                mask[action as usize] = !action.is_move()
-                    || !self.state.render_map[(agent.position + action.direction()).idx()]
-                        .move_blocked();
+                mask[action as usize] = true;
             }
         }
     }
@@ -219,7 +180,7 @@ impl Environment for Survival {
         let dim = (self.width as usize, self.height as usize);
         if self.state.tiles.dim() != dim {
             self.state.tiles = Array2::from_elem(dim, SurvivalObs::TileEmpty);
-            self.state.objects = Array2::from_elem(dim, [None; 2]);
+            self.state.spatial_index = Array2::from_elem(dim, [None; 2]);
         }
 
         // an empty room: wall padding around bare floor
@@ -232,16 +193,15 @@ impl Environment for Survival {
             ])
             .fill(SurvivalObs::TileEmpty);
 
-        self.state.objects.fill([None; 2]);
-        self.state.entities.clear();
+        self.state.spatial_index.fill([None; 2]);
+        self.state.world.clear();
         self.state.agents.clear();
 
         for i in 0..self.num_agents() {
-            let id = self.state.spawn(Entity {
-                position: Position::new(20, 20 + i as i32),
-                slot: Slot::Upper,
-                tile: SurvivalObs::AgentGeneric,
-            });
+            let id = self.state.spawn_prototype(
+                prototypes::Prototype::Survivor { agent_index: i },
+                Position::new(20, 20 + i as i32),
+            );
             self.state.agents.push(id);
         }
 
@@ -256,19 +216,24 @@ impl Environment for Survival {
         self.state.agent_order.shuffle(&mut self.state.rngs);
 
         for turn in 0..self.num_agents() {
-            let agent_id = self.state.agent_order[turn];
-            timestep.last_action[agent_id] = actions[agent_id];
-            timestep.reward[agent_id] = 0.0;
+            let agent_index = self.state.agent_order[turn];
+            let agent_id = self.state.agents[agent_index];
+            let (&position, &slot) = self
+                .state
+                .world
+                .query_one_mut::<(&Position, &Slot)>(agent_id)
+                .expect("Agents should have Position and Slot");
 
-            let action = SurvivalAction::from_id(actions[agent_id]);
+            timestep.last_action[agent_index] = actions[agent_index];
+            timestep.reward[agent_index] = 0.0;
+
+            let action = SurvivalAction::from_id(actions[agent_index]);
             if action.is_move() {
-                // the render map is stale mid-step, so check the layers directly
-                let id = self.state.agents[agent_id];
-                let target = self.state.entities[id].position + action.direction();
-                let slot = self.state.entities[id].slot as usize;
-                let occupied = self.state.objects[target.idx()][slot].is_some();
+                let target = position + action.direction();
+                let slot = slot as usize;
+                let occupied = self.state.spatial_index[target.idx()][slot].is_some();
                 if !occupied && !self.state.tiles[target.idx()].move_blocked() {
-                    self.state.move_entity(id, target);
+                    self.state.move_entity(agent_id, target);
                 }
             }
         }
@@ -326,41 +291,21 @@ impl Environment for Survival {
         ]);
         tilemap.zip_mut_with(&interior, |dst, &tile| *dst = tile.into());
 
+        let pad = Position::new(self.pad_width, self.pad_height);
         grid_render_state.agent_positions.clear();
-        for agent_id in 0..self.num_agents() {
-            let local_pos = self.state.agent(agent_id).position
-                - Position::new(self.pad_width, self.pad_height);
-            grid_render_state.agent_positions.push(local_pos);
-        }
+        grid_render_state
+            .agent_positions
+            .extend(self.state.agents.iter().map(|&id| {
+                *self
+                    .state
+                    .world
+                    .get::<&Position>(id)
+                    .expect("Agents must have a Position")
+                    - pad
+            }));
     }
 
     fn num_tasks(&self) -> usize {
         1
     }
-}
-
-fn encode_view(
-    map: &Array2<SurvivalObs>,
-    lighting: &Array2<bool>,
-    viewer: Position,
-    vision_radius: i32,
-    view: &mut ArrayViewMut2<VocabId>,
-) {
-    let (width, height) = view.dim();
-    // the sweep runs over the window itself, with the viewer at its centre
-    let center = Position::new(width as i32 / 2, height as i32 / 2);
-    let origin = viewer - center;
-
-    view.fill(SurvivalObs::MASK.into());
-    fov::shadowcast(
-        center,
-        (width, height),
-        |cell| !map[(origin + cell).idx()].opaque(),
-        |cell| {
-            let position = origin + cell;
-            if fov::within(cell - center, vision_radius) || lighting[position.idx()] {
-                view[cell.idx()] = map[position.idx()].into();
-            }
-        },
-    );
 }
