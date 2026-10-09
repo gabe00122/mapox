@@ -91,3 +91,9 @@ pub const PRIMARY_ACTION: &str = "primary";
 pub const DIG_ACTION: &str = "dig";
 
 pub const PLACE_PIPE: &str = "place_pipe";
+
+pub const TAKE: &str = "item/take";
+pub const PUT: &str = "item/put";
+pub const SWAP: &str = "item/swap";
+pub const COMBINE: &str = "item/combine";
+pub const USE: &str = "item/use";

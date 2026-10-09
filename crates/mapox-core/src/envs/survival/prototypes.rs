@@ -5,15 +5,17 @@ use crate::envs::{
     survival::{
         SurvivalObs, SurvivalState,
         fire::Fire,
+        items::{Inventory, Item, ItemType},
         lightning::LightEmitter,
         needs::{Health, Hunger},
-        world::{Agent, Slot},
+        world::{Agent, Direction, Slot},
     },
 };
 
 pub(super) enum Prototype {
     Survivor { agent_index: usize },
     Fire,
+    Item(ItemType),
 }
 
 impl SurvivalState {
@@ -22,10 +24,12 @@ impl SurvivalState {
             Prototype::Survivor { agent_index } => self.spawn((
                 Agent { agent_index },
                 position,
+                Direction::default(),
                 Slot::Upper,
                 SurvivalObs::AgentGeneric,
                 Health { amount: 100 },
                 Hunger { amount: 100 },
+                Inventory::default(),
             )),
             Prototype::Fire => self.spawn((
                 position,
@@ -34,6 +38,9 @@ impl SurvivalState {
                 LightEmitter { radius: 7 },
                 Fire { fuel: 50 },
             )),
+            Prototype::Item(item_type) => {
+                self.spawn((position, Slot::Lower, item_type.obs(), Item { item_type }))
+            }
         }
     }
 }
