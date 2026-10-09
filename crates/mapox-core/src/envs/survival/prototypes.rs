@@ -30,6 +30,7 @@ impl SurvivalState {
             Prototype::Fire => self.spawn((
                 position,
                 Slot::Lower,
+                SurvivalObs::TileFire,
                 LightEmitter { radius: 7 },
                 Fire { fuel: 50 },
             )),

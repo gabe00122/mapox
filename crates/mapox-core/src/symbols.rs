@@ -35,6 +35,7 @@ pub const TILE_WATER: &str = "tile/water";
 pub const TILE_FOOD: &str = "tile/food";
 pub const TILE_PELLET: &str = "tile/pellet";
 pub const TILE_POWER_PELLET: &str = "tile/power_pellet";
+pub const TILE_FIRE: &str = "tile/fire";
 
 pub const TILE_PIPE_HORIZONTAL: &str = "tile/pipe_horizontal";
 pub const TILE_PIPE_VIRTICAL: &str = "tile/pipe_virtical";

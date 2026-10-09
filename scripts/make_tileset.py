@@ -143,6 +143,11 @@ HEART = hex_color("e5383f")
 HEART_DARK = hex_color("8f1d22")
 HEART_LIGHT = hex_color("ff8a8f")
 
+FLAME_DEEP = hex_color("e85d04")
+FLAME = hex_color("ff9f1c")
+FLAME_CORE = hex_color("ffd166")
+EMBER = hex_color("c2410c")
+
 MEAT = hex_color("c8763c")
 MEAT_DARK = hex_color("8c4a20")
 MEAT_LIGHT = hex_color("f0a769")
@@ -887,6 +892,24 @@ DRUMSTICK = check(
     "drumstick",
 )
 
+FIRE = check(
+    [
+        "............",
+        "......y.....",
+        ".....yY.....",
+        "....yYY..y..",
+        "...yYWY.yY..",
+        "...YWWWYYY..",
+        "..yYWWWWWYy.",
+        "..YYWWWWWYY.",
+        "...rYYYYYr..",
+        ".TTtrrrrrtTT",
+        "..tTTttTTt..",
+        "............",
+    ],
+    "fire",
+)
+
 
 # --- sheet -----------------------------------------------------------------
 
@@ -963,6 +986,21 @@ def build_sheet() -> list[list[Sprite]]:
         stamp(floor(), GHOST_EYES, {"W": GHOST_EYE, "P": GHOST_PUPIL}),
     ]
 
+    survival_row = [
+        stamp(
+            floor(),
+            FIRE,
+            {
+                "y": FLAME_DEEP,
+                "Y": FLAME,
+                "W": FLAME_CORE,
+                "r": EMBER,
+                "T": WOOD,
+                "t": WOOD_DARK,
+            },
+        ),
+    ]
+
     return [
         terrain,
         items,
@@ -971,6 +1009,7 @@ def build_sheet() -> list[list[Sprite]]:
         team_row(TEAM_BLUE),
         digits,
         pacman_row,
+        survival_row,
     ]
 
 

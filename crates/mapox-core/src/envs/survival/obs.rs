@@ -18,8 +18,8 @@ use crate::{
     },
     symbols::{
         AGENT_GENERIC, TILE_DECOR_1, TILE_DECOR_2, TILE_DECOR_3, TILE_DECOR_4,
-        TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_MASK, TILE_UI, TILE_WALL, TILE_WATER, UI_DIGITS,
-        UI_HEALTH, UI_HUNGER,
+        TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_FIRE, TILE_MASK, TILE_UI, TILE_WALL, TILE_WATER,
+        UI_DIGITS, UI_HEALTH, UI_HUNGER,
     },
     timestep::TimeStepMut,
     vocab::VocabId,
@@ -37,6 +37,7 @@ vocab_enum!(pub(super) SurvivalObs {
     TileDecor2 => TILE_DECOR_2,
     TileDecor3 => TILE_DECOR_3,
     TileDecor4 => TILE_DECOR_4,
+    TileFire => TILE_FIRE,
     AgentGeneric => AGENT_GENERIC,
     UiHealth => UI_HEALTH,
     UiHunger => UI_HUNGER,
@@ -82,13 +83,13 @@ impl SurvivalObs {
         )
     }
 
-    pub(super) fn spawnable(self) -> bool {
-        use SurvivalObs::*;
-        matches!(
-            self,
-            TileEmpty | TileDecor1 | TileDecor2 | TileDecor3 | TileDecor4
-        )
-    }
+    // pub(super) fn spawnable(self) -> bool {
+    //     use SurvivalObs::*;
+    //     matches!(
+    //         self,
+    //         TileEmpty | TileDecor1 | TileDecor2 | TileDecor3 | TileDecor4
+    //     )
+    // }
 }
 
 impl ViewTile for SurvivalObs {

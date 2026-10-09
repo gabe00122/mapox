@@ -16,8 +16,8 @@ use crate::{symbols, vocab::Vocabulary};
 
 /// Symbol -> (col, row) on the sheet `scripts/make_tileset.py` draws. Row 0
 /// is terrain, row 1 items and characters, row 2 the snake colours, rows 3
-/// and 4 the soldiers, row 5 the UI digits and stat labels, and row 6
-/// pac-man.
+/// and 4 the soldiers, row 5 the UI digits and stat labels, row 6 pac-man,
+/// and row 7 survival.
 const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::TILE_UI, 0, 0),
     (symbols::TILE_MASK, 1, 0),
@@ -73,6 +73,7 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::AGENT_GHOST_CLYDE, 9, 6),
     (symbols::AGENT_GHOST_FRIGHTENED, 10, 6),
     (symbols::AGENT_GHOST_EYES, 11, 6),
+    (symbols::TILE_FIRE, 0, 7),
 ];
 
 pub(crate) fn resolve_art(vocab: &Vocabulary) -> Vec<(u32, u32)> {
