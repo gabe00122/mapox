@@ -4,7 +4,6 @@ use crate::{
         AGENT_GENERIC, TILE_DECOR_1, TILE_DECOR_2, TILE_DECOR_3, TILE_DECOR_4,
         TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_MASK, TILE_UI, TILE_WALL, TILE_WATER,
     },
-    vocab::{VocabId, Vocabulary},
     vocab_enum,
 };
 

@@ -1,7 +1,6 @@
 use crate::{
     envs::common::Position,
     symbols::{MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, NOOP},
-    vocab::{VocabId, Vocabulary},
     vocab_enum,
 };
 

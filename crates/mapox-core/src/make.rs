@@ -9,7 +9,7 @@ use crate::{
         pacman::{Pacman, PacmanConfig},
         scouts::{Scouts, ScoutsConfig},
         snake::{Snake, SnakeConfig},
-        survival::{Survival, SurvivalConfig},
+        survival::{Survival, config::SurvivalConfig},
     },
     error::MapoxResult,
     wrappers::{multitask::MultitaskWrapper, vector::VectorWrapper},

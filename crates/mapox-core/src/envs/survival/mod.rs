@@ -1,9 +1,9 @@
 pub mod action;
+pub mod config;
 pub mod obs;
 
 use ndarray::{Array2, ArrayViewMut2, s};
 use rand::{SeedableRng, rngs::SmallRng, seq::SliceRandom};
-use serde::{Deserialize, Serialize};
 use slotmap::{SlotMap, new_key_type};
 
 use crate::{
@@ -14,7 +14,7 @@ use crate::{
             fov::{self, ViewTile},
             vocab_enum::VocabEnum,
         },
-        survival::{action::SurvivalAction, obs::SurvivalObs},
+        survival::{action::SurvivalAction, config::SurvivalConfig, obs::SurvivalObs},
     },
     render::env::{GridRenderSettings, GridRenderState},
     spec::{ActionSpec, ObservationSpec},
@@ -22,38 +22,10 @@ use crate::{
     vocab::{VocabId, Vocabulary},
 };
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct SurvivalConfig {
-    pub num_agents: usize,
-
-    pub width: i32,
-    pub height: i32,
-    pub view_width: i32,
-    pub view_height: i32,
-    /// How far an agent sees around itself in the dark. Past it, only lit
-    /// ground shows.
-    pub vision_radius: i32,
-}
-
-impl Default for SurvivalConfig {
-    fn default() -> Self {
-        Self {
-            num_agents: 8,
-            width: 40,
-            height: 40,
-            view_width: 15,
-            view_height: 15,
-            vision_radius: 2,
-        }
-    }
-}
-
 new_key_type! {
-    /// Generational key: a removed entity's id stops resolving instead of aliasing a reused slot.
     struct EntityId;
 }
 
-/// Each tile holds up to one entity per slot, so e.g. an agent can stand on top of something.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Slot {
     Lower = 0,
@@ -62,12 +34,11 @@ enum Slot {
 
 type ObjectCell = [Option<EntityId>; 2];
 
-/// Anything that sits on the objects layer. Only agents for now.
 #[derive(Debug, Clone)]
 struct Entity {
     position: Position,
     slot: Slot,
-    tile: SurvivalObs, // what the entity draws as
+    tile: SurvivalObs,
 }
 
 #[derive(Debug, Clone)]
@@ -368,13 +339,6 @@ impl Environment for Survival {
     }
 }
 
-/// Fills `view`, an observation window centred on `viewer`, with what the
-/// viewer sees of `map`: anything in its line of sight that is within
-/// `vision_radius` of it or lit, and mask everywhere else.
-///
-/// The sweep runs over the whole window, since dark ground hides nothing
-/// behind it, so lit ground far off still shows through the dark between. Only
-/// opaque tiles block sight, lit or not.
 fn encode_view(
     map: &Array2<SurvivalObs>,
     lighting: &Array2<bool>,
@@ -399,80 +363,4 @@ fn encode_view(
             }
         },
     );
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Draws back what a viewer at the centre of `rows` sees with the given
-    /// lit cells: `#` wall, `.` floor, `?` hidden. `rows` read top down, `#`
-    /// a wall and anything else floor, and its middle is the viewer.
-    fn seen(rows: &[&str], lit: &[(i32, i32)], vision_radius: i32) -> String {
-        let (width, height) = (rows[0].len(), rows.len());
-        let mut map = Array2::from_elem((width, height), SurvivalObs::TileEmpty);
-        for (row, line) in rows.iter().enumerate() {
-            for (x, glyph) in line.chars().enumerate() {
-                if glyph == '#' {
-                    map[[x, height - 1 - row]] = SurvivalObs::TileWall;
-                }
-            }
-        }
-        let mut lighting = Array2::from_elem(map.dim(), false);
-        for &(x, y) in lit {
-            lighting[[x as usize, y as usize]] = true;
-        }
-
-        let viewer = Position::new(width as i32 / 2, height as i32 / 2);
-        let mut view = Array2::from_elem(map.dim(), 0);
-        encode_view(&map, &lighting, viewer, vision_radius, &mut view.view_mut());
-
-        (0..height)
-            .map(|row| {
-                (0..width)
-                    .map(|x| match view[[x, height - 1 - row]] {
-                        id if id == SurvivalObs::TileWall as VocabId => '#',
-                        id if id == SurvivalObs::Mask as VocabId => '?',
-                        _ => '.',
-                    })
-                    .collect::<String>()
-            })
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
-
-    /// In the dark the viewer sees only its vision disk.
-    #[test]
-    fn the_dark_shows_only_the_vision_radius() {
-        let view = seen(
-            &[
-                ".......", ".......", ".......", ".......", ".......", ".......", ".......",
-            ],
-            &[],
-            1,
-        );
-        assert_eq!(
-            view,
-            "???????\n???????\n??...??\n??...??\n??...??\n???????\n???????"
-        );
-    }
-
-    /// Lit ground far off shows through the dark between, but not from
-    /// behind a wall.
-    #[test]
-    fn lit_ground_shows_in_line_of_sight() {
-        let view = seen(
-            &[
-                ".......", ".......", ".......", ".......", ".......", "...#...", ".......",
-            ],
-            // the top-left corner, in the open; the wall; and the cell
-            // straight under the wall, behind it
-            &[(0, 6), (3, 1), (3, 0)],
-            0,
-        );
-        assert_eq!(
-            view,
-            ".??????\n???????\n???????\n???.???\n???????\n???#???\n???????"
-        );
-    }
 }
