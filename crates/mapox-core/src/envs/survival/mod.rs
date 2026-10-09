@@ -3,6 +3,7 @@ pub mod config;
 pub mod obs;
 
 mod fire;
+mod items;
 mod lightning;
 mod needs;
 mod prototypes;
@@ -217,8 +218,7 @@ impl Environment for Survival {
             let action = SurvivalAction::from_id(actions[agent_index]);
             if action.is_move() {
                 let target = position + action.direction();
-                let slot = slot as usize;
-                let occupied = self.state.spatial_index[target.idx()][slot].is_some();
+                let occupied = self.state.is_occupied(target, slot);
                 if !occupied && !self.state.tiles[target.idx()].move_blocked() {
                     self.state.move_entity(agent_id, target);
                 }
