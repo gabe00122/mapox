@@ -59,7 +59,7 @@ pub(super) fn encode_view(
     map: &Array2<SurvivalObs>,
     lighting: &Array2<bool>,
     viewer: Position,
-    vision_radius: i32,
+    night_vision_radius: i32,
     view: &mut ArrayViewMut2<VocabId>,
 ) {
     let (width, height) = view.dim();
@@ -74,7 +74,7 @@ pub(super) fn encode_view(
         |cell| !map[(origin + cell).idx()].opaque(),
         |cell| {
             let position = origin + cell;
-            if lighting[position.idx()] || fov::within(cell - center, vision_radius) {
+            if lighting[position.idx()] || fov::within(cell - center, night_vision_radius) {
                 view[cell.idx()] = map[position.idx()].into();
             }
         },

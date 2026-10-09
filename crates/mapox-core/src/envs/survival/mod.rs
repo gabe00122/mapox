@@ -146,7 +146,7 @@ impl Survival {
                 &self.state.render_map,
                 &self.state.lighting,
                 position,
-                self.config.vision_radius,
+                self.config.night_vision_radius,
                 &mut view,
             );
 

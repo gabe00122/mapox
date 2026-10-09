@@ -150,6 +150,9 @@ class RustSurvivalConfig(BaseModel):
     height: int = 40
     view_width: int = 15
     view_height: int = 15
+    # how far an agent sees around itself in the dark; past it, only lit
+    # ground shows
+    night_vision_radius: int = 2
 
 
 class RustVecConfig(BaseModel):

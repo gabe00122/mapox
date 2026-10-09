@@ -10,7 +10,7 @@ pub struct SurvivalConfig {
     pub view_height: i32,
     /// How far an agent sees around itself in the dark. Past it, only lit
     /// ground shows.
-    pub vision_radius: i32,
+    pub night_vision_radius: i32,
 }
 
 impl Default for SurvivalConfig {
@@ -21,7 +21,7 @@ impl Default for SurvivalConfig {
             height: 40,
             view_width: 15,
             view_height: 15,
-            vision_radius: 2,
+            night_vision_radius: 2,
         }
     }
 }
