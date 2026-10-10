@@ -7,11 +7,12 @@ mod items;
 mod lightning;
 mod needs;
 mod prototypes;
+mod survivor;
 mod world;
 
 use hecs::{Entity, World};
 use ndarray::{Array2, s};
-use rand::{SeedableRng, rngs::SmallRng, seq::SliceRandom};
+use rand::{SeedableRng, rngs::SmallRng};
 
 use crate::{
     env::Environment,
@@ -23,7 +24,7 @@ use crate::{
             items::ItemType,
             obs::{SurvivalObs, UI_WIDTH},
             prototypes::Prototype,
-            world::{Direction, EntityCell, Slot},
+            world::{EntityCell, Slot},
         },
     },
     render::env::{GridRenderSettings, GridRenderState},
@@ -205,31 +206,7 @@ impl Environment for Survival {
         self.state.tick_hunger();
         self.state.tick_fire();
 
-        self.state.agent_order.shuffle(&mut self.state.rngs);
-
-        // this should probably be in a "tick agents"
-        for turn in 0..self.num_agents() {
-            let agent_index = self.state.agent_order[turn];
-            let agent_id = self.state.agents[agent_index];
-            let (&position, direction, &slot) = self
-                .state
-                .world
-                .query_one_mut::<(&Position, &mut Direction, &Slot)>(agent_id)
-                .expect("Agents should have Position, Direction and Slot");
-
-            timestep.last_action[agent_index] = actions[agent_index];
-            timestep.reward[agent_index] = 0.0;
-
-            let action = SurvivalAction::from_id(actions[agent_index]);
-            if let Some(move_direction) = action.move_direction() {
-                direction.front = move_direction;
-                let target = position + move_direction;
-                let occupied = self.state.is_occupied(target, slot);
-                if !occupied && !self.state.tiles[target.idx()].move_blocked() {
-                    self.state.move_entity(agent_id, target);
-                }
-            }
-        }
+        self.state.tick_survivors(actions, timestep);
 
         self.state.time += 1;
         self.prepare_render();

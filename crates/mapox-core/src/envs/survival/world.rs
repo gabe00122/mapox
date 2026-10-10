@@ -23,19 +23,6 @@ impl Slot {
     }
 }
 
-// Which direction the entity is facing
-pub(super) struct Direction {
-    pub front: Position,
-}
-
-impl Default for Direction {
-    fn default() -> Self {
-        Direction {
-            front: Position::new(0, 1),
-        }
-    }
-}
-
 pub(super) type EntityCell = [Option<Entity>; 2];
 
 impl SurvivalState {

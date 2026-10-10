@@ -8,7 +8,8 @@ use crate::envs::{
         items::{Inventory, Item, ItemType},
         lightning::LightEmitter,
         needs::{Health, Hunger},
-        world::{Agent, Direction, Slot},
+        survivor::Direction,
+        world::{Agent, Slot},
     },
 };
 
