@@ -55,6 +55,7 @@ impl SurvivalState {
                 SurvivalAction::ItemPut => self.item_put(agent_id),
                 SurvivalAction::ItemCombine => self.item_craft(agent_id),
                 SurvivalAction::ItemUse => self.item_use(agent_id),
+                SurvivalAction::ItemRefine => self.item_refine(agent_id),
                 SurvivalAction::Noop => {}
             }
         }

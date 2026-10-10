@@ -45,31 +45,27 @@ pub(super) struct Inventory {
 }
 
 impl SurvivalState {
-    pub(crate) fn item_refine(&mut self, id: Entity) {
-        let Ok((&position, direction, inventory)) = self
+    pub(super) fn item_refine(&mut self, id: Entity) {
+        let mut query = self
             .world
-            .query_one_mut::<(&Position, &Direction, &Inventory)>(id)
+            .query_one::<(&Position, &Direction, &mut Inventory)>(id);
+        let Ok((&position, direction, inventory)) = query.get() else {
+            return;
+        };
+        let Some(hand) = inventory.hand else {
+            return;
+        };
+
+        let target_pos = position + direction.to_pos();
+        let Some(output) =
+            self.spatial_index[target_pos.idx()][0] // lower slot
+                .and_then(|target| self.world.get::<&RefineType>(target).ok())
+                .and_then(|refine_type| refine_type.refine(hand))
         else {
             return;
         };
 
-        let Some(hand) = inventory.hand else {
-            return;
-        };
-        let target_pos = position + direction.to_pos();
-        let Some(target_id) = self.spatial_index[target_pos.idx()][0] else {
-            return;
-        };
-        let Ok(refine_type) = self.world.query_one_mut::<&RefineType>(target_id) else {
-            return;
-        };
-        let Some(output) = refine_type.refine(hand) else {
-            return;
-        };
-
-        if let Ok(inventory) = self.world.query_one_mut::<&mut Inventory>(id) {
-            inventory.hand = Some(output)
-        }
+        inventory.hand = Some(output);
     }
 
     pub(crate) fn item_use(&mut self, id: Entity) {

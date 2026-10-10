@@ -67,6 +67,7 @@ const ACTION_KEYS: &[(&str, &str, &[Key])] = &[
     (symbols::SWAP, "swap", &[Key::Z]),
     (symbols::COMBINE, "craft", &[Key::X]),
     (symbols::USE, "use", &[Key::F]),
+    (symbols::REFINE, "refine", &[Key::G]),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

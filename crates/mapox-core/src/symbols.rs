@@ -112,3 +112,4 @@ pub const PUT: &str = "item/put";
 pub const SWAP: &str = "item/swap";
 pub const COMBINE: &str = "item/combine";
 pub const USE: &str = "item/use";
+pub const REFINE: &str = "item/refine";
