@@ -1,3 +1,5 @@
+use hecs::Entity;
+
 use crate::envs::survival::SurvivalState;
 
 const TICK_HUNGER_EVERY: usize = 2;
@@ -24,6 +26,20 @@ impl SurvivalState {
             if hunger.amount == 0 {
                 health.amount = health.amount.saturating_sub(1);
             }
+        }
+    }
+
+    pub(super) fn tick_death(&mut self) {
+        let mut dead = Vec::new();
+
+        for (entity, health) in self.world.query_mut::<(Entity, &Health)>() {
+            if health.amount == 0 {
+                dead.push(entity);
+            }
+        }
+
+        for id in dead {
+            self.despawn(id);
         }
     }
 }

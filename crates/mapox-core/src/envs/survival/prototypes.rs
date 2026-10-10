@@ -5,7 +5,7 @@ use crate::envs::{
     survival::{
         SurvivalObs, SurvivalState,
         fire::Fire,
-        items::{Inventory, Item, ItemType},
+        items::{Inventory, ItemType},
         lightning::LightEmitter,
         needs::{Health, Hunger},
         survivor::DirectionObs,
@@ -36,8 +36,8 @@ impl SurvivalState {
                         SurvivalObs::AgentLeft,
                     ],
                 },
-                Health { amount: 100 },
-                Hunger { amount: 100 },
+                Health { amount: 99 },
+                Hunger { amount: 99 },
                 Inventory::default(),
             )),
             Prototype::Fire => self.spawn((
@@ -48,7 +48,7 @@ impl SurvivalState {
                 Fire { fuel: 50 },
             )),
             Prototype::Item(item_type) => {
-                self.spawn((position, Slot::Lower, item_type.obs(), Item { item_type }))
+                self.spawn((position, Slot::Lower, item_type.obs(), item_type))
             }
         }
     }

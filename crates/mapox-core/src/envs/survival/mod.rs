@@ -176,6 +176,11 @@ impl Environment for Survival {
             ])
             .fill(SurvivalObs::TileEmpty);
 
+        for i in 0..self.num_agents() {
+            // reset this so the seed is the source of truth for agent order
+            self.state.agent_order[i] = i;
+        }
+
         self.state.spatial_index.fill([None; 2]);
         self.state.world.clear();
         self.state.agents.clear();
@@ -204,11 +209,12 @@ impl Environment for Survival {
     }
 
     fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
+        self.state.tick_survivors(actions, timestep);
         self.state.tick_starvation();
         self.state.tick_hunger();
         self.state.tick_fire();
+        self.state.tick_death();
 
-        self.state.tick_survivors(actions, timestep);
         self.state.tick_direction_tiles();
 
         self.state.time += 1;
@@ -269,12 +275,11 @@ impl Environment for Survival {
         grid_render_state
             .agent_positions
             .extend(self.state.agents.iter().map(|&id| {
-                *self
-                    .state
+                self.state
                     .world
                     .get::<&Position>(id)
-                    .expect("Agents must have a Position")
-                    - pad
+                    .map(|p| *p - pad)
+                    .unwrap_or(Position::new(-1, -1))
             }));
     }
 

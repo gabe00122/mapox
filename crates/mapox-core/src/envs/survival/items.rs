@@ -13,10 +13,6 @@ impl ItemType {
     }
 }
 
-pub(super) struct Item {
-    pub item_type: ItemType,
-}
-
 #[derive(Default)]
 pub(super) struct Inventory {
     pub hand: Option<ItemType>,

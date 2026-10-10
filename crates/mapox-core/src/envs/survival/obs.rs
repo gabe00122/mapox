@@ -59,8 +59,8 @@ vocab_enum!(pub(super) SurvivalObs {
 /// Where the UI band puts things. Its top row is the stats, each a label
 /// then a three digit number: health from column 0, hunger from column 5.
 const HEALTH_COL: usize = 0;
-const HUNGER_COL: usize = 5;
-const STAT_DIGITS: usize = 3;
+const HUNGER_COL: usize = 4;
+const STAT_DIGITS: usize = 2;
 /// The narrowest view the band fits in.
 pub(super) const UI_WIDTH: usize = HUNGER_COL + 1 + STAT_DIGITS;
 
@@ -116,6 +116,7 @@ impl Survival {
         let fov_height = self.config.view_height as usize;
         // the top row of the band is the stats
         let stats_row = fov_height + UI_HEIGHT - 1;
+        timestep.obs.fill(SurvivalObs::Mask.into());
 
         for (&position, agent, health, hunger) in
             self.state
