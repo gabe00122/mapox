@@ -2,7 +2,7 @@ use hecs::Entity;
 
 use crate::envs::{
     common::{Direction, Position},
-    survival::{Slot, SurvivalObs, SurvivalState},
+    survival::{Slot, SurvivalObs, SurvivalState, prototypes::Prototype},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -29,6 +29,32 @@ impl SurvivalState {
     // fn item_can_put(&mut self, id: Entity) -> bool {
     //     false
     // }
+
+    pub(super) fn item_swap(&mut self, id: Entity) {
+        if let Ok(inventory) = self.world.query_one_mut::<&mut Inventory>(id) {
+            std::mem::swap(&mut inventory.hand, &mut inventory.back);
+        }
+    }
+
+    pub(super) fn item_put(&mut self, id: Entity) {
+        let Ok((&position, direction, inventory)) =
+            self.world
+                .query_one_mut::<(&Position, &Direction, &mut Inventory)>(id)
+        else {
+            return;
+        };
+
+        let target_pos = position + direction.to_pos();
+        let blocked = self.spatial_index[target_pos.idx()][0].is_some() // lower slot
+            || self.tiles[target_pos.idx()].move_blocked();
+        if blocked {
+            return;
+        }
+
+        if let Some(item) = inventory.hand.take() {
+            self.spawn_prototype(Prototype::Item(item), target_pos);
+        }
+    }
 
     pub(super) fn item_take(&mut self, id: Entity) {
         let mut target_entity: Option<Entity> = None;

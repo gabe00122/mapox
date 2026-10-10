@@ -48,6 +48,10 @@ impl SurvivalState {
                 }
             } else if action == SurvivalAction::ItemTake {
                 self.item_take(agent_id)
+            } else if action == SurvivalAction::ItemSwap {
+                self.item_swap(agent_id);
+            } else if action == SurvivalAction::ItemPut {
+                self.item_put(agent_id)
             }
         }
     }
