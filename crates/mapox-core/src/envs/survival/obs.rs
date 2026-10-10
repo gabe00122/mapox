@@ -17,9 +17,9 @@ use crate::{
         },
     },
     symbols::{
-        AGENT_GENERIC, TILE_DECOR_1, TILE_DECOR_2, TILE_DECOR_3, TILE_DECOR_4,
-        TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_FIRE, TILE_MASK, TILE_UI, TILE_WALL, TILE_WATER,
-        UI_DIGITS, UI_HEALTH, UI_HUNGER,
+        AGENT_GENERIC_DOWN, AGENT_GENERIC_LEFT, AGENT_GENERIC_RIGHT, AGENT_GENERIC_UP,
+        TILE_DECOR_1, TILE_DECOR_2, TILE_DECOR_3, TILE_DECOR_4, TILE_DESTRUCTIBLE_WALL, TILE_EMPTY,
+        TILE_FIRE, TILE_MASK, TILE_UI, TILE_WALL, TILE_WATER, UI_DIGITS, UI_HEALTH, UI_HUNGER,
     },
     timestep::TimeStepMut,
     vocab::VocabId,
@@ -38,7 +38,10 @@ vocab_enum!(pub(super) SurvivalObs {
     TileDecor3 => TILE_DECOR_3,
     TileDecor4 => TILE_DECOR_4,
     TileFire => TILE_FIRE,
-    AgentGeneric => AGENT_GENERIC,
+    AgentUp => AGENT_GENERIC_UP,
+    AgentRight => AGENT_GENERIC_RIGHT,
+    AgentDown => AGENT_GENERIC_DOWN,
+    AgentLeft => AGENT_GENERIC_LEFT,
     UiHealth => UI_HEALTH,
     UiHunger => UI_HUNGER,
     Digit0 => UI_DIGITS[0],
@@ -79,7 +82,13 @@ impl SurvivalObs {
         use SurvivalObs::*;
         matches!(
             self,
-            TileWall | TileDestructibleWall | TileWater | AgentGeneric
+            TileWall
+                | TileDestructibleWall
+                | TileWater
+                | AgentUp
+                | AgentRight
+                | AgentDown
+                | AgentLeft
         )
     }
 

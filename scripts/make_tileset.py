@@ -999,6 +999,10 @@ def build_sheet() -> list[list[Sprite]]:
                 "t": WOOD_DARK,
             },
         ),
+        *(
+            facing_pip(stamp(floor(), AGENT, AGENT_PALETTE), direction, GOLD_LIGHT)
+            for direction in range(4)
+        ),
     ]
 
     return [

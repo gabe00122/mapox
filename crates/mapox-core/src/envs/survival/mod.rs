@@ -196,6 +196,8 @@ impl Environment for Survival {
 
         timestep.reward.fill(0.0);
         timestep.last_action.fill(0);
+
+        self.state.tick_direction_tiles();
         self.prepare_render();
         self.encode_observations(timestep);
         self.encode_action_mask(timestep);
@@ -207,6 +209,7 @@ impl Environment for Survival {
         self.state.tick_fire();
 
         self.state.tick_survivors(actions, timestep);
+        self.state.tick_direction_tiles();
 
         self.state.time += 1;
         self.prepare_render();

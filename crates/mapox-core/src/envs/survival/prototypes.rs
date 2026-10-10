@@ -8,6 +8,7 @@ use crate::envs::{
         items::{Inventory, Item, ItemType},
         lightning::LightEmitter,
         needs::{Health, Hunger},
+        survivor::DirectionObs,
         world::{Agent, Slot},
     },
 };
@@ -26,7 +27,15 @@ impl SurvivalState {
                 position,
                 Direction::Up,
                 Slot::Upper,
-                SurvivalObs::AgentGeneric,
+                SurvivalObs::AgentUp,
+                DirectionObs {
+                    tiles: [
+                        SurvivalObs::AgentUp,
+                        SurvivalObs::AgentRight,
+                        SurvivalObs::AgentDown,
+                        SurvivalObs::AgentLeft,
+                    ],
+                },
                 Health { amount: 100 },
                 Hunger { amount: 100 },
                 Inventory::default(),

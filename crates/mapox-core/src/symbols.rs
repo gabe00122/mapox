@@ -46,6 +46,12 @@ pub const TILE_DECOR_3: &str = "tile/decor_3";
 pub const TILE_DECOR_4: &str = "tile/decor_4";
 
 pub const AGENT_GENERIC: &str = "agent/generic";
+/// The generic agent by facing, in `MOVES` order, for envs where what an
+/// agent acts on is the tile in front of it.
+pub const AGENT_GENERIC_UP: &str = "agent/generic_up";
+pub const AGENT_GENERIC_RIGHT: &str = "agent/generic_right";
+pub const AGENT_GENERIC_DOWN: &str = "agent/generic_down";
+pub const AGENT_GENERIC_LEFT: &str = "agent/generic_left";
 pub const AGENT_SCOUT: &str = "agent/scout";
 pub const AGENT_HARVESTER: &str = "agent/harvester";
 pub const AGENT_PREY: &str = "agent/prey";
