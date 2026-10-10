@@ -188,16 +188,28 @@ impl Environment for Survival {
         for i in 0..self.num_agents() {
             let id = self.state.spawn_prototype(
                 Prototype::Survivor { agent_index: i },
-                Position::new(20, 20 + i as i32),
+                Position::new(10, 20 + i as i32),
             );
             self.state.agents.push(id);
         }
 
+        // swap items for testing
         self.state
             .spawn_prototype(Prototype::Fire, Position::new(20, 20));
 
-        self.state
-            .spawn_prototype(Prototype::Item(ItemType::Wood), Position::new(20, 21));
+        let items = [
+            ItemType::Wood,
+            ItemType::Rock,
+            ItemType::CutGrass,
+            ItemType::Stick,
+            ItemType::StoneAxe,
+        ];
+
+        for (i, item) in items.into_iter().enumerate() {
+            self.state
+                .spawn_prototype(Prototype::Item(item), Position::new(20, 20 + i as i32));
+        }
+        //
 
         timestep.reward.fill(0.0);
         timestep.last_action.fill(0);

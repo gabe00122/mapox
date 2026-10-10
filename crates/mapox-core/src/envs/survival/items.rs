@@ -5,13 +5,18 @@ use crate::envs::{
     survival::{Slot, SurvivalObs, SurvivalState, prototypes::Prototype},
 };
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum ItemType {
     Rock,
     Stick,
     Wood,
     CutGrass,
+    StoneAxe,
 }
+
+// requirement, requirement, product
+const RECIPES: &[(ItemType, ItemType, ItemType)] =
+    &[(ItemType::Rock, ItemType::Stick, ItemType::StoneAxe)];
 
 impl ItemType {
     pub(super) fn obs(&self) -> SurvivalObs {
@@ -26,9 +31,25 @@ pub(super) struct Inventory {
 }
 
 impl SurvivalState {
-    // fn item_can_put(&mut self, id: Entity) -> bool {
-    //     false
-    // }
+    pub(crate) fn item_craft(&mut self, id: Entity) {
+        let Ok(inventory) = self.world.query_one_mut::<&mut Inventory>(id) else {
+            return;
+        };
+
+        let (Some(hand), Some(back)) = (inventory.hand, inventory.back) else {
+            return;
+        };
+
+        let Some(&(_, _, product)) = RECIPES
+            .iter()
+            .find(|&&(a, b, _)| (a == hand && b == back) || (a == back && b == hand))
+        else {
+            return;
+        };
+
+        inventory.hand = Some(product);
+        inventory.back = None;
+    }
 
     pub(super) fn item_swap(&mut self, id: Entity) {
         if let Ok(inventory) = self.world.query_one_mut::<&mut Inventory>(id) {

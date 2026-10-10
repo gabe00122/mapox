@@ -155,6 +155,9 @@ impl Survival {
             if let Some(hands) = inventory.hand {
                 ui[(0, 0)] = hands.obs().into();
             }
+            if let Some(back) = inventory.back {
+                ui[(1, 0)] = back.obs().into();
+            }
         }
 
         timestep.time.fill(self.state.time as i32);
