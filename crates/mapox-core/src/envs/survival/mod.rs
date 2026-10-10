@@ -7,6 +7,7 @@ mod items;
 mod lightning;
 mod needs;
 mod prototypes;
+mod refine;
 mod survivor;
 mod world;
 

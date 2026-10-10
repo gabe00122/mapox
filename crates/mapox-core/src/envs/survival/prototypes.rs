@@ -8,6 +8,7 @@ use crate::envs::{
         items::{Inventory, ItemType},
         lightning::LightEmitter,
         needs::{Health, Hunger},
+        refine::RefineType,
         survivor::DirectionObs,
         world::{Agent, Slot},
     },
@@ -23,7 +24,7 @@ impl SurvivalState {
     pub(super) fn spawn_prototype(&mut self, prototype: Prototype, position: Position) -> Entity {
         match prototype {
             Prototype::Survivor { agent_index } => self.spawn((
-                Agent { agent_index },
+                Agent::new(agent_index),
                 position,
                 Direction::Up,
                 Slot::Upper,
@@ -45,6 +46,7 @@ impl SurvivalState {
                 Slot::Lower,
                 SurvivalObs::TileFire,
                 LightEmitter { radius: 7 },
+                RefineType::Cook,
                 Fire { fuel: 50 },
             )),
             Prototype::Item(item_type) => {

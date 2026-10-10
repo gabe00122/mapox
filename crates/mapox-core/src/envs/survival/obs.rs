@@ -126,12 +126,12 @@ impl Survival {
         for (&position, agent, health, hunger, inventory) in
             self.state
                 .world
-                .query_mut::<(&Position, &Agent, &Health, &Hunger, &Inventory)>()
+                .query_mut::<(&Position, &mut Agent, &Health, &Hunger, &Inventory)>()
         {
-            let agent_id = agent.agent_index;
+            let agent_index = agent.agent_index;
 
             // wall padding keeps the view window inside the map
-            let mut view = timestep.obs.slice_mut(s![agent_id, .., ..fov_height, 0]);
+            let mut view = timestep.obs.slice_mut(s![agent_index, .., ..fov_height, 0]);
             encode_view(
                 &self.state.render_map,
                 &self.state.lighting,
@@ -140,7 +140,7 @@ impl Survival {
                 &mut view,
             );
 
-            let mut ui = timestep.obs.slice_mut(s![agent_id, .., fov_height.., 0]);
+            let mut ui = timestep.obs.slice_mut(s![agent_index, .., fov_height.., 0]);
             ui.fill(SurvivalObs::UI.into());
 
             // draw stats (the last row of the UI band)
@@ -164,6 +164,9 @@ impl Survival {
             if let Some(back) = inventory.back {
                 ui[(1, 0)] = back.obs().into();
             }
+
+            timestep.reward[agent_index] = agent.reward;
+            agent.reward = 0.0;
         }
 
         timestep.time.fill(self.state.time as i32);

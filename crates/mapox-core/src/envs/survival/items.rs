@@ -2,7 +2,7 @@ use hecs::Entity;
 
 use crate::envs::{
     common::{Direction, Position},
-    survival::{Slot, SurvivalObs, SurvivalState, prototypes::Prototype},
+    survival::{Slot, SurvivalObs, SurvivalState, prototypes::Prototype, refine::RefineType},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -36,6 +36,8 @@ impl ItemType {
     }
 }
 
+// Inventory could be extended to act like a stack with n slots
+// instead of swap it would be n swap actions for swaping 0 with the nth position
 #[derive(Default)]
 pub(super) struct Inventory {
     pub hand: Option<ItemType>,
@@ -43,6 +45,33 @@ pub(super) struct Inventory {
 }
 
 impl SurvivalState {
+    pub(crate) fn item_refine(&mut self, id: Entity) {
+        let Ok((&position, direction, inventory)) = self
+            .world
+            .query_one_mut::<(&Position, &Direction, &Inventory)>(id)
+        else {
+            return;
+        };
+
+        let Some(hand) = inventory.hand else {
+            return;
+        };
+        let target_pos = position + direction.to_pos();
+        let Some(target_id) = self.spatial_index[target_pos.idx()][0] else {
+            return;
+        };
+        let Ok(refine_type) = self.world.query_one_mut::<&RefineType>(target_id) else {
+            return;
+        };
+        let Some(output) = refine_type.refine(hand) else {
+            return;
+        };
+
+        if let Ok(inventory) = self.world.query_one_mut::<&mut Inventory>(id) {
+            inventory.hand = Some(output)
+        }
+    }
+
     pub(crate) fn item_use(&mut self, id: Entity) {
         let Ok((&position, direction, inventory)) = self
             .world

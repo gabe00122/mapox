@@ -4,6 +4,16 @@ use crate::envs::{common::Position, survival::SurvivalState};
 
 pub(super) struct Agent {
     pub agent_index: usize,
+    pub reward: f32,
+}
+
+impl Agent {
+    pub(super) fn new(agent_index: usize) -> Self {
+        Self {
+            agent_index,
+            reward: 0.0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
