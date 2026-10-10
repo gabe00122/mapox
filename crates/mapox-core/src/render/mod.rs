@@ -78,6 +78,11 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::AGENT_GENERIC_RIGHT, 2, 7),
     (symbols::AGENT_GENERIC_DOWN, 3, 7),
     (symbols::AGENT_GENERIC_LEFT, 4, 7),
+    (symbols::ITEM_ROCK, 5, 7),
+    (symbols::ITEM_STICK, 6, 7),
+    (symbols::ITEM_WOOD, 7, 7),
+    (symbols::ITEM_CUT_GRASS, 8, 7),
+    (symbols::ITEM_STONE_AXE, 9, 7),
 ];
 
 pub(crate) fn resolve_art(vocab: &Vocabulary) -> Vec<(u32, u32)> {

@@ -12,15 +12,27 @@ pub(super) enum ItemType {
     Wood,
     CutGrass,
     StoneAxe,
+    CampfireKit,
+    Berry,
+    CookedBerry,
 }
 
 // requirement, requirement, product
-const RECIPES: &[(ItemType, ItemType, ItemType)] =
-    &[(ItemType::Rock, ItemType::Stick, ItemType::StoneAxe)];
+const RECIPES: &[(ItemType, ItemType, ItemType)] = &[
+    (ItemType::Rock, ItemType::Stick, ItemType::StoneAxe),
+    (ItemType::Wood, ItemType::CutGrass, ItemType::CampfireKit),
+];
 
 impl ItemType {
     pub(super) fn obs(&self) -> SurvivalObs {
-        SurvivalObs::Digit0
+        match self {
+            ItemType::Rock => SurvivalObs::ItemRock,
+            ItemType::Stick => SurvivalObs::ItemStick,
+            ItemType::Wood => SurvivalObs::ItemWood,
+            ItemType::CutGrass => SurvivalObs::ItemCutGrass,
+            ItemType::StoneAxe => SurvivalObs::ItemStoneAxe,
+            _ => SurvivalObs::Digit0,
+        }
     }
 }
 
@@ -31,6 +43,35 @@ pub(super) struct Inventory {
 }
 
 impl SurvivalState {
+    pub(crate) fn item_use(&mut self, id: Entity) {
+        let Ok((&position, direction, inventory)) = self
+            .world
+            .query_one_mut::<(&Position, &Direction, &Inventory)>(id)
+        else {
+            return;
+        };
+
+        let Some(hand) = inventory.hand else {
+            return;
+        };
+
+        let target_pos = position + direction.to_pos();
+
+        match hand {
+            ItemType::CampfireKit => {
+                if self.is_blocked(target_pos, Slot::Lower) {
+                    return;
+                }
+
+                if let Ok(inventory) = self.world.query_one_mut::<&mut Inventory>(id) {
+                    inventory.hand = None;
+                }
+                self.spawn_prototype(Prototype::Fire, target_pos);
+            }
+            _ => {}
+        }
+    }
+
     pub(crate) fn item_craft(&mut self, id: Entity) {
         let Ok(inventory) = self.world.query_one_mut::<&mut Inventory>(id) else {
             return;
@@ -58,23 +99,26 @@ impl SurvivalState {
     }
 
     pub(super) fn item_put(&mut self, id: Entity) {
-        let Ok((&position, direction, inventory)) =
-            self.world
-                .query_one_mut::<(&Position, &Direction, &mut Inventory)>(id)
+        let Ok((&position, direction, inventory)) = self
+            .world
+            .query_one_mut::<(&Position, &Direction, &Inventory)>(id)
         else {
             return;
         };
 
+        let Some(item) = inventory.hand else {
+            return;
+        };
+
         let target_pos = position + direction.to_pos();
-        let blocked = self.spatial_index[target_pos.idx()][0].is_some() // lower slot
-            || self.tiles[target_pos.idx()].move_blocked();
-        if blocked {
+        if self.is_blocked(target_pos, Slot::Lower) {
             return;
         }
 
-        if let Some(item) = inventory.hand.take() {
-            self.spawn_prototype(Prototype::Item(item), target_pos);
+        if let Ok(inventory) = self.world.query_one_mut::<&mut Inventory>(id) {
+            inventory.hand = inventory.back.take();
         }
+        self.spawn_prototype(Prototype::Item(item), target_pos);
     }
 
     pub(super) fn item_take(&mut self, id: Entity) {
@@ -85,7 +129,7 @@ impl SurvivalState {
             .query_one::<(&Position, &Direction, &mut Inventory)>(id)
             .get()
         {
-            if inventory.hand.is_some() {
+            if inventory.hand.is_some() && inventory.back.is_some() {
                 return;
             }
 
@@ -93,6 +137,9 @@ impl SurvivalState {
             target_entity = self.spatial_index[target_pos.idx()][0]; // lower slot
 
             if let Some(item) = target_entity.and_then(|id| self.world.get::<&ItemType>(id).ok()) {
+                if inventory.hand.is_some() {
+                    inventory.back = inventory.hand.take();
+                }
                 inventory.hand = Some(*item);
             } else {
                 // clear the target so things that aren't items aren't deleted

@@ -41,8 +41,7 @@ impl SurvivalState {
                 {
                     *direction = move_direction;
                     let target = position + move_direction.to_pos();
-                    let occupied = self.is_occupied(target, slot);
-                    if !occupied && !self.tiles[target.idx()].move_blocked() {
+                    if !self.is_blocked(target, slot) {
                         self.move_entity(agent_id, target);
                     }
                 }
@@ -54,6 +53,8 @@ impl SurvivalState {
                 self.item_put(agent_id)
             } else if action == SurvivalAction::ItemCombine {
                 self.item_craft(agent_id);
+            } else if action == SurvivalAction::ItemUse {
+                self.item_use(agent_id);
             }
         }
     }

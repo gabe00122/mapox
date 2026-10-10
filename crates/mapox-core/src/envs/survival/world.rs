@@ -38,6 +38,11 @@ impl SurvivalState {
         slot.indices().any(|i| cell[i].is_some())
     }
 
+    /// True if `slot` at `position` is taken or the terrain blocks movement.
+    pub(super) fn is_blocked(&self, position: Position, slot: Slot) -> bool {
+        self.is_occupied(position, slot) || self.tiles[position.idx()].move_blocked()
+    }
+
     pub(super) fn spawn(&mut self, components: impl DynamicBundle) -> Entity {
         let id = self.world.spawn(components);
 

@@ -45,6 +45,15 @@ pub const TILE_DECOR_2: &str = "tile/decor_2";
 pub const TILE_DECOR_3: &str = "tile/decor_3";
 pub const TILE_DECOR_4: &str = "tile/decor_4";
 
+// Items: things that lie on the ground or sit in an inventory slot, drawn the
+// same in both places.
+pub const ITEM_ROCK: &str = "item/rock";
+pub const ITEM_STICK: &str = "item/stick";
+pub const ITEM_WOOD: &str = "item/wood";
+/// A bundle of cut grass.
+pub const ITEM_CUT_GRASS: &str = "item/cut_grass";
+pub const ITEM_STONE_AXE: &str = "item/stone_axe";
+
 pub const AGENT_GENERIC: &str = "agent/generic";
 /// The generic agent by facing, in `MOVES` order, for envs where what an
 /// agent acts on is the tile in front of it.

@@ -195,7 +195,7 @@ impl Environment for Survival {
 
         // swap items for testing
         self.state
-            .spawn_prototype(Prototype::Fire, Position::new(20, 20));
+            .spawn_prototype(Prototype::Fire, Position::new(18, 20));
 
         let items = [
             ItemType::Wood,

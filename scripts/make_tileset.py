@@ -153,6 +153,10 @@ MEAT_DARK = hex_color("8c4a20")
 MEAT_LIGHT = hex_color("f0a769")
 BONE = hex_color("f2efe6")
 
+STRAW = hex_color("c9b458")
+STRAW_LIGHT = hex_color("ece08e")
+LEATHER = hex_color("8a5a32")
+
 TEAM_RED = hex_color("e5383f")
 TEAM_BLUE = hex_color("3a78ff")
 TEAM_NEUTRAL = hex_color("d6dbe4")
@@ -910,6 +914,98 @@ FIRE = check(
     "fire",
 )
 
+STICK = check(
+    [
+        "............",
+        "..........w.",
+        ".........lw.",
+        "........lw..",
+        ".......lw...",
+        "......lw.w..",
+        ".....lwlw...",
+        "....lw......",
+        "...lw.......",
+        "..lw........",
+        ".lw.........",
+        "............",
+    ],
+    "stick",
+)
+
+ROCK = check(
+    [
+        "............",
+        "............",
+        "............",
+        "....OOOO....",
+        "...OLLssO...",
+        "..OLLsssSO..",
+        ".OLssssssSO.",
+        ".OsssssssSO.",
+        ".OSssssSSSO.",
+        "..OOSSSSOO..",
+        "....OOOO....",
+        "............",
+    ],
+    "rock",
+)
+
+LOG = check(
+    [
+        "............",
+        "............",
+        "............",
+        ".OOOOOOOOOO.",
+        "OlllllllOeeO",
+        "OwwwwwwwOekO",
+        "OwwwwwwwOkeO",
+        "OdddddddOeeO",
+        ".OOOOOOOOOO.",
+        "............",
+        "............",
+        "............",
+    ],
+    "log",
+)
+
+GRASS_BUNDLE = check(
+    [
+        "............",
+        "..s..s..s...",
+        "..S.sS.sS...",
+        "...SSSsSS...",
+        "....SSSS....",
+        "....OkkO....",
+        "....SSSS....",
+        "...SSsSSS...",
+        "..SSs.SSsS..",
+        "..S...S..S..",
+        "............",
+        "............",
+    ],
+    "grass bundle",
+)
+
+STONE_AXE = check(
+    [
+        "............",
+        ".....OOOO...",
+        "....OLLssO..",
+        "...OLsssSSO.",
+        "...OsswSSSO.",
+        "....OOwlOO..",
+        ".....wl.....",
+        "....wl......",
+        "...wl.......",
+        "..wl........",
+        ".wl.........",
+        "............",
+    ],
+    "stone axe",
+)
+
+STONE_PALETTE = {"O": OUTLINE, "L": STONE_LIGHT, "s": STONE, "S": STONE_DARK}
+
 
 # --- sheet -----------------------------------------------------------------
 
@@ -1003,6 +1099,26 @@ def build_sheet() -> list[list[Sprite]]:
             facing_pip(stamp(floor(), AGENT, AGENT_PALETTE), direction, GOLD_LIGHT)
             for direction in range(4)
         ),
+        stamp(floor(), ROCK, STONE_PALETTE),
+        stamp(floor(), STICK, {"l": WOOD_LIGHT, "w": WOOD}),
+        stamp(
+            floor(),
+            LOG,
+            {
+                "O": OUTLINE,
+                "l": WOOD_LIGHT,
+                "w": WOOD,
+                "d": WOOD_DARK,
+                "e": hex_color("d8b07a"),
+                "k": WOOD,
+            },
+        ),
+        stamp(
+            floor(),
+            GRASS_BUNDLE,
+            {"s": STRAW_LIGHT, "S": STRAW, "O": OUTLINE, "k": LEATHER},
+        ),
+        stamp(floor(), STONE_AXE, {**STONE_PALETTE, "w": WOOD, "l": WOOD_LIGHT}),
     ]
 
     return [
