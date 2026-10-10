@@ -12,6 +12,7 @@ use crate::{
         },
         survival::{
             Survival,
+            items::Inventory,
             needs::{Health, Hunger},
             world::Agent,
         },
@@ -114,14 +115,12 @@ impl ViewTile for SurvivalObs {
 impl Survival {
     pub(super) fn encode_observations(&mut self, timestep: &mut TimeStepMut) {
         let fov_height = self.config.view_height as usize;
-        // the top row of the band is the stats
-        let stats_row = fov_height + UI_HEIGHT - 1;
         timestep.obs.fill(SurvivalObs::Mask.into());
 
-        for (&position, agent, health, hunger) in
+        for (&position, agent, health, hunger, inventory) in
             self.state
                 .world
-                .query_mut::<(&Position, &Agent, &Health, &Hunger)>()
+                .query_mut::<(&Position, &Agent, &Health, &Hunger, &Inventory)>()
         {
             let agent_id = agent.agent_index;
 
@@ -138,7 +137,8 @@ impl Survival {
             let mut ui = timestep.obs.slice_mut(s![agent_id, .., fov_height.., 0]);
             ui.fill(SurvivalObs::UI.into());
 
-            let mut stats = timestep.obs.slice_mut(s![agent_id, .., stats_row, 0]);
+            // draw stats (the last row of the UI band)
+            let mut stats = ui.slice_mut(s![.., UI_HEIGHT - 1]);
             for (col, label, value) in [
                 (HEALTH_COL, SurvivalObs::UiHealth, health.amount),
                 (HUNGER_COL, SurvivalObs::UiHunger, hunger.amount),
@@ -149,6 +149,11 @@ impl Survival {
                     u32::from(value),
                     &DIGIT_TILES,
                 );
+            }
+
+            // draw inventory
+            if let Some(hands) = inventory.hand {
+                ui[(0, 0)] = hands.obs().into();
             }
         }
 

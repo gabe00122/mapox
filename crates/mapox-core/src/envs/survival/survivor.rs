@@ -33,12 +33,12 @@ impl SurvivalState {
             timestep.last_action[agent_index] = actions[agent_index];
             timestep.reward[agent_index] = 0.0;
 
-            if let Ok((&position, direction, &slot)) = self
-                .world
-                .query_one_mut::<(&Position, &mut Direction, &Slot)>(agent_id)
-            {
-                let action = SurvivalAction::from_id(actions[agent_index]);
-                if let Some(move_direction) = action.move_direction() {
+            let action = SurvivalAction::from_id(actions[agent_index]);
+            if let Some(move_direction) = action.move_direction() {
+                if let Ok((&position, direction, &slot)) =
+                    self.world
+                        .query_one_mut::<(&Position, &mut Direction, &Slot)>(agent_id)
+                {
                     *direction = move_direction;
                     let target = position + move_direction.to_pos();
                     let occupied = self.is_occupied(target, slot);
@@ -46,6 +46,8 @@ impl SurvivalState {
                         self.move_entity(agent_id, target);
                     }
                 }
+            } else if action == SurvivalAction::ItemTake {
+                self.item_take(agent_id)
             }
         }
     }

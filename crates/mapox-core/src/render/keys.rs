@@ -62,6 +62,8 @@ const ACTION_KEYS: &[(&str, &str, &[Key])] = &[
     (symbols::PRIMARY_ACTION, "primary action", &[Key::F]),
     (symbols::DIG_ACTION, "dig", &[Key::E]),
     (symbols::PLACE_PIPE, "place pipe", &[Key::Q]),
+    (symbols::TAKE, "take", &[Key::E]),
+    (symbols::PUT, "put", &[Key::Q]),
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
