@@ -4,12 +4,45 @@ use crate::envs::survival::SurvivalState;
 
 const TICK_HUNGER_EVERY: usize = 2;
 
+#[derive(Debug, Clone, Copy)]
 pub(super) struct Health {
     pub amount: u8,
+    pub max: u8,
+}
+
+impl Health {
+    pub fn add(&mut self, rhs: u8) {
+        self.amount = self.amount.saturating_add(rhs).min(self.max);
+    }
+}
+
+impl Default for Health {
+    fn default() -> Self {
+        Self {
+            amount: 99,
+            max: 99,
+        }
+    }
 }
 
 pub(super) struct Hunger {
     pub amount: u8,
+    pub max: u8,
+}
+
+impl Default for Hunger {
+    fn default() -> Self {
+        Self {
+            amount: 99,
+            max: 99,
+        }
+    }
+}
+
+impl Hunger {
+    pub fn add(&mut self, rhs: u8) {
+        self.amount = self.amount.saturating_add(rhs).min(self.max);
+    }
 }
 
 impl SurvivalState {

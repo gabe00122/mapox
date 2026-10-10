@@ -204,6 +204,8 @@ impl Environment for Survival {
             ItemType::CutGrass,
             ItemType::Stick,
             ItemType::StoneAxe,
+            ItemType::Berry,
+            ItemType::CookedBerry,
         ];
 
         for (i, item) in items.into_iter().enumerate() {

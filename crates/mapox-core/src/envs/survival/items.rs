@@ -2,7 +2,9 @@ use hecs::Entity;
 
 use crate::envs::{
     common::{Direction, Position},
-    survival::{Slot, SurvivalObs, SurvivalState, prototypes::Prototype, refine::RefineType},
+    survival::{
+        Slot, SurvivalObs, SurvivalState, needs::Hunger, prototypes::Prototype, refine::RefineType,
+    },
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,6 +34,14 @@ impl ItemType {
             ItemType::CutGrass => SurvivalObs::ItemCutGrass,
             ItemType::StoneAxe => SurvivalObs::ItemStoneAxe,
             _ => SurvivalObs::Digit0,
+        }
+    }
+
+    fn hunger_restore(&self) -> Option<u8> {
+        match self {
+            ItemType::Berry => Some(10),
+            ItemType::CookedBerry => Some(40),
+            _ => None,
         }
     }
 }
@@ -76,13 +86,24 @@ impl SurvivalState {
             return;
         };
 
-        let Some(hand) = inventory.hand else {
+        let Some(item) = inventory.hand else {
             return;
         };
 
+        if let Some(hunger_restore) = item.hunger_restore() {
+            if let Ok((inventory, hunger)) = self
+                .world
+                .query_one_mut::<(&mut Inventory, &mut Hunger)>(id)
+            {
+                hunger.add(hunger_restore);
+                inventory.hand = None;
+            }
+            return;
+        }
+
         let target_pos = position + direction.to_pos();
 
-        match hand {
+        match item {
             ItemType::CampfireKit => {
                 if self.is_blocked(target_pos, Slot::Lower) {
                     return;

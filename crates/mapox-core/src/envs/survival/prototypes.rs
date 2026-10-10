@@ -37,8 +37,8 @@ impl SurvivalState {
                         SurvivalObs::AgentLeft,
                     ],
                 },
-                Health { amount: 99 },
-                Hunger { amount: 99 },
+                Health::default(),
+                Hunger::default(),
                 Inventory::default(),
             )),
             Prototype::Fire => self.spawn((
