@@ -1,5 +1,5 @@
 use crate::{
-    envs::common::Position,
+    envs::common::Direction,
     symbols::{COMBINE, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, NOOP, PUT, SWAP, TAKE, USE},
     vocab_enum,
 };
@@ -24,13 +24,13 @@ vocab_enum!(pub(super) SurvivalAction {
 });
 
 impl SurvivalAction {
-    pub(super) fn move_direction(self) -> Option<Position> {
+    pub(super) fn move_direction(self) -> Option<Direction> {
         use SurvivalAction::*;
         match self {
-            MoveUp => Some(Position::new(0, 1)),
-            MoveRight => Some(Position::new(1, 0)),
-            MoveDown => Some(Position::new(0, -1)),
-            MoveLeft => Some(Position::new(-1, 0)),
+            MoveUp => Some(Direction::Up),
+            MoveRight => Some(Direction::Right),
+            MoveDown => Some(Direction::Down),
+            MoveLeft => Some(Direction::Left),
             _ => None,
         }
     }

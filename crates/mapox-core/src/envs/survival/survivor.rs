@@ -2,25 +2,12 @@ use rand::seq::SliceRandom;
 
 use crate::{
     envs::{
-        common::{Position, vocab_enum::VocabEnum},
+        common::{Direction, Position, vocab_enum::VocabEnum},
         survival::{Slot, SurvivalAction, SurvivalState},
     },
     timestep::TimeStepMut,
     vocab::VocabId,
 };
-
-// Which direction the entity is facing
-pub(super) struct Direction {
-    pub front: Position,
-}
-
-impl Default for Direction {
-    fn default() -> Self {
-        Direction {
-            front: Position::new(0, 1),
-        }
-    }
-}
 
 impl SurvivalState {
     pub(super) fn tick_survivors(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
@@ -39,8 +26,8 @@ impl SurvivalState {
 
             let action = SurvivalAction::from_id(actions[agent_index]);
             if let Some(move_direction) = action.move_direction() {
-                direction.front = move_direction;
-                let target = position + move_direction;
+                *direction = move_direction;
+                let target = position + move_direction.to_pos();
                 let occupied = self.is_occupied(target, slot);
                 if !occupied && !self.tiles[target.idx()].move_blocked() {
                     self.move_entity(agent_id, target);

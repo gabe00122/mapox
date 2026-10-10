@@ -1,14 +1,13 @@
 use hecs::Entity;
 
 use crate::envs::{
-    common::Position,
+    common::{Direction, Position},
     survival::{
         SurvivalObs, SurvivalState,
         fire::Fire,
         items::{Inventory, Item, ItemType},
         lightning::LightEmitter,
         needs::{Health, Hunger},
-        survivor::Direction,
         world::{Agent, Slot},
     },
 };
@@ -25,7 +24,7 @@ impl SurvivalState {
             Prototype::Survivor { agent_index } => self.spawn((
                 Agent { agent_index },
                 position,
-                Direction::default(),
+                Direction::Up,
                 Slot::Upper,
                 SurvivalObs::AgentGeneric,
                 Health { amount: 100 },
