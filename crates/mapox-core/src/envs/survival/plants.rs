@@ -31,11 +31,14 @@ impl Survival {
             .world
             .query_mut::<(&mut Active, &mut ReactiveAfter)>()
         {
-            reactive_after.reset_delay = (reactive_after.reset_delay - 1).max(0);
-            if reactive_after.reset_delay == 0 {
-                active.is_active = true;
-            } else if !active.is_active && reactive_after.just_active {
-                reactive_after.time_left = reactive_after.reset_delay;
+            if !active.is_active {
+                if reactive_after.just_active {
+                    reactive_after.time_left = reactive_after.reset_delay;
+                }
+                reactive_after.time_left = (reactive_after.time_left - 1).max(0);
+                if reactive_after.time_left == 0 {
+                    active.is_active = true;
+                }
             }
 
             reactive_after.just_active = active.is_active;

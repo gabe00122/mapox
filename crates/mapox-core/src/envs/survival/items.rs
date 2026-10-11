@@ -6,7 +6,7 @@ use crate::envs::{
         Slot, SurvivalObs, SurvivalState,
         fire::{Active, Fueled},
         needs::Hunger,
-        plants::Chopable,
+        plants::{Chopable, ItemProducer},
         prototypes::Prototype,
         refine::RefineType,
     },
@@ -132,8 +132,8 @@ impl SurvivalState {
             }
             ItemType::StoneAxe => {
                 // the lower slot also holds Slot::Both entities like trees
-                let Some((target, drop)) = self.spatial_index[target_pos.idx()][0]
-                    .and_then(|target| {
+                let Some((target, drop)) =
+                    self.spatial_index[target_pos.idx()][0].and_then(|target| {
                         let chopable = self.world.query_one_mut::<&Chopable>(target).ok()?;
                         Some((target, chopable.item))
                     })
@@ -216,33 +216,42 @@ impl SurvivalState {
     }
 
     pub(super) fn item_take(&mut self, id: Entity) {
-        let mut target_entity: Option<Entity> = None;
-
-        if let Ok((position, direction, inventory)) = self
+        let Ok((&position, direction, inventory)) = self
             .world
-            .query_one::<(&Position, &Direction, &mut Inventory)>(id)
-            .get()
-        {
-            if inventory.hand.is_some() && inventory.back.is_some() {
-                return;
-            }
+            .query_one_mut::<(&Position, &Direction, &Inventory)>(id)
+        else {
+            return;
+        };
 
-            let target_pos = *position + direction.to_pos();
-            target_entity = self.spatial_index[target_pos.idx()][0]; // lower slot
-
-            if let Some(item) = target_entity.and_then(|id| self.world.get::<&ItemType>(id).ok()) {
-                if inventory.hand.is_some() {
-                    inventory.back = inventory.hand.take();
-                }
-                inventory.hand = Some(*item);
-            } else {
-                // clear the target so things that aren't items aren't deleted
-                target_entity = None;
-            }
+        if inventory.hand.is_some() && inventory.back.is_some() {
+            return;
         }
 
-        if let Some(target_entity) = target_entity {
-            self.despawn(target_entity);
+        let target_pos = position + direction.to_pos();
+        let Some(target) = self.spatial_index[target_pos.idx()][0] else {
+            return; // lower slot
+        };
+
+        let item = if let Ok(&item) = self.world.query_one_mut::<&ItemType>(target) {
+            self.despawn(target);
+            item
+        } else if let Ok((active, producer)) = self
+            .world
+            .query_one_mut::<(&mut Active, &ItemProducer)>(target)
+            && active.is_active
+        {
+            // producers stay put and are deactivated until they regrow
+            active.is_active = false;
+            producer.item
+        } else {
+            return;
+        };
+
+        if let Ok(inventory) = self.world.query_one_mut::<&mut Inventory>(id) {
+            if inventory.hand.is_some() {
+                inventory.back = inventory.hand.take();
+            }
+            inventory.hand = Some(item);
         }
     }
 }
@@ -274,7 +283,11 @@ mod tests {
         }
 
         let target = state.spawn_prototype(prototype, target_pos);
-        state.world.query_one_mut::<&mut Inventory>(agent).unwrap().hand = Some(ItemType::StoneAxe);
+        state
+            .world
+            .query_one_mut::<&mut Inventory>(agent)
+            .unwrap()
+            .hand = Some(ItemType::StoneAxe);
         state.item_use(agent);
 
         assert!(!state.world.contains(target), "the chopped entity is gone");
@@ -295,5 +308,55 @@ mod tests {
     #[test]
     fn chopping_a_berry_bush_leaves_a_stick() {
         assert_eq!(chop(Prototype::BerryBush), Some(ItemType::Stick));
+    }
+
+    #[test]
+    fn taking_from_a_berry_bush_deactivates_it_until_it_regrows() {
+        let config = SurvivalConfig::default();
+        let mut env = Survival::new(&config, 512);
+        let mut buffers = TimeStepBuffers::new(&env);
+        env.reset(0, &mut buffers.view_mut());
+
+        let state = &mut env.state;
+        let agent = state.agents[0];
+        let (&position, direction) = state
+            .world
+            .query_one_mut::<(&Position, &Direction)>(agent)
+            .unwrap();
+        let target_pos = position + direction.to_pos();
+        for target in state.spatial_index[target_pos.idx()].into_iter().flatten() {
+            state.despawn(target);
+        }
+        *state.world.query_one_mut::<&mut Inventory>(agent).unwrap() = Inventory::default();
+
+        let bush = state.spawn_prototype(Prototype::BerryBush, target_pos);
+        let is_active = |env: &mut Survival| {
+            env.state
+                .world
+                .query_one_mut::<&Active>(bush)
+                .unwrap()
+                .is_active
+        };
+
+        env.state.item_take(agent);
+        assert!(env.state.world.contains(bush), "the bush stays");
+        assert!(!is_active(&mut env), "the bush is picked");
+        assert_eq!(
+            env.state
+                .world
+                .query_one_mut::<&Inventory>(agent)
+                .unwrap()
+                .hand,
+            Some(ItemType::Berry)
+        );
+
+        env.state.item_take(agent);
+        let inventory = env.state.world.query_one_mut::<&Inventory>(agent).unwrap();
+        assert_eq!(inventory.back, None, "a picked bush gives nothing");
+
+        for _ in 0..10 {
+            env.tick_reactivate_after();
+        }
+        assert!(is_active(&mut env), "the bush regrows");
     }
 }
