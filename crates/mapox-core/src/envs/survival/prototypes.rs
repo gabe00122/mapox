@@ -54,6 +54,7 @@ impl SurvivalState {
                 },
                 Fueled {
                     fuel: 50,
+                    max_fuel: 50,
                     burn_rate: 1,
                 },
             )),

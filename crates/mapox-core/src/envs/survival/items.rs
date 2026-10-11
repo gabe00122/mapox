@@ -3,7 +3,10 @@ use hecs::Entity;
 use crate::envs::{
     common::{Direction, Position},
     survival::{
-        Slot, SurvivalObs, SurvivalState, fire::Active, needs::Hunger, prototypes::Prototype,
+        Slot, SurvivalObs, SurvivalState,
+        fire::{Active, Fueled},
+        needs::Hunger,
+        prototypes::Prototype,
         refine::RefineType,
     },
 };
@@ -42,6 +45,14 @@ impl ItemType {
         match self {
             ItemType::Berry => Some(10),
             ItemType::CookedBerry => Some(40),
+            _ => None,
+        }
+    }
+
+    fn fuel_value(&self) -> Option<u8> {
+        match self {
+            ItemType::Stick | ItemType::CutGrass => Some(10),
+            ItemType::Wood => Some(50),
             _ => None,
         }
     }
@@ -159,6 +170,22 @@ impl SurvivalState {
         };
 
         let target_pos = position + direction.to_pos();
+
+        // putting fuel into a fueled thing (e.g. a fire) burns it up, relighting it if burnt out
+        if let Some(fuel_value) = item.fuel_value()
+            && let Some(target) = self.spatial_index[target_pos.idx()][0] // lower slot
+            && let Ok((active, fueled)) = self
+                .world
+                .query_one_mut::<(&mut Active, &mut Fueled)>(target)
+        {
+            fueled.fuel = (fueled.fuel + fuel_value as i32).min(fueled.max_fuel);
+            active.is_active = true;
+            if let Ok(inventory) = self.world.query_one_mut::<&mut Inventory>(id) {
+                inventory.hand = inventory.back.take();
+            }
+            return;
+        }
+
         if self.is_blocked(target_pos, Slot::Lower) {
             return;
         }

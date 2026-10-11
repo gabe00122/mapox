@@ -27,23 +27,21 @@ impl Default for Active {
 
 pub(super) struct Fueled {
     pub fuel: i32,
+    pub max_fuel: i32,
     pub burn_rate: i32,
 }
 
 impl SurvivalState {
     pub(super) fn tick_fueled(&mut self) {
-        // let mut burnt_out = Vec::new();
-
         for (active, fire) in self.world.query_mut::<(&mut Active, &mut Fueled)>() {
-            fire.fuel -= fire.burn_rate;
-            if fire.fuel <= 0 {
+            if !active.is_active {
+                continue;
+            }
+            fire.fuel = (fire.fuel - fire.burn_rate).max(0);
+            if fire.fuel == 0 {
                 active.is_active = false;
             }
         }
-
-        // for id in burnt_out {
-        //     self.despawn(id);
-        // }
     }
 
     pub(super) fn tick_active_obs(&mut self) {
