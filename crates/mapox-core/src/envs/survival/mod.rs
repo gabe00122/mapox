@@ -141,7 +141,7 @@ impl Survival {
         }
 
         for (position, &slot, &tile) in world.query_mut::<(&Position, &Slot, &SurvivalObs)>() {
-            if slot == Slot::Upper {
+            if slot == Slot::Upper || slot == Slot::Both {
                 render_map[position.idx()] = tile;
             }
         }
@@ -206,6 +206,8 @@ impl Environment for Survival {
             .spawn_prototype(Prototype::Fire, Position::new(18, 20));
         self.state
             .spawn_prototype(Prototype::BerryBush, Position::new(17, 20));
+        self.state
+            .spawn_prototype(Prototype::Tree, Position::new(16, 20));
 
         let items = [
             ItemType::Wood,
@@ -237,6 +239,7 @@ impl Environment for Survival {
         self.state.tick_starvation();
         self.state.tick_hunger();
         self.state.tick_fueled();
+        self.tick_reactivate_after();
         self.state.tick_death();
 
         //update obs

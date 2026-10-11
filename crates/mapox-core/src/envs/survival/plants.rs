@@ -25,7 +25,7 @@ pub(super) struct Chopable {
 }
 
 impl Survival {
-    fn tick_reactivate_after(&mut self) {
+    pub(super) fn tick_reactivate_after(&mut self) {
         for (active, reactive_after) in self
             .state
             .world
