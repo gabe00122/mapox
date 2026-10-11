@@ -64,11 +64,11 @@ impl SurvivalState {
             Prototype::BerryBush => self.spawn((
                 position,
                 Slot::Lower,
-                SurvivalObs::Digit0,
+                SurvivalObs::TileBerryBush,
                 Active::default(),
                 ActiveObs {
-                    enabled: SurvivalObs::Digit0,
-                    disabled: SurvivalObs::Digit1,
+                    enabled: SurvivalObs::TileBerryBush,
+                    disabled: SurvivalObs::TileBush,
                 },
                 ItemProducer {
                     item: ItemType::Berry,
@@ -81,7 +81,7 @@ impl SurvivalState {
             Prototype::Tree => self.spawn((
                 position,
                 Slot::Both,
-                SurvivalObs::Digit0,
+                SurvivalObs::TileTree,
                 Chopable {
                     item: Some(ItemType::Wood),
                 },

@@ -37,7 +37,9 @@ impl ItemType {
             ItemType::Wood => SurvivalObs::ItemWood,
             ItemType::CutGrass => SurvivalObs::ItemCutGrass,
             ItemType::StoneAxe => SurvivalObs::ItemStoneAxe,
-            _ => SurvivalObs::Digit0,
+            ItemType::CampfireKit => SurvivalObs::ItemCampfireKit,
+            ItemType::Berry => SurvivalObs::ItemBerry,
+            ItemType::CookedBerry => SurvivalObs::ItemCookedBerry,
         }
     }
 

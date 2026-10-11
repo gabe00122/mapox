@@ -139,6 +139,22 @@ GHOST_FRIGHTENED_FACE = hex_color("ffd9c7")
 GHOST_EYE = hex_color("f2f2ee")
 GHOST_PUPIL = hex_color("2121c4")
 
+LEAF = hex_color("3f9a4a")
+LEAF_LIGHT = hex_color("6fd26a")
+LEAF_DARK = hex_color("25602e")
+LEAF_EDGE = hex_color("14301a")
+
+BERRY = hex_color("d6336c")
+BERRY_DARK = hex_color("8a1c44")
+BERRY_LIGHT = hex_color("ff9ec0")
+BERRY_EDGE = hex_color("4a0d24")
+
+COOKED = hex_color("9a5a2e")
+COOKED_DARK = hex_color("5e3018")
+COOKED_LIGHT = hex_color("d89a5e")
+COOKED_EDGE = hex_color("2e160a")
+STEAM = hex_color("c8cfdb")
+
 HEART = hex_color("e5383f")
 HEART_DARK = hex_color("8f1d22")
 HEART_LIGHT = hex_color("ff8a8f")
@@ -1027,6 +1043,125 @@ STONE_AXE = check(
     "stone axe",
 )
 
+TREE = check(
+    [
+        "....OOOO....",
+        "..OOLLLGOO..",
+        ".OLLLGGGGGO.",
+        ".OLGGGGGgGO.",
+        "OLGGGgGGGGgO",
+        "OGGGGGGGgGgO",
+        ".OGgGGGGGgO.",
+        "..OOgGGgOO..",
+        "....OTTO....",
+        "....OTtO....",
+        "...OTTTtO...",
+        "....OOOO....",
+    ],
+    "tree",
+)
+
+# A ripe bush carries berries on R and h; picked bare, those are leaf.
+BUSH = check(
+    [
+        "............",
+        "............",
+        "....OOOO....",
+        "..OOGGLGOO..",
+        ".OGLGRhGGGO.",
+        ".OGGGRRGLGO.",
+        "OGRhGGGGRhGO",
+        "OGRRGgGGRRGO",
+        "OGGGGGRhGGgO",
+        ".OgGGGRRGgO.",
+        "..OOgggggO..",
+        "............",
+    ],
+    "bush",
+)
+
+BERRIES = check(
+    [
+        "............",
+        "............",
+        "......gG....",
+        "...OOOgOOO..",
+        "..OhRRORhRO.",
+        "..ORRrORRrO.",
+        "..OOrOOOrOO.",
+        "....OhRRO...",
+        "....ORRrO...",
+        "....OrrrO...",
+        ".....OOO....",
+        "............",
+    ],
+    "berries",
+)
+
+CAMPFIRE_KIT = check(
+    [
+        "............",
+        "............",
+        "............",
+        "..lT....Tl..",
+        "...lT..Tl...",
+        "....lTTl....",
+        "....TttT....",
+        "...Tt..tT...",
+        ".LsSLsSLsSs.",
+        ".SOSSOSSOSS.",
+        "............",
+        "............",
+    ],
+    "campfire kit",
+)
+
+TREE_PALETTE = {
+    "O": LEAF_EDGE,
+    "L": LEAF_LIGHT,
+    "G": LEAF,
+    "g": LEAF_DARK,
+    "T": WOOD,
+    "t": WOOD_DARK,
+}
+
+
+def bush(ripe: bool) -> Sprite:
+    berry, shine = (BERRY, BERRY_LIGHT) if ripe else (LEAF, LEAF)
+    palette = {
+        "O": LEAF_EDGE,
+        "L": LEAF_LIGHT,
+        "G": LEAF,
+        "g": LEAF_DARK,
+        "R": berry,
+        "h": shine,
+    }
+    return stamp(floor(), BUSH, palette)
+
+
+def berries(cooked: bool) -> Sprite:
+    """Raw berries are bright; cooked ones roasted brown and steaming."""
+    if cooked:
+        palette = {
+            "O": COOKED_EDGE,
+            "R": COOKED,
+            "r": COOKED_DARK,
+            "h": COOKED_LIGHT,
+            "g": STEAM,
+            "G": STEAM,
+        }
+    else:
+        palette = {
+            "O": BERRY_EDGE,
+            "R": BERRY,
+            "r": BERRY_DARK,
+            "h": BERRY_LIGHT,
+            "g": GRASS,
+            "G": GRASS_LIGHT,
+        }
+    return stamp(floor(), BERRIES, palette)
+
+
 STONE_PALETTE = {"O": OUTLINE, "L": STONE_LIGHT, "s": STONE, "S": STONE_DARK}
 
 
@@ -1147,6 +1282,24 @@ def build_sheet() -> list[list[Sprite]]:
             FIRE_OUT,
             {"a": ASH_LIGHT, "A": ASH, "e": EMBER, "C": CHAR, "c": WOOD_DARK},
         ),
+        stamp(floor(), TREE, TREE_PALETTE),
+    ]
+    plants_row = [
+        bush(ripe=True),
+        bush(ripe=False),
+        berries(cooked=False),
+        berries(cooked=True),
+        stamp(
+            floor(),
+            CAMPFIRE_KIT,
+            {
+                "T": WOOD,
+                "t": WOOD_DARK,
+                "l": WOOD_LIGHT,
+                **{k: v for k, v in STONE_PALETTE.items() if k != "s"},
+                "s": STONE,
+            },
+        ),
     ]
 
     return [
@@ -1158,6 +1311,7 @@ def build_sheet() -> list[list[Sprite]]:
         digits,
         pacman_row,
         survival_row,
+        plants_row,
     ]
 
 
