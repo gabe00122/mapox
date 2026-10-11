@@ -6,6 +6,7 @@ use crate::envs::{
         Slot, SurvivalObs, SurvivalState,
         fire::{Active, Fueled},
         needs::Hunger,
+        plants::Chopable,
         prototypes::Prototype,
         refine::RefineType,
     },
@@ -129,6 +130,22 @@ impl SurvivalState {
                 }
                 self.spawn_prototype(Prototype::Fire, target_pos);
             }
+            ItemType::StoneAxe => {
+                // the lower slot also holds Slot::Both entities like trees
+                let Some((target, drop)) = self.spatial_index[target_pos.idx()][0]
+                    .and_then(|target| {
+                        let chopable = self.world.query_one_mut::<&Chopable>(target).ok()?;
+                        Some((target, chopable.item))
+                    })
+                else {
+                    return;
+                };
+
+                self.despawn(target);
+                if let Some(drop) = drop {
+                    self.spawn_prototype(Prototype::Item(drop), target_pos);
+                }
+            }
             _ => {}
         }
     }
@@ -227,5 +244,56 @@ impl SurvivalState {
         if let Some(target_entity) = target_entity {
             self.despawn(target_entity);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        env::Environment,
+        envs::survival::{Survival, config::SurvivalConfig},
+        timestep::TimeStepBuffers,
+    };
+
+    fn chop(prototype: Prototype) -> Option<ItemType> {
+        let config = SurvivalConfig::default();
+        let mut env = Survival::new(&config, 512);
+        let mut buffers = TimeStepBuffers::new(&env);
+        env.reset(0, &mut buffers.view_mut());
+
+        let state = &mut env.state;
+        let agent = state.agents[0];
+        let (&position, direction) = state
+            .world
+            .query_one_mut::<(&Position, &Direction)>(agent)
+            .unwrap();
+        let target_pos = position + direction.to_pos();
+        for target in state.spatial_index[target_pos.idx()].into_iter().flatten() {
+            state.despawn(target);
+        }
+
+        let target = state.spawn_prototype(prototype, target_pos);
+        state.world.query_one_mut::<&mut Inventory>(agent).unwrap().hand = Some(ItemType::StoneAxe);
+        state.item_use(agent);
+
+        assert!(!state.world.contains(target), "the chopped entity is gone");
+        assert_eq!(
+            state.world.query_one_mut::<&Inventory>(agent).unwrap().hand,
+            Some(ItemType::StoneAxe),
+            "the axe is kept"
+        );
+        state.spatial_index[target_pos.idx()][0]
+            .map(|item| *state.world.query_one_mut::<&ItemType>(item).unwrap())
+    }
+
+    #[test]
+    fn chopping_a_tree_leaves_wood() {
+        assert_eq!(chop(Prototype::Tree), Some(ItemType::Wood));
+    }
+
+    #[test]
+    fn chopping_a_berry_bush_leaves_a_stick() {
+        assert_eq!(chop(Prototype::BerryBush), Some(ItemType::Stick));
     }
 }
