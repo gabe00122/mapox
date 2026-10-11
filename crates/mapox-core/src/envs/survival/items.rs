@@ -20,6 +20,7 @@ pub(super) enum ItemType {
     Wood,
     CutGrass,
     StoneAxe,
+    StonePixaxe,
     CampfireKit,
     Berry,
     CookedBerry,
@@ -29,6 +30,7 @@ pub(super) enum ItemType {
 const RECIPES: &[(ItemType, ItemType, ItemType)] = &[
     (ItemType::Rock, ItemType::Stick, ItemType::StoneAxe),
     (ItemType::Wood, ItemType::CutGrass, ItemType::CampfireKit),
+    (ItemType::StoneAxe, ItemType::Rock, ItemType::StonePixaxe),
 ];
 
 impl ItemType {
@@ -42,6 +44,7 @@ impl ItemType {
             ItemType::CampfireKit => SurvivalObs::ItemCampfireKit,
             ItemType::Berry => SurvivalObs::ItemBerry,
             ItemType::CookedBerry => SurvivalObs::ItemCookedBerry,
+            _ => SurvivalObs::Digit0,
         }
     }
 

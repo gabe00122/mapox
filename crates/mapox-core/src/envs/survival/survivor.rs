@@ -67,10 +67,14 @@ impl SurvivalState {
 
     pub(super) fn calculae_survival_reward(&mut self) {
         for (agent, hunger, health) in self.world.query_mut::<(&mut Agent, &Hunger, &Health)>() {
+            if health.amount == 0 {
+                agent.reward -= 1.0;
+            }
+
             let hunger_percentage = f32::from(hunger.amount) / f32::from(hunger.max);
             let health_percentage = f32::from(health.amount) / f32::from(health.max);
 
-            agent.reward += 0.01 * (health_percentage + hunger_percentage.max(0.5))
+            agent.reward += 0.025 * (health_percentage + hunger_percentage.min(0.5));
         }
     }
 }

@@ -133,6 +133,8 @@ impl Survival {
     pub(super) fn encode_observations(&mut self, timestep: &mut TimeStepMut) {
         let fov_height = self.config.view_height as usize;
         timestep.obs.fill(SurvivalObs::Mask.into());
+        timestep.reward.fill(0.0);
+        timestep.terminated.fill(true);
 
         for (&position, agent, health, hunger, inventory) in
             self.state
@@ -179,11 +181,11 @@ impl Survival {
             }
 
             timestep.reward[agent_index] = agent.reward;
+            timestep.terminated[agent_index] = health.amount == 0 || self.state.time == self.length;
             agent.reward = 0.0;
         }
 
         timestep.time.fill(self.state.time as i32);
-        timestep.terminated.fill(self.state.time == self.length);
         timestep.task_ids.fill(0);
     }
 }

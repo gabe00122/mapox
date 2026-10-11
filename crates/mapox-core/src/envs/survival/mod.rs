@@ -212,7 +212,6 @@ impl Environment for Survival {
         self.state.tick_damage_to_above();
         self.state.tick_fueled();
         self.tick_reactivate_after();
-        self.state.tick_death();
 
         //update obs
         self.state.tick_direction_tiles();
@@ -224,6 +223,7 @@ impl Environment for Survival {
         self.state.calculae_survival_reward();
         self.encode_observations(timestep);
         self.encode_action_mask(timestep);
+        self.state.tick_death();
     }
 
     fn consume_metrics(&mut self) -> serde_json::Value {
