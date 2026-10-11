@@ -21,6 +21,7 @@ pub(super) enum Prototype {
     BerryBush,
     TallGrass,
     Tree,
+    Portal,
     Item(ItemType),
 }
 
@@ -75,7 +76,7 @@ impl SurvivalState {
                 ItemProducer {
                     item: ItemType::Berry,
                 },
-                ReactiveAfter::new(200),
+                ReactiveAfter::new(400),
                 Chopable {
                     item: Some(ItemType::Stick),
                 },
@@ -92,7 +93,7 @@ impl SurvivalState {
                 ItemProducer {
                     item: ItemType::CutGrass,
                 },
-                ReactiveAfter::new(200),
+                ReactiveAfter::new(400),
             )),
             Prototype::Tree => self.spawn((
                 position,
@@ -102,6 +103,8 @@ impl SurvivalState {
                     item: Some(ItemType::Wood),
                 },
             )),
+            // takes the lower slot so nothing can be put down over it
+            Prototype::Portal => self.spawn((position, Slot::Both, SurvivalObs::TilePortal)),
             Prototype::Item(item_type) => {
                 self.spawn((position, Slot::Lower, item_type.obs(), item_type))
             }

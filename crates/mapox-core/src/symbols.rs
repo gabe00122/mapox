@@ -46,6 +46,8 @@ pub const TILE_CUT_GRASS: &str = "tile/cut_grass";
 pub const TILE_FIRE: &str = "tile/fire";
 /// A [`TILE_FIRE`] that has burnt through its fuel.
 pub const TILE_FIRE_OUT: &str = "tile/fire_out";
+/// Where survivors come into the world, and come back to after dying.
+pub const TILE_PORTAL: &str = "tile/portal";
 
 pub const TILE_PIPE_HORIZONTAL: &str = "tile/pipe_horizontal";
 pub const TILE_PIPE_VIRTICAL: &str = "tile/pipe_virtical";

@@ -92,6 +92,7 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::ITEM_CAMPFIRE_KIT, 4, 8),
     (symbols::TILE_TALL_GRASS, 5, 8),
     (symbols::TILE_CUT_GRASS, 6, 8),
+    (symbols::TILE_PORTAL, 7, 8),
 ];
 
 pub(crate) fn resolve_art(vocab: &Vocabulary) -> Vec<(u32, u32)> {

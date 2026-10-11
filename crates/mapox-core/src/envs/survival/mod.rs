@@ -7,6 +7,7 @@ mod items;
 mod lightning;
 mod needs;
 mod plants;
+mod portal;
 mod prototypes;
 mod refine;
 mod survivor;
@@ -27,7 +28,6 @@ use crate::{
             config::SurvivalConfig,
             items::ItemType,
             obs::{SurvivalObs, UI_WIDTH},
-            prototypes::Prototype,
             world::{EntityCell, Slot},
         },
     },
@@ -40,9 +40,10 @@ use crate::{
 struct SurvivalState {
     rngs: SmallRng,
     world: World,
-    agents: Vec<Entity>,     // agent_id -> entity
+    agents: Vec<Entity>,     // agent_id -> entity, stale while the agent is dead
     agent_order: Vec<usize>, // agent turn order
     time: usize,
+    portal: Position, // where agents spawn and respawn
 
     tiles: Array2<SurvivalObs>,        // terrain layer
     spatial_index: Array2<EntityCell>, // fast special entity lookup index
@@ -109,6 +110,7 @@ impl Survival {
                 render_map: Array2::from_elem(map_dim, SurvivalObs::TileEmpty),
                 rngs: SmallRng::seed_from_u64(0),
                 time: 0,
+                portal: Position::new(0, 0),
 
                 dusk: None,
             },
@@ -182,18 +184,17 @@ impl Environment for Survival {
 
         self.state.spatial_index.fill([None; 2]);
         self.state.world.clear();
+        // every slot starts dead, so the respawn brings them all in
         self.state.agents.clear();
+        self.state
+            .agents
+            .resize(self.num_agents(), Entity::DANGLING);
 
         // wall padding around the generated interior
         self.state.tiles.fill(SurvivalObs::TileWall);
         self.generate_map();
-
-        for (i, position) in self.spawn_positions().into_iter().enumerate() {
-            let id = self
-                .state
-                .spawn_prototype(Prototype::Survivor { agent_index: i }, position);
-            self.state.agents.push(id);
-        }
+        self.place_portal();
+        self.state.tick_respawn();
 
         timestep.reward.fill(0.0);
         timestep.last_action.fill(0);
@@ -209,6 +210,7 @@ impl Environment for Survival {
         self.state.tick_starvation();
         self.state.tick_hunger();
 
+        // buildings
         self.state.tick_damage_to_above();
         self.state.tick_fueled();
         self.tick_reactivate_after();
@@ -218,12 +220,13 @@ impl Environment for Survival {
         self.state.tick_active_obs();
         //
 
-        self.tick_time();
+        self.tick_time(); // day night cycle
         self.prepare_render();
         self.state.calculae_survival_reward();
         self.encode_observations(timestep);
         self.encode_action_mask(timestep);
         self.state.tick_death();
+        self.state.tick_respawn();
     }
 
     fn consume_metrics(&mut self) -> serde_json::Value {

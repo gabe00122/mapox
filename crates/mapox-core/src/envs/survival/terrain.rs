@@ -1,12 +1,11 @@
 //! Map generation: biomes from noise, joined up into one walkable region.
 
 use ndarray::s;
-use rand::seq::SliceRandom;
 
 use crate::envs::{
     common::{
         Position,
-        map_gen::{connect_regions, noise_field, quantile, roll, spread_out},
+        map_gen::{connect_regions, noise_field, quantile, roll},
     },
     survival::{Survival, SurvivalObs, items::ItemType, prototypes::Prototype},
 };
@@ -148,32 +147,6 @@ impl Survival {
                 }
             }
         }
-    }
-
-    /// Where the agents start: on open ground with nothing on it, out of each
-    /// other's sight where the map has room for it.
-    pub(super) fn spawn_positions(&mut self) -> Vec<Position> {
-        let mut free = Vec::new();
-        for x in self.pad_width..self.width - self.pad_width {
-            for y in self.pad_height..self.height - self.pad_height {
-                let position = Position::new(x, y);
-                if self.state.spatial_index[position.idx()] == [None; 2]
-                    && !self.state.tiles[position.idx()].move_blocked()
-                {
-                    free.push(position);
-                }
-            }
-        }
-        free.shuffle(&mut self.state.rngs);
-
-        let apart = self.pad_width.max(self.pad_height) + 1;
-        let spawns = spread_out(&free, self.config.num_agents, apart);
-        assert_eq!(
-            spawns.len(),
-            self.config.num_agents,
-            "no open ground left to spawn on"
-        );
-        spawns
     }
 }
 

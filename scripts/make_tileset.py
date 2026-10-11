@@ -176,6 +176,13 @@ STRAW = hex_color("c9b458")
 STRAW_LIGHT = hex_color("ece08e")
 LEATHER = hex_color("8a5a32")
 
+PORTAL_EDGE = hex_color("2a0f4a")
+PORTAL_DARK = hex_color("5b2a9e")
+PORTAL = hex_color("9d4edd")
+PORTAL_LIGHT = hex_color("c58cff")
+PORTAL_CORE = hex_color("3a1670")
+PORTAL_SPARK = hex_color("eedcff")
+
 TEAM_RED = hex_color("e5383f")
 TEAM_BLUE = hex_color("3a78ff")
 TEAM_NEUTRAL = hex_color("d6dbe4")
@@ -1155,6 +1162,25 @@ CAMPFIRE_KIT = check(
     "campfire kit",
 )
 
+# A swirl of light around a dark core.
+PORTAL_ART = check(
+    [
+        "............",
+        "...OOOOOO...",
+        "..OpPPPPpO..",
+        ".OpPLLLLPpO.",
+        ".OPLcccWLPO.",
+        ".OPLcWccLPO.",
+        ".OPLccWcLPO.",
+        ".OPLcccWLPO.",
+        ".OpPLLLLPpO.",
+        "..OpPPPPpO..",
+        "...OOOOOO...",
+        "............",
+    ],
+    "portal",
+)
+
 TREE_PALETTE = {
     "O": LEAF_EDGE,
     "L": LEAF_LIGHT,
@@ -1343,6 +1369,18 @@ def build_sheet() -> list[list[Sprite]]:
         ),
         stamp(floor(), TALL_GRASS, {**GRASS_PALETTE, "s": STRAW_LIGHT, "S": STRAW}),
         stamp(floor(), CUT_GRASS, {**GRASS_PALETTE, "s": STRAW_LIGHT}),
+        stamp(
+            floor(),
+            PORTAL_ART,
+            {
+                "O": PORTAL_EDGE,
+                "p": PORTAL_DARK,
+                "P": PORTAL,
+                "L": PORTAL_LIGHT,
+                "c": PORTAL_CORE,
+                "W": PORTAL_SPARK,
+            },
+        ),
     ]
 
     return [
