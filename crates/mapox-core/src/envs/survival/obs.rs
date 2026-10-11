@@ -65,7 +65,7 @@ vocab_enum!(pub(super) SurvivalObs {
 });
 
 /// Where the UI band puts things. Its top row is the stats, each a label
-/// then a three digit number: health from column 0, hunger from column 5.
+/// then a two digit number: health from column 0, hunger from column 4.
 const HEALTH_COL: usize = 0;
 const HUNGER_COL: usize = 4;
 const STAT_DIGITS: usize = 2;
@@ -233,7 +233,7 @@ mod tests {
 
         use SurvivalObs::*;
         let mut stats = vec![UI; width];
-        stats[..9].copy_from_slice(&[UiHealth, UI, UI, Digit7, UI, UiHunger, UI, Digit4, Digit2]);
+        stats[..7].copy_from_slice(&[UiHealth, UI, Digit7, UI, UiHunger, Digit4, Digit2]);
         let stats: Vec<VocabId> = stats.into_iter().map(Into::into).collect();
         assert_eq!(row(fov + UI_HEIGHT - 1), stats);
         assert_eq!(row(fov), vec![VocabId::from(UI); width]);

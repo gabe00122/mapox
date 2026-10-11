@@ -132,7 +132,18 @@ mod tests {
     use crate::envs::pacman::{Pacman, PacmanConfig};
     use crate::envs::scouts::{Scouts, ScoutsConfig};
     use crate::envs::snake::{Snake, SnakeConfig};
+    use crate::envs::survival::{Survival, config::SurvivalConfig};
     use egui::{Event, Modifiers};
+
+    fn all_envs() -> Vec<Box<dyn Environment>> {
+        vec![
+            Box::new(FindReturn::new(&FindReturnConfig::default(), 512)),
+            Box::new(Scouts::new(&ScoutsConfig::default(), 512)),
+            Box::new(Snake::new(&SnakeConfig::default(), 512)),
+            Box::new(Pacman::new(&PacmanConfig::default(), 512)),
+            Box::new(Survival::new(&SurvivalConfig::default(), 512)),
+        ]
+    }
 
     /// One frame's worth of input with `keys` freshly pressed. Assigned
     /// rather than struct-literalled: `InputState` keeps some fields private.
@@ -154,14 +165,7 @@ mod tests {
     /// An action no key sends is an action the env can't be play-tested on.
     #[test]
     fn every_env_action_has_a_key() {
-        let envs: Vec<Box<dyn Environment>> = vec![
-            Box::new(FindReturn::new(&FindReturnConfig::default(), 512)),
-            Box::new(Scouts::new(&ScoutsConfig::default(), 512)),
-            Box::new(Snake::new(&SnakeConfig::default(), 512)),
-            Box::new(Pacman::new(&PacmanConfig::default(), 512)),
-        ];
-
-        for env in envs {
+        for env in all_envs() {
             for symbol in env.action_vocab().symbols() {
                 assert!(
                     ACTION_KEYS.iter().any(|(name, _, _)| name == symbol),
@@ -179,22 +183,44 @@ mod tests {
         assert_eq!(action_label("teleport"), "teleport");
     }
 
-    /// Deliberately strict: a key means one thing in the viewer, whatever env
-    /// is loaded, so two rows claiming it is a mistake rather than a fallback.
-    /// [`read`] would silently take the earlier row.
+    /// A command key means the same thing whatever env is loaded, so it must
+    /// not also send an action.
     #[test]
-    fn no_key_is_bound_twice() {
-        let mut bound: Vec<Key> = COMMAND_KEYS.iter().map(|&(key, _)| key).collect();
-        bound.extend(
-            ACTION_KEYS
-                .iter()
-                .flat_map(|(_, _, keys)| keys.iter().copied()),
-        );
-
+    fn command_keys_are_unique_and_never_actions() {
         let mut seen = Vec::new();
-        for key in bound {
+        for &(key, _) in COMMAND_KEYS {
             assert!(!seen.contains(&key), "{} is bound twice", key.name());
             seen.push(key);
+        }
+
+        for (symbol, _, keys) in ACTION_KEYS {
+            for key in *keys {
+                assert!(
+                    !seen.contains(key),
+                    "{} is both a command and {symbol}",
+                    key.name()
+                );
+            }
+        }
+    }
+
+    /// Action keys may be shared between envs that never have both actions
+    /// (E is dig in one, take in another), but within an env a key must send
+    /// one action: [`read`] would silently take the earlier row.
+    #[test]
+    fn no_key_sends_two_actions_in_one_env() {
+        for env in all_envs() {
+            let mut seen = Vec::new();
+            for (_, label, keys) in action_bindings(env.action_vocab()) {
+                for &key in keys {
+                    assert!(
+                        !seen.contains(&key),
+                        "{} sends two actions, one of them {label}",
+                        key.name()
+                    );
+                    seen.push(key);
+                }
+            }
         }
     }
 
