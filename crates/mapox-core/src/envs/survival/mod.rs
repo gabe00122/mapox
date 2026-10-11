@@ -6,6 +6,7 @@ mod fire;
 mod items;
 mod lightning;
 mod needs;
+mod plants;
 mod prototypes;
 mod refine;
 mod survivor;
@@ -203,6 +204,8 @@ impl Environment for Survival {
         // swap items for testing
         self.state
             .spawn_prototype(Prototype::Fire, Position::new(18, 20));
+        self.state
+            .spawn_prototype(Prototype::BerryBush, Position::new(17, 20));
 
         let items = [
             ItemType::Wood,

@@ -8,6 +8,7 @@ use crate::envs::{
         items::{Inventory, ItemType},
         lightning::LightEmitter,
         needs::{Health, Hunger},
+        plants::{ItemProducer, ReactiveAfter},
         refine::RefineType,
         survivor::DirectionObs,
         world::{Agent, Slot},
@@ -17,6 +18,7 @@ use crate::envs::{
 pub(super) enum Prototype {
     Survivor { agent_index: usize },
     Fire,
+    BerryBush,
     Item(ItemType),
 }
 
@@ -57,6 +59,20 @@ impl SurvivalState {
                     max_fuel: 50,
                     burn_rate: 1,
                 },
+            )),
+            Prototype::BerryBush => self.spawn((
+                position,
+                Slot::Lower,
+                SurvivalObs::Digit0,
+                Active::default(),
+                ActiveObs {
+                    enabled: SurvivalObs::Digit0,
+                    disabled: SurvivalObs::Digit1,
+                },
+                ItemProducer {
+                    item: ItemType::Berry,
+                },
+                ReactiveAfter::new(10),
             )),
             Prototype::Item(item_type) => {
                 self.spawn((position, Slot::Lower, item_type.obs(), item_type))
