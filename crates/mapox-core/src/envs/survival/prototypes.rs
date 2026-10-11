@@ -4,7 +4,7 @@ use crate::envs::{
     common::{Direction, Position},
     survival::{
         SurvivalObs, SurvivalState,
-        fire::Fueled,
+        fire::{Active, ActiveObs, Fueled},
         items::{Inventory, ItemType},
         lightning::LightEmitter,
         needs::{Health, Hunger},
@@ -47,7 +47,15 @@ impl SurvivalState {
                 SurvivalObs::TileFire,
                 LightEmitter { radius: 7 },
                 RefineType::Cook,
-                Fueled { fuel: 50 },
+                Active::default(),
+                ActiveObs {
+                    enabled: SurvivalObs::TileFire,
+                    disabled: SurvivalObs::TileFireOut,
+                },
+                Fueled {
+                    fuel: 50,
+                    burn_rate: 1,
+                },
             )),
             Prototype::Item(item_type) => {
                 self.spawn((position, Slot::Lower, item_type.obs(), item_type))

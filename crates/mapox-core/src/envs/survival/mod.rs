@@ -236,7 +236,10 @@ impl Environment for Survival {
         self.state.tick_fueled();
         self.state.tick_death();
 
+        //update obs
         self.state.tick_direction_tiles();
+        self.state.tick_active_obs();
+        //
 
         self.tick_time();
         self.prepare_render();

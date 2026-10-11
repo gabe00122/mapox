@@ -3,7 +3,7 @@ use crate::envs::{
         Position,
         fov::{self, ViewTile},
     },
-    survival::Survival,
+    survival::{Survival, fire::Active},
 };
 
 pub(super) struct LightEmitter {
@@ -21,7 +21,12 @@ impl Survival {
         lighting.fill(!is_dusk);
 
         if is_dusk {
-            for (&position, light) in world.query_mut::<(&Position, &LightEmitter)>() {
+            for (&position, light, active) in
+                world.query_mut::<(&Position, &LightEmitter, Option<&Active>)>()
+            {
+                if !Active::is_on(active) {
+                    continue;
+                }
                 let in_reach = |cell: Position| fov::within(cell - position, light.radius);
                 fov::shadowcast(
                     position,

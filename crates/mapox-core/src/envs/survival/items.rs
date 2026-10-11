@@ -3,7 +3,8 @@ use hecs::Entity;
 use crate::envs::{
     common::{Direction, Position},
     survival::{
-        Slot, SurvivalObs, SurvivalState, needs::Hunger, prototypes::Prototype, refine::RefineType,
+        Slot, SurvivalObs, SurvivalState, fire::Active, needs::Hunger, prototypes::Prototype,
+        refine::RefineType,
     },
 };
 
@@ -69,6 +70,7 @@ impl SurvivalState {
         let target_pos = position + direction.to_pos();
         let Some(output) =
             self.spatial_index[target_pos.idx()][0] // lower slot
+                .filter(|&target| Active::is_on(self.world.get::<&Active>(target).ok().as_deref()))
                 .and_then(|target| self.world.get::<&RefineType>(target).ok())
                 .and_then(|refine_type| refine_type.refine(hand))
         else {

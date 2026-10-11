@@ -147,6 +147,9 @@ FLAME_DEEP = hex_color("e85d04")
 FLAME = hex_color("ff9f1c")
 FLAME_CORE = hex_color("ffd166")
 EMBER = hex_color("c2410c")
+ASH = hex_color("4b4f58")
+ASH_LIGHT = hex_color("6b707b")
+CHAR = hex_color("2b2420")
 
 MEAT = hex_color("c8763c")
 MEAT_DARK = hex_color("8c4a20")
@@ -914,6 +917,26 @@ FIRE = check(
     "fire",
 )
 
+# The same fire once its fuel is gone: a heap of ash on charred logs, a last
+# ember or two still glowing.
+FIRE_OUT = check(
+    [
+        "............",
+        "............",
+        "............",
+        "............",
+        "............",
+        "............",
+        "......a.....",
+        "....aAAa....",
+        "...aAeAAa...",
+        ".CCcAAAeAcCC",
+        "..cCCccCCc..",
+        "............",
+    ],
+    "fire out",
+)
+
 STICK = check(
     [
         "............",
@@ -1119,6 +1142,11 @@ def build_sheet() -> list[list[Sprite]]:
             {"s": STRAW_LIGHT, "S": STRAW, "O": OUTLINE, "k": LEATHER},
         ),
         stamp(floor(), STONE_AXE, {**STONE_PALETTE, "w": WOOD, "l": WOOD_LIGHT}),
+        stamp(
+            floor(),
+            FIRE_OUT,
+            {"a": ASH_LIGHT, "A": ASH, "e": EMBER, "C": CHAR, "c": WOOD_DARK},
+        ),
     ]
 
     return [

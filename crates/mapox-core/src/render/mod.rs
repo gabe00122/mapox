@@ -83,6 +83,7 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::ITEM_WOOD, 7, 7),
     (symbols::ITEM_CUT_GRASS, 8, 7),
     (symbols::ITEM_STONE_AXE, 9, 7),
+    (symbols::TILE_FIRE_OUT, 10, 7),
 ];
 
 pub(crate) fn resolve_art(vocab: &Vocabulary) -> Vec<(u32, u32)> {
