@@ -21,7 +21,7 @@ impl Default for SurvivalConfig {
             height: 40,
             view_width: 15,
             view_height: 15,
-            night_vision_radius: 2,
+            night_vision_radius: 1,
         }
     }
 }

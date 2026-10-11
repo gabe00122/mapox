@@ -9,6 +9,7 @@ mod needs;
 mod prototypes;
 mod refine;
 mod survivor;
+mod time;
 mod world;
 
 use hecs::{Entity, World};
@@ -44,7 +45,10 @@ struct SurvivalState {
     tiles: Array2<SurvivalObs>,        // terrain layer
     spatial_index: Array2<EntityCell>, // fast special entity lookup index
     lighting: Array2<bool>,            // true for a lit tile and false for a dark tile
-    render_map: Array2<SurvivalObs>,   // the render target for the agent views
+    render_map: Array2<SurvivalObs>,   // the render target for the agent views,
+
+    // day night cycle
+    dusk: Option<i32>, // when dusk is in play this represents the agent vision radius
 }
 
 pub struct Survival {
@@ -103,6 +107,8 @@ impl Survival {
                 render_map: Array2::from_elem(map_dim, SurvivalObs::TileEmpty),
                 rngs: SmallRng::seed_from_u64(0),
                 time: 0,
+
+                dusk: None,
             },
             length,
 
@@ -227,12 +233,12 @@ impl Environment for Survival {
         self.state.tick_survivors(actions, timestep);
         self.state.tick_starvation();
         self.state.tick_hunger();
-        self.state.tick_fire();
+        self.state.tick_fueled();
         self.state.tick_death();
 
         self.state.tick_direction_tiles();
 
-        self.state.time += 1;
+        self.tick_time();
         self.prepare_render();
         self.encode_observations(timestep);
         self.encode_action_mask(timestep);

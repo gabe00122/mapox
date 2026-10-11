@@ -136,7 +136,9 @@ impl Survival {
                 &self.state.render_map,
                 &self.state.lighting,
                 position,
-                self.config.night_vision_radius,
+                self.config
+                    .night_vision_radius
+                    .max(self.state.dusk.unwrap_or(0)),
                 &mut view,
             );
 
