@@ -19,6 +19,7 @@ pub(super) enum Prototype {
     Survivor { agent_index: usize },
     Fire,
     BerryBush,
+    TallGrass,
     Tree,
     Item(ItemType),
 }
@@ -77,6 +78,20 @@ impl SurvivalState {
                 Chopable {
                     item: Some(ItemType::Stick),
                 },
+            )),
+            Prototype::TallGrass => self.spawn((
+                position,
+                Slot::Lower,
+                SurvivalObs::TileTallGrass,
+                Active::default(),
+                ActiveObs {
+                    enabled: SurvivalObs::TileTallGrass,
+                    disabled: SurvivalObs::TileCutGrass,
+                },
+                ItemProducer {
+                    item: ItemType::CutGrass,
+                },
+                ReactiveAfter::new(100),
             )),
             Prototype::Tree => self.spawn((
                 position,

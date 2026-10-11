@@ -10,6 +10,7 @@ mod plants;
 mod prototypes;
 mod refine;
 mod survivor;
+mod terrain;
 mod time;
 mod world;
 
@@ -174,16 +175,6 @@ impl Environment for Survival {
             self.state.spatial_index = Array2::from_elem(dim, [None; 2]);
         }
 
-        // an empty room: wall padding around bare floor
-        self.state.tiles.fill(SurvivalObs::TileWall);
-        self.state
-            .tiles
-            .slice_mut(s![
-                self.pad_width as usize..(self.width - self.pad_width) as usize,
-                self.pad_height as usize..(self.height - self.pad_height) as usize,
-            ])
-            .fill(SurvivalObs::TileEmpty);
-
         for i in 0..self.num_agents() {
             // reset this so the seed is the source of truth for agent order
             self.state.agent_order[i] = i;
@@ -193,37 +184,16 @@ impl Environment for Survival {
         self.state.world.clear();
         self.state.agents.clear();
 
-        for i in 0..self.num_agents() {
-            let id = self.state.spawn_prototype(
-                Prototype::Survivor { agent_index: i },
-                Position::new(10, 20 + i as i32),
-            );
+        // wall padding around the generated interior
+        self.state.tiles.fill(SurvivalObs::TileWall);
+        self.generate_map();
+
+        for (i, position) in self.spawn_positions().into_iter().enumerate() {
+            let id = self
+                .state
+                .spawn_prototype(Prototype::Survivor { agent_index: i }, position);
             self.state.agents.push(id);
         }
-
-        // swap items for testing
-        self.state
-            .spawn_prototype(Prototype::Fire, Position::new(18, 20));
-        self.state
-            .spawn_prototype(Prototype::BerryBush, Position::new(17, 20));
-        self.state
-            .spawn_prototype(Prototype::Tree, Position::new(16, 20));
-
-        let items = [
-            ItemType::Wood,
-            ItemType::Rock,
-            ItemType::CutGrass,
-            ItemType::Stick,
-            ItemType::StoneAxe,
-            ItemType::Berry,
-            ItemType::CookedBerry,
-        ];
-
-        for (i, item) in items.into_iter().enumerate() {
-            self.state
-                .spawn_prototype(Prototype::Item(item), Position::new(20, 20 + i as i32));
-        }
-        //
 
         timestep.reward.fill(0.0);
         timestep.last_action.fill(0);

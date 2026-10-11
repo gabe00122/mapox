@@ -1007,6 +1007,45 @@ LOG = check(
     "log",
 )
 
+# Taller and denser than the lush grass tile, with seed heads, so it reads as
+# a plant to harvest rather than ground.
+TALL_GRASS = check(
+    [
+        ".s.......s..",
+        ".S...s...S..",
+        ".L.s.S.L.L.s",
+        "LG.S.L.G.G.S",
+        "GG.L.G.GLG.L",
+        "Gg.GLG.gGg.G",
+        "gGLgGg.GgGLg",
+        "gGGgGgLgGgGg",
+        "ggGggGGgggGg",
+        "gggggggggggg",
+        ".g.g.gg.g.g.",
+        "............",
+    ],
+    "tall grass",
+)
+
+# Tall grass cut down to stubble, the cut ends pale.
+CUT_GRASS = check(
+    [
+        "............",
+        "............",
+        "............",
+        "............",
+        "............",
+        "............",
+        ".s.s..s.s.s.",
+        ".G.L.sG.L.G.",
+        "gGLgGg.GgGLg",
+        "ggGggGGgggGg",
+        ".g.g.gg.g.g.",
+        "............",
+    ],
+    "cut grass",
+)
+
 GRASS_BUNDLE = check(
     [
         "............",
@@ -1162,6 +1201,8 @@ def berries(cooked: bool) -> Sprite:
     return stamp(floor(), BERRIES, palette)
 
 
+GRASS_PALETTE = {"g": LEAF_DARK, "G": LEAF, "L": GRASS_LIGHT}
+
 STONE_PALETTE = {"O": OUTLINE, "L": STONE_LIGHT, "s": STONE, "S": STONE_DARK}
 
 
@@ -1300,6 +1341,8 @@ def build_sheet() -> list[list[Sprite]]:
                 "s": STONE,
             },
         ),
+        stamp(floor(), TALL_GRASS, {**GRASS_PALETTE, "s": STRAW_LIGHT, "S": STRAW}),
+        stamp(floor(), CUT_GRASS, {**GRASS_PALETTE, "s": STRAW_LIGHT}),
     ]
 
     return [

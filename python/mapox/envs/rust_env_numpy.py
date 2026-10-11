@@ -139,7 +139,7 @@ class RustPacmanConfig(BaseModel):
 
 
 class RustSurvivalConfig(BaseModel):
-    """An empty walled room: no goal and no reward yet."""
+    """A generated survival map: no goal and no reward yet."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
     env_type: Literal["rust_survival"] = "rust_survival"
@@ -153,6 +153,13 @@ class RustSurvivalConfig(BaseModel):
     # how far an agent sees around itself in the dark; past it, only lit
     # ground shows
     night_vision_radius: int = 1
+    # share of the map that is water (lowest ground) and rock (highest)
+    water_fraction: float = 0.10
+    rock_fraction: float = 0.15
+    # share of the land between that is forest (wettest) and scrub (driest);
+    # the rest is meadow
+    forest_fraction: float = 0.25
+    scrub_fraction: float = 0.25
 
 
 class RustVecConfig(BaseModel):

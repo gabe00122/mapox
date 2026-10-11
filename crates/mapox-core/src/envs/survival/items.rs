@@ -311,6 +311,43 @@ mod tests {
     }
 
     #[test]
+    fn taking_tall_grass_gives_cut_grass_and_leaves_it_cut() {
+        let config = SurvivalConfig::default();
+        let mut env = Survival::new(&config, 512);
+        let mut buffers = TimeStepBuffers::new(&env);
+        env.reset(0, &mut buffers.view_mut());
+
+        let state = &mut env.state;
+        let agent = state.agents[0];
+        let (&position, direction) = state
+            .world
+            .query_one_mut::<(&Position, &Direction)>(agent)
+            .unwrap();
+        let target_pos = position + direction.to_pos();
+        for target in state.spatial_index[target_pos.idx()].into_iter().flatten() {
+            state.despawn(target);
+        }
+        *state.world.query_one_mut::<&mut Inventory>(agent).unwrap() = Inventory::default();
+
+        let grass = state.spawn_prototype(Prototype::TallGrass, target_pos);
+        state.item_take(agent);
+        assert!(state.world.contains(grass), "the grass stays");
+        assert_eq!(
+            state.world.query_one_mut::<&Inventory>(agent).unwrap().hand,
+            Some(ItemType::CutGrass)
+        );
+
+        env.state.tick_active_obs();
+        assert_eq!(
+            *env.state
+                .world
+                .query_one_mut::<&SurvivalObs>(grass)
+                .unwrap(),
+            SurvivalObs::TileCutGrass
+        );
+    }
+
+    #[test]
     fn taking_from_a_berry_bush_deactivates_it_until_it_regrows() {
         let config = SurvivalConfig::default();
         let mut env = Survival::new(&config, 512);

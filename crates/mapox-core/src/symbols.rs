@@ -39,6 +39,10 @@ pub const TILE_TREE: &str = "tile/tree";
 /// A bush with ripe berries on it. [`TILE_BUSH`] is the same bush picked bare.
 pub const TILE_BERRY_BUSH: &str = "tile/berry_bush";
 pub const TILE_BUSH: &str = "tile/bush";
+/// Tall grass: walked through, and taken from for an [`ITEM_CUT_GRASS`],
+/// which leaves it [`TILE_CUT_GRASS`] until it grows back.
+pub const TILE_TALL_GRASS: &str = "tile/tall_grass";
+pub const TILE_CUT_GRASS: &str = "tile/cut_grass";
 pub const TILE_FIRE: &str = "tile/fire";
 /// A [`TILE_FIRE`] that has burnt through its fuel.
 pub const TILE_FIRE_OUT: &str = "tile/fire_out";

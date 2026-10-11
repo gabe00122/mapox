@@ -11,6 +11,15 @@ pub struct SurvivalConfig {
     /// How far an agent sees around itself in the dark. Past it, only lit
     /// ground shows.
     pub night_vision_radius: i32,
+
+    /// Share of the map that is water (the lowest ground) and rock (the
+    /// highest).
+    pub water_fraction: f64,
+    pub rock_fraction: f64,
+    /// Share of the land between that is forest (the wettest) and scrub (the
+    /// driest); the rest is meadow.
+    pub forest_fraction: f64,
+    pub scrub_fraction: f64,
 }
 
 impl Default for SurvivalConfig {
@@ -22,6 +31,10 @@ impl Default for SurvivalConfig {
             view_width: 15,
             view_height: 15,
             night_vision_radius: 1,
+            water_fraction: 0.10,
+            rock_fraction: 0.15,
+            forest_fraction: 0.25,
+            scrub_fraction: 0.25,
         }
     }
 }
