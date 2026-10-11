@@ -221,6 +221,7 @@ impl Environment for Survival {
 
         self.tick_time();
         self.prepare_render();
+        self.state.calculae_survival_reward();
         self.encode_observations(timestep);
         self.encode_action_mask(timestep);
     }

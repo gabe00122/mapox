@@ -9,6 +9,7 @@ use crate::envs::{
         plants::{Chopable, ItemProducer},
         prototypes::Prototype,
         refine::RefineType,
+        world::Agent,
     },
 };
 
@@ -123,6 +124,10 @@ impl SurvivalState {
             ItemType::CampfireKit => {
                 if self.is_blocked(target_pos, Slot::Lower) {
                     return;
+                }
+                //temporary reward
+                if let Ok(agent) = self.world.query_one_mut::<&mut Agent>(id) {
+                    agent.reward += 0.1;
                 }
 
                 if let Ok(inventory) = self.world.query_one_mut::<&mut Inventory>(id) {

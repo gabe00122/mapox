@@ -3,7 +3,11 @@ use rand::seq::SliceRandom;
 use crate::{
     envs::{
         common::{Direction, Position, vocab_enum::VocabEnum},
-        survival::{Slot, SurvivalAction, SurvivalObs, SurvivalState},
+        survival::{
+            Slot, SurvivalAction, SurvivalObs, SurvivalState,
+            needs::{Health, Hunger},
+            world::Agent,
+        },
     },
     timestep::TimeStepMut,
     vocab::VocabId,
@@ -58,6 +62,15 @@ impl SurvivalState {
                 SurvivalAction::ItemRefine => self.item_refine(agent_id),
                 SurvivalAction::Noop => {}
             }
+        }
+    }
+
+    pub(super) fn calculae_survival_reward(&mut self) {
+        for (agent, hunger, health) in self.world.query_mut::<(&mut Agent, &Hunger, &Health)>() {
+            let hunger_percentage = f32::from(hunger.amount) / f32::from(hunger.max);
+            let health_percentage = f32::from(health.amount) / f32::from(health.max);
+
+            agent.reward += 0.01 * (health_percentage + hunger_percentage.max(0.5))
         }
     }
 }
