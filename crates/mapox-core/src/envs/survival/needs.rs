@@ -14,6 +14,10 @@ impl Health {
     pub fn add(&mut self, rhs: u8) {
         self.amount = self.amount.saturating_add(rhs).min(self.max);
     }
+
+    pub fn sub(&mut self, rhs: u8) {
+        self.amount = self.amount.saturating_sub(rhs);
+    }
 }
 
 impl Default for Health {

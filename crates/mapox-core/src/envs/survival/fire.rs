@@ -1,4 +1,7 @@
-use crate::envs::survival::{SurvivalObs, SurvivalState};
+use crate::envs::{
+    common::Position,
+    survival::{SurvivalObs, SurvivalState, needs::Health},
+};
 
 // fire could be replaced by a Fuel and Active component which could be reused for things like a furness and lights
 // Active could be reused to make plants regenerate in the future too
@@ -31,6 +34,10 @@ pub(super) struct Fueled {
     pub burn_rate: i32,
 }
 
+pub(super) struct DamageToAbove {
+    pub amount: u8,
+}
+
 impl SurvivalState {
     pub(super) fn tick_fueled(&mut self) {
         for (active, fire) in self.world.query_mut::<(&mut Active, &mut Fueled)>() {
@@ -53,6 +60,21 @@ impl SurvivalState {
                 active_obs.enabled
             } else {
                 active_obs.disabled
+            }
+        }
+    }
+
+    pub(super) fn tick_damage_to_above(&mut self) {
+        for (active, damage_to_above, position) in self
+            .world
+            .query::<(&Active, &DamageToAbove, &Position)>()
+            .iter()
+        {
+            if active.is_active
+                && let Some(mut target_health) = self.spatial_index[position.idx()][1]
+                    .and_then(|target_id| self.world.get::<&mut Health>(target_id).ok())
+            {
+                target_health.sub(damage_to_above.amount);
             }
         }
     }

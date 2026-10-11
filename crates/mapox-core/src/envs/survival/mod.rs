@@ -208,6 +208,8 @@ impl Environment for Survival {
         self.state.tick_survivors(actions, timestep);
         self.state.tick_starvation();
         self.state.tick_hunger();
+
+        self.state.tick_damage_to_above();
         self.state.tick_fueled();
         self.tick_reactivate_after();
         self.state.tick_death();

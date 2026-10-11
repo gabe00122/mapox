@@ -54,8 +54,8 @@ impl ItemType {
 
     fn fuel_value(&self) -> Option<u8> {
         match self {
-            ItemType::Stick | ItemType::CutGrass => Some(10),
-            ItemType::Wood => Some(50),
+            ItemType::Stick | ItemType::CutGrass => Some(50),
+            ItemType::Wood => Some(200),
             _ => None,
         }
     }

@@ -4,7 +4,7 @@ use crate::envs::{
     common::{Direction, Position},
     survival::{
         SurvivalObs, SurvivalState,
-        fire::{Active, ActiveObs, Fueled},
+        fire::{Active, ActiveObs, DamageToAbove, Fueled},
         items::{Inventory, ItemType},
         lightning::LightEmitter,
         needs::{Health, Hunger},
@@ -57,10 +57,11 @@ impl SurvivalState {
                     disabled: SurvivalObs::TileFireOut,
                 },
                 Fueled {
-                    fuel: 50,
-                    max_fuel: 50,
-                    burn_rate: 1,
+                    fuel: 200,
+                    max_fuel: 500,
+                    burn_rate: 2,
                 },
+                DamageToAbove { amount: 25 },
             )),
             Prototype::BerryBush => self.spawn((
                 position,
@@ -74,7 +75,7 @@ impl SurvivalState {
                 ItemProducer {
                     item: ItemType::Berry,
                 },
-                ReactiveAfter::new(10),
+                ReactiveAfter::new(200),
                 Chopable {
                     item: Some(ItemType::Stick),
                 },
@@ -91,7 +92,7 @@ impl SurvivalState {
                 ItemProducer {
                     item: ItemType::CutGrass,
                 },
-                ReactiveAfter::new(100),
+                ReactiveAfter::new(200),
             )),
             Prototype::Tree => self.spawn((
                 position,
