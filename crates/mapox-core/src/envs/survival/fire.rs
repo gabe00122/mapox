@@ -67,14 +67,14 @@ impl SurvivalState {
     pub(super) fn tick_damage_to_above(&mut self) {
         for (active, damage_to_above, position) in self
             .world
-            .query::<(&Active, &DamageToAbove, &Position)>()
+            .query::<(Option<&Active>, &DamageToAbove, &Position)>()
             .iter()
         {
-            if active.is_active
+            if Active::is_on(active)
                 && let Some(mut target_health) = self.spatial_index[position.idx()][1]
                     .and_then(|target_id| self.world.get::<&mut Health>(target_id).ok())
             {
-                target_health.update(damage_to_above.amount);
+                target_health.update(-damage_to_above.amount);
             }
         }
     }

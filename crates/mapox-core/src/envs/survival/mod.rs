@@ -153,13 +153,29 @@ impl Survival {
         self.prepare_lights();
     }
 
-    fn encode_action_mask(&self, timestep: &mut TimeStepMut) {
-        for agent_id in 0..self.num_agents() {
+    /// Masks out the item actions that would do nothing. Moves always turn
+    /// the agent, so they and the noop stay legal and every row has one.
+    fn encode_action_mask(&mut self, timestep: &mut TimeStepMut) {
+        let state = &mut self.state;
+        for agent_id in 0..state.agents.len() {
+            let id = state.agents[agent_id];
             let mut mask = timestep.action_mask.row_mut(agent_id);
 
             mask.fill(false);
             for &action in SurvivalAction::TABLE {
-                mask[action as usize] = true;
+                mask[action as usize] = match action {
+                    SurvivalAction::MoveUp
+                    | SurvivalAction::MoveRight
+                    | SurvivalAction::MoveDown
+                    | SurvivalAction::MoveLeft
+                    | SurvivalAction::Noop => true,
+                    SurvivalAction::ItemTake => state.plan_take(id).is_some(),
+                    SurvivalAction::ItemPut => state.plan_put(id).is_some(),
+                    SurvivalAction::ItemSwap => state.can_swap(id),
+                    SurvivalAction::ItemCombine => state.plan_craft(id).is_some(),
+                    SurvivalAction::ItemUse => state.plan_use(id).is_some(),
+                    SurvivalAction::ItemRefine => state.plan_refine(id).is_some(),
+                };
             }
         }
     }
@@ -227,9 +243,10 @@ impl Environment for Survival {
         self.prepare_render();
         self.state.calculae_survival_reward();
         self.encode_observations(timestep);
-        self.encode_action_mask(timestep);
         self.state.tick_death();
         self.state.tick_respawn();
+        // the next action goes to the respawned entity, so mask against it
+        self.encode_action_mask(timestep);
     }
 
     fn consume_metrics(&mut self) -> serde_json::Value {

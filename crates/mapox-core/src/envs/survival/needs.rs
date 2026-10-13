@@ -14,7 +14,7 @@ pub(super) struct Health {
 impl Health {
     pub fn update(&mut self, value: i32) {
         let before = self.amount;
-        self.amount = (self.amount - value).clamp(0, self.max);
+        self.amount = (self.amount + value).clamp(0, self.max);
         self.changed += self.amount - before;
     }
 }
@@ -48,7 +48,7 @@ impl Default for Hunger {
 impl Hunger {
     pub fn update(&mut self, value: i32) {
         let before = self.amount;
-        self.amount = (self.amount - value).clamp(0, self.max);
+        self.amount = (self.amount + value).clamp(0, self.max);
         self.changed += self.amount - before;
     }
 }

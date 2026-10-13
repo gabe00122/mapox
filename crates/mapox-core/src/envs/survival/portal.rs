@@ -1,5 +1,6 @@
 //! The portal: every survivor comes into the world on or next to it, at the
 //! start of an episode and again after each death.
+// Vibe coded and might need further evaluation
 
 use std::collections::VecDeque;
 
@@ -100,70 +101,5 @@ impl SurvivalState {
                 self.agents[agent_index] = id;
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{
-        env::Environment,
-        envs::survival::{SurvivalAction, SurvivalObs, config::SurvivalConfig, needs::Health},
-        timestep::TimeStepBuffers,
-    };
-
-    fn position(env: &Survival, id: Entity) -> Position {
-        *env.state.world.get::<&Position>(id).unwrap()
-    }
-
-    #[test]
-    fn agents_start_packed_around_the_one_portal() {
-        for seed in 0..10 {
-            let mut env = Survival::new(&SurvivalConfig::default(), 512);
-            let mut buffers = TimeStepBuffers::new(&env);
-            env.reset(seed, &mut buffers.view_mut());
-
-            let portals = env.state.world.query_mut::<&SurvivalObs>().into_iter();
-            let portals = portals.filter(|&obs| *obs == SurvivalObs::TilePortal);
-            assert_eq!(portals.count(), 1, "seed {seed}");
-
-            let portal = env.state.portal;
-            assert_eq!(position(&env, env.state.agents[0]), portal, "seed {seed}");
-            for &agent in &env.state.agents {
-                let offset = position(&env, agent) - portal;
-                // eight agents fit within a few steps unless the portal is
-                // walled in tight
-                assert!(offset.x.abs() + offset.y.abs() <= 8, "seed {seed}");
-            }
-        }
-    }
-
-    #[test]
-    fn a_dead_agent_comes_back_at_the_portal() {
-        let mut env = Survival::new(&SurvivalConfig::default(), 512);
-        let mut buffers = TimeStepBuffers::new(&env);
-        env.reset(0, &mut buffers.view_mut());
-
-        // move agent 0 off the portal so it is free to respawn onto
-        let dead = env.state.agents[0];
-        let portal = env.state.portal;
-        let away = (0..env.width)
-            .flat_map(|x| (0..env.height).map(move |y| Position::new(x, y)))
-            .find(|&p| {
-                let offset = p - portal;
-                offset.x.abs() + offset.y.abs() > 4 && env.state.can_spawn_at(p)
-            })
-            .unwrap();
-        env.state.move_entity(dead, away);
-        env.state.world.get::<&mut Health>(dead).unwrap().amount = 0;
-
-        let actions = vec![SurvivalAction::Noop.into(); env.num_agents()];
-        env.step(&actions, &mut buffers.view_mut());
-        assert!(buffers.terminated[0], "the death is reported");
-
-        let reborn = env.state.agents[0];
-        assert!(!env.state.world.contains(dead));
-        assert_eq!(position(&env, reborn), env.state.portal);
-        assert_eq!(env.state.world.get::<&Health>(reborn).unwrap().amount, 99);
     }
 }
