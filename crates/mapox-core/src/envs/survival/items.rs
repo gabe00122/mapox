@@ -48,7 +48,7 @@ impl ItemType {
         }
     }
 
-    fn hunger_restore(&self) -> Option<u8> {
+    fn hunger_restore(&self) -> Option<i32> {
         match self {
             ItemType::Berry => Some(10),
             ItemType::CookedBerry => Some(40),
@@ -56,7 +56,7 @@ impl ItemType {
         }
     }
 
-    fn fuel_value(&self) -> Option<u8> {
+    fn fuel_value(&self) -> Option<i32> {
         match self {
             ItemType::Stick | ItemType::CutGrass => Some(50),
             ItemType::Wood => Some(200),
@@ -115,7 +115,7 @@ impl SurvivalState {
                 .world
                 .query_one_mut::<(&mut Inventory, &mut Hunger)>(id)
             {
-                hunger.add(i32::from(hunger_restore));
+                hunger.update(i32::from(hunger_restore));
                 inventory.hand = None;
             }
             return;

@@ -206,6 +206,9 @@ impl Environment for Survival {
     }
 
     fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
+        self.state.reset_health_changed();
+        self.state.reset_hunger_changed();
+
         self.state.tick_survivors(actions, timestep);
         self.state.tick_starvation();
         self.state.tick_hunger();

@@ -71,10 +71,8 @@ impl SurvivalState {
                 agent.reward -= 1.0;
             }
 
-            let hunger_percentage = hunger.amount as f32 / hunger.max as f32;
-            let health_percentage = health.amount as f32 / health.max as f32;
-
-            agent.reward += 0.025 * (health_percentage + hunger_percentage.min(0.5));
+            agent.reward += 2.5 * (hunger.changed as f32 / hunger.max as f32);
+            agent.reward += 5.0 * (health.changed as f32 / health.max as f32);
         }
     }
 }

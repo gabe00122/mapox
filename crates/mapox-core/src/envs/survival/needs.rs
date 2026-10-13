@@ -7,16 +7,15 @@ const TICK_HUNGER_EVERY: usize = 2;
 #[derive(Debug, Clone, Copy)]
 pub(super) struct Health {
     pub amount: i32,
+    pub changed: i32,
     pub max: i32,
 }
 
 impl Health {
-    pub fn add(&mut self, rhs: i32) {
-        self.amount = self.amount.saturating_add(rhs).clamp(0, self.max);
-    }
-
-    pub fn sub(&mut self, rhs: i32) {
-        self.amount = self.amount.saturating_sub(rhs).max(0);
+    pub fn update(&mut self, value: i32) {
+        let before = self.amount;
+        self.amount = (self.amount - value).clamp(0, self.max);
+        self.changed += self.amount - before;
     }
 }
 
@@ -25,12 +24,14 @@ impl Default for Health {
         Self {
             amount: 99,
             max: 99,
+            changed: 0,
         }
     }
 }
 
 pub(super) struct Hunger {
     pub amount: i32,
+    pub changed: i32,
     pub max: i32,
 }
 
@@ -39,21 +40,36 @@ impl Default for Hunger {
         Self {
             amount: 99,
             max: 99,
+            changed: 0,
         }
     }
 }
 
 impl Hunger {
-    pub fn add(&mut self, rhs: i32) {
-        self.amount = self.amount.saturating_add(rhs).clamp(0, self.max);
+    pub fn update(&mut self, value: i32) {
+        let before = self.amount;
+        self.amount = (self.amount - value).clamp(0, self.max);
+        self.changed += self.amount - before;
     }
 }
 
 impl SurvivalState {
+    pub(super) fn reset_hunger_changed(&mut self) {
+        for hunger in self.world.query_mut::<&mut Hunger>() {
+            hunger.changed = 0;
+        }
+    }
+
+    pub(super) fn reset_health_changed(&mut self) {
+        for health in self.world.query_mut::<&mut Health>() {
+            health.changed = 0;
+        }
+    }
+
     pub(super) fn tick_hunger(&mut self) {
         if self.time % TICK_HUNGER_EVERY == TICK_HUNGER_EVERY - 1 {
             for hunger in self.world.query_mut::<&mut Hunger>() {
-                hunger.amount = (hunger.amount - 1).max(0);
+                hunger.update(-1);
             }
         }
     }
@@ -61,7 +77,7 @@ impl SurvivalState {
     pub(super) fn tick_starvation(&mut self) {
         for (hunger, health) in self.world.query_mut::<(&Hunger, &mut Health)>() {
             if hunger.amount == 0 {
-                health.amount = (health.amount - 1).max(0);
+                health.update(-1);
             }
         }
     }
