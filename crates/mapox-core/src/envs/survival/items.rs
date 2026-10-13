@@ -115,7 +115,7 @@ impl SurvivalState {
                 .world
                 .query_one_mut::<(&mut Inventory, &mut Hunger)>(id)
             {
-                hunger.add(hunger_restore);
+                hunger.add(i32::from(hunger_restore));
                 inventory.hand = None;
             }
             return;

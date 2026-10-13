@@ -1,4 +1,5 @@
 //! Map generation: biomes from noise, joined up into one walkable region.
+// This was vibe coded and might need a rework
 
 use ndarray::s;
 

@@ -74,7 +74,7 @@ impl SurvivalState {
                 && let Some(mut target_health) = self.spatial_index[position.idx()][1]
                     .and_then(|target_id| self.world.get::<&mut Health>(target_id).ok())
             {
-                target_health.sub(damage_to_above.amount);
+                target_health.sub(i32::from(damage_to_above.amount));
             }
         }
     }

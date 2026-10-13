@@ -28,6 +28,11 @@ const MAX_CATCH_UP_STEPS: usize = 4;
 /// Width of the episode / agent / mode panel, in points.
 const SIDE_PANEL_WIDTH: f32 = 220.0;
 
+/// Width of the strip the side panel collapses to, just room for the button
+/// that opens it again inside a [`COLLAPSED_PANEL_MARGIN`] either side.
+const COLLAPSED_PANEL_WIDTH: f32 = 32.0;
+const COLLAPSED_PANEL_MARGIN: i8 = 4;
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ViewMode {
     /// The map from the render state, every agent visible.
@@ -88,6 +93,9 @@ pub struct RenderApp {
     task_names: Vec<String>,
     /// The task being played, `Some` exactly when `task_names` is non-empty.
     task: Option<usize>,
+    /// Whether the side panel is open; collapsed, it leaves its width to the
+    /// map.
+    show_side_panel: bool,
     /// Whether the controls reference is open over the map. The next key
     /// press or click closes it and does nothing else.
     show_controls: bool,
@@ -161,6 +169,7 @@ impl RenderApp {
             focused_agent: 0,
             task_names,
             task,
+            show_side_panel: true,
             show_controls: false,
             target_fps: 10.0,
             next_step_time: None,
@@ -296,6 +305,7 @@ impl RenderApp {
                     self.select_task((task + 1) % self.task_names.len());
                 }
             }
+            Command::ToggleSidePanel => self.show_side_panel = !self.show_side_panel,
             Command::Reset => self.reset(),
             Command::ShowControls => self.show_controls = true,
             Command::Quit => ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close),
@@ -377,7 +387,18 @@ impl RenderApp {
     /// map runs out of height first and would leave this space black.
     fn side_panel_ui(&mut self, ui: &mut egui::Ui) {
         ui.add_space(8.0);
-        section_heading(ui, "episode");
+        ui.horizontal(|ui| {
+            section_heading(ui, "episode");
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui
+                    .small_button("▶")
+                    .on_hover_text(format!("hide ({})", command_hint(Command::ToggleSidePanel)))
+                    .clicked()
+                {
+                    self.run_command(Command::ToggleSidePanel, ui);
+                }
+            });
+        });
         egui::Grid::new("episode").num_columns(2).show(ui, |ui| {
             ui.label("step");
             ui.label(format!("{} / {}", self.step_count, self.length));
@@ -724,12 +745,42 @@ impl eframe::App for RenderApp {
 
         self.run_clock(ui);
 
-        egui::Panel::right("side")
-            .resizable(false)
-            .exact_size(SIDE_PANEL_WIDTH)
-            .show(ui, |ui| {
-                egui::ScrollArea::vertical().show(ui, |ui| self.side_panel_ui(ui));
-            });
+        // neither panel is resizable, so egui never flips this copy; the
+        // buttons toggle the panel through `run_command` like the key does
+        let mut expanded = self.show_side_panel;
+        egui::Panel::show_switched(
+            ui,
+            &mut expanded,
+            egui::Panel::right("side collapsed")
+                .resizable(false)
+                .exact_size(COLLAPSED_PANEL_WIDTH)
+                .frame(
+                    egui::Frame::side_top_panel(ui.style())
+                        .inner_margin(egui::Margin::symmetric(COLLAPSED_PANEL_MARGIN, 2)),
+                ),
+            egui::Panel::right("side")
+                .resizable(false)
+                .exact_size(SIDE_PANEL_WIDTH),
+            |ui, expanded| {
+                if expanded {
+                    egui::ScrollArea::vertical().show(ui, |ui| self.side_panel_ui(ui));
+                } else {
+                    ui.add_space(8.0);
+                    ui.vertical_centered(|ui| {
+                        if ui
+                            .small_button("◀")
+                            .on_hover_text(format!(
+                                "show panel ({})",
+                                command_hint(Command::ToggleSidePanel)
+                            ))
+                            .clicked()
+                        {
+                            self.run_command(Command::ToggleSidePanel, ui);
+                        }
+                    });
+                }
+            },
+        );
 
         // after the side panel: its task picker can swap in a different map
         // size, and the settings and the render state must agree when drawn

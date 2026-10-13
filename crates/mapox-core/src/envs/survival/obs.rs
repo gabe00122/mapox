@@ -168,7 +168,7 @@ impl Survival {
                 stats[col] = label.into();
                 write_number(
                     stats.slice_mut(s![col + 1..col + 1 + STAT_DIGITS]),
-                    u32::from(value),
+                    value.max(0).cast_unsigned(),
                     &DIGIT_TILES,
                 );
             }
