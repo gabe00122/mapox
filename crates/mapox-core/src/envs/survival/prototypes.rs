@@ -4,6 +4,7 @@ use crate::envs::{
     common::{Direction, Position},
     survival::{
         SurvivalObs, SurvivalState,
+        achievements::Achievements,
         fire::{Active, ActiveObs, DamageToAbove, Fueled},
         items::{Inventory, ItemType},
         lightning::LightEmitter,
@@ -45,6 +46,7 @@ impl SurvivalState {
                 Health::default(),
                 Hunger::default(),
                 Inventory::default(),
+                Achievements::default(),
             )),
             Prototype::Fire => self.spawn((
                 position,
@@ -76,7 +78,7 @@ impl SurvivalState {
                 ItemProducer {
                     item: ItemType::Berry,
                 },
-                ReactiveAfter::new(400),
+                ReactiveAfter::new(200),
                 Chopable {
                     item: Some(ItemType::Stick),
                 },

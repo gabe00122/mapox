@@ -2,6 +2,7 @@ pub mod action;
 pub mod config;
 pub mod obs;
 
+mod achievements;
 mod fire;
 mod items;
 mod lightning;
@@ -18,12 +19,14 @@ mod world;
 use hecs::{Entity, World};
 use ndarray::{Array2, s};
 use rand::{SeedableRng, rngs::SmallRng};
+use strum::{EnumCount, IntoEnumIterator};
 
 use crate::{
     env::Environment,
     envs::{
         common::{Position, UI_HEIGHT, vocab_enum::VocabEnum},
         survival::{
+            achievements::Achievements,
             action::SurvivalAction,
             config::SurvivalConfig,
             items::ItemType,
@@ -60,6 +63,8 @@ struct SurvivalMetrics {
     reward: f64,
     turns: f64,
     lives: f64,
+    // lives that held each item, by item index
+    achievements: [f64; ItemType::COUNT],
 }
 
 pub struct Survival {
@@ -166,12 +171,15 @@ impl Survival {
     /// Adds this step to the totals and counts the lives that end here, by
     /// death or by the episode running out.
     fn record_lives(&mut self, timestep: &TimeStepMut) {
-        for agent in self.state.world.query_mut::<&Agent>() {
+        for (agent, achievements) in self.state.world.query_mut::<(&Agent, &Achievements)>() {
             let i = agent.agent_index;
             self.metrics.reward += f64::from(timestep.reward[i]);
             self.metrics.turns += 1.0;
             if timestep.terminated[i] {
                 self.metrics.lives += 1.0;
+                for item in ItemType::iter().filter(|&item| achievements.has(item)) {
+                    self.metrics.achievements[item as usize] += 1.0;
+                }
             }
         }
     }
@@ -247,6 +255,7 @@ impl Environment for Survival {
     fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
         self.state.reset_health_changed();
         self.state.reset_hunger_changed();
+        self.state.reset_achievements_changed();
 
         self.state.tick_survivors(actions, timestep);
         self.state.tick_starvation();
@@ -264,7 +273,10 @@ impl Environment for Survival {
 
         self.tick_time(); // day night cycle
         self.prepare_render();
-        self.state.calculae_survival_reward();
+        self.state
+            .calculae_survival_reward(self.config.survival_reward);
+        self.state
+            .calculate_achievement_reward(self.config.achievement_reward);
         self.encode_observations(timestep);
         self.record_lives(timestep);
         self.state.tick_death();
@@ -276,9 +288,16 @@ impl Environment for Survival {
     fn consume_metrics(&mut self) -> serde_json::Value {
         let metrics = std::mem::take(&mut self.metrics);
         let lives = metrics.lives.max(1.0);
+        let achievements: serde_json::Map<_, _> = ItemType::iter()
+            .map(|item| {
+                let rate = metrics.achievements[item as usize] / lives;
+                (<&str>::from(item).to_owned(), rate.into())
+            })
+            .collect();
         serde_json::json!({
             "reward": metrics.reward / lives,
             "turns_survived": metrics.turns / lives,
+            "achievements": achievements,
         })
     }
 

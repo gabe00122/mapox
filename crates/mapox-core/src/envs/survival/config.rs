@@ -20,6 +20,13 @@ pub struct SurvivalConfig {
     /// driest); the rest is meadow.
     pub forest_fraction: f64,
     pub scrub_fraction: f64,
+
+    /// Scales the reward for staying fed and healthy and the penalty for
+    /// dying; 0 turns it off.
+    pub survival_reward: f32,
+    /// Paid the first time each item enters a survivor's inventory in a
+    /// life; 0 turns it off. The metrics count achievements either way.
+    pub achievement_reward: f32,
 }
 
 impl Default for SurvivalConfig {
@@ -35,6 +42,8 @@ impl Default for SurvivalConfig {
             rock_fraction: 0.15,
             forest_fraction: 0.25,
             scrub_fraction: 0.25,
+            survival_reward: 1.0,
+            achievement_reward: 1.0,
         }
     }
 }

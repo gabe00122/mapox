@@ -1,4 +1,5 @@
 use hecs::Entity;
+use strum::{EnumCount, EnumIter, IntoStaticStr};
 
 use crate::envs::{
     common::{Direction, Position},
@@ -13,14 +14,16 @@ use crate::envs::{
     },
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+// the snake_case names are the metric keys
+#[derive(Debug, Clone, Copy, PartialEq, Eq, EnumCount, EnumIter, IntoStaticStr)]
+#[strum(serialize_all = "snake_case")]
 pub(super) enum ItemType {
     Rock,
     Stick,
     Wood,
     CutGrass,
     StoneAxe,
-    StonePixaxe,
+    StonePickaxe,
     CampfireKit,
     Berry,
     CookedBerry,
@@ -30,7 +33,7 @@ pub(super) enum ItemType {
 const RECIPES: &[(ItemType, ItemType, ItemType)] = &[
     (ItemType::Rock, ItemType::Stick, ItemType::StoneAxe),
     (ItemType::Wood, ItemType::CutGrass, ItemType::CampfireKit),
-    (ItemType::StoneAxe, ItemType::Rock, ItemType::StonePixaxe),
+    (ItemType::StoneAxe, ItemType::Rock, ItemType::StonePickaxe),
 ];
 
 impl ItemType {
@@ -135,6 +138,7 @@ impl SurvivalState {
         if let Ok(inventory) = self.world.query_one_mut::<&mut Inventory>(id) {
             inventory.hand = Some(output);
         }
+        self.unlock_achievement(id, output);
     }
 
     pub(super) fn plan_use(&mut self, id: Entity) -> Option<UsePlan> {
@@ -221,6 +225,7 @@ impl SurvivalState {
             inventory.hand = Some(product);
             inventory.back = None;
         }
+        self.unlock_achievement(id, product);
     }
 
     /// Swapping two empty slots is the only swap that does nothing.
@@ -322,6 +327,7 @@ impl SurvivalState {
             }
             inventory.hand = Some(item);
         }
+        self.unlock_achievement(id, item);
     }
 }
 

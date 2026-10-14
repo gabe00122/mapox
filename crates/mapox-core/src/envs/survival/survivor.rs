@@ -65,14 +65,15 @@ impl SurvivalState {
         }
     }
 
-    pub(super) fn calculae_survival_reward(&mut self) {
+    /// Pays for staying fed and healthy and charges for dying, all times `scale`.
+    pub(super) fn calculae_survival_reward(&mut self, scale: f32) {
         for (agent, hunger, health) in self.world.query_mut::<(&mut Agent, &Hunger, &Health)>() {
+            let mut reward = 2.5 * (hunger.changed as f32 / hunger.max as f32)
+                + 5.0 * (health.changed as f32 / health.max as f32);
             if health.amount == 0 {
-                agent.reward -= 1.0;
+                reward -= 1.0;
             }
-
-            agent.reward += 2.5 * (hunger.changed as f32 / hunger.max as f32);
-            agent.reward += 5.0 * (health.changed as f32 / health.max as f32);
+            agent.reward += scale * reward;
         }
     }
 }

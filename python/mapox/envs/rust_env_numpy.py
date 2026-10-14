@@ -139,7 +139,7 @@ class RustPacmanConfig(BaseModel):
 
 
 class RustSurvivalConfig(BaseModel):
-    """A generated survival map: no goal and no reward yet."""
+    """A generated survival map, rewarding survival and new items."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
     env_type: Literal["rust_survival"] = "rust_survival"
@@ -160,6 +160,13 @@ class RustSurvivalConfig(BaseModel):
     # the rest is meadow
     forest_fraction: float = 0.25
     scrub_fraction: float = 0.25
+
+    # scales the reward for staying fed and healthy and the penalty for
+    # dying; 0 turns it off
+    survival_reward: float = 1.0
+    # paid the first time each item enters a survivor's inventory in a life;
+    # 0 turns it off, and the metrics count achievements either way
+    achievement_reward: float = 1.0
 
 
 class RustVecConfig(BaseModel):
