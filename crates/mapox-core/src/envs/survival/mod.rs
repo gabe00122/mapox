@@ -159,7 +159,7 @@ impl Survival {
             }
         }
 
-        // render lights, this should be a seperate function
+        // render lights, this should be a separate function
         self.prepare_lights();
     }
 

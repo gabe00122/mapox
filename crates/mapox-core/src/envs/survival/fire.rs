@@ -3,7 +3,7 @@ use crate::envs::{
     survival::{SurvivalObs, SurvivalState, needs::Health},
 };
 
-// fire could be replaced by a Fuel and Active component which could be reused for things like a furness and lights
+// fire could be replaced by a Fuel and Active component which could be reused for things like a furnace and lights
 // Active could be reused to make plants regenerate in the future too
 
 pub(super) struct ActiveObs {

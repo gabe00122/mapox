@@ -66,7 +66,7 @@ impl ItemType {
 }
 
 // Inventory could be extended to act like a stack with n slots
-// instead of swap it would be n swap actions for swaping 0 with the nth position
+// instead of swap it would be n swap actions for swapping 0 with the nth position
 #[derive(Debug, Default, Clone, Copy)]
 pub(super) struct Inventory {
     pub hand: Option<ItemType>,
