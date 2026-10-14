@@ -28,7 +28,7 @@ use crate::{
             config::SurvivalConfig,
             items::ItemType,
             obs::{SurvivalObs, UI_WIDTH},
-            world::{EntityCell, Slot},
+            world::{Agent, EntityCell, Slot},
         },
     },
     render::env::{GridRenderSettings, GridRenderState},
@@ -54,9 +54,18 @@ struct SurvivalState {
     dusk: Option<i32>, // when dusk is in play this represents the agent vision radius
 }
 
+#[derive(Debug, Clone, Default)]
+struct SurvivalMetrics {
+    // summed over the episode, where every life ends by the last step
+    reward: f64,
+    turns: f64,
+    lives: f64,
+}
+
 pub struct Survival {
     pub config: SurvivalConfig,
     state: SurvivalState,
+    metrics: SurvivalMetrics,
 
     // max steps for a single episode
     length: usize,
@@ -114,6 +123,7 @@ impl Survival {
 
                 dusk: None,
             },
+            metrics: SurvivalMetrics::default(),
             length,
 
             pad_width,
@@ -151,6 +161,19 @@ impl Survival {
 
         // render lights, this should be a seperate function
         self.prepare_lights();
+    }
+
+    /// Adds this step to the totals and counts the lives that end here, by
+    /// death or by the episode running out.
+    fn record_lives(&mut self, timestep: &TimeStepMut) {
+        for agent in self.state.world.query_mut::<&Agent>() {
+            let i = agent.agent_index;
+            self.metrics.reward += f64::from(timestep.reward[i]);
+            self.metrics.turns += 1.0;
+            if timestep.terminated[i] {
+                self.metrics.lives += 1.0;
+            }
+        }
     }
 
     /// Masks out the item actions that would do nothing. Moves always turn
@@ -243,6 +266,7 @@ impl Environment for Survival {
         self.prepare_render();
         self.state.calculae_survival_reward();
         self.encode_observations(timestep);
+        self.record_lives(timestep);
         self.state.tick_death();
         self.state.tick_respawn();
         // the next action goes to the respawned entity, so mask against it
@@ -250,7 +274,12 @@ impl Environment for Survival {
     }
 
     fn consume_metrics(&mut self) -> serde_json::Value {
-        serde_json::json!({})
+        let metrics = std::mem::take(&mut self.metrics);
+        let lives = metrics.lives.max(1.0);
+        serde_json::json!({
+            "reward": metrics.reward / lives,
+            "turns_survived": metrics.turns / lives,
+        })
     }
 
     fn observation_spec(&self) -> ObservationSpec {

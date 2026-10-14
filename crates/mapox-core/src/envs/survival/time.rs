@@ -2,7 +2,7 @@ use crate::envs::survival::Survival;
 
 const DAY_TIME: usize = 100;
 const DUSK_TIME: usize = 50;
-const NIGHT_TIME: usize = 20;
+const NIGHT_TIME: usize = 50;
 const DUSK_END: usize = DAY_TIME + DUSK_TIME;
 const CYCLE_TIME: usize = DUSK_END + NIGHT_TIME;
 

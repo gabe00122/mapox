@@ -273,13 +273,17 @@ struct PacmanState {
     time: usize,
 }
 
+/// Summed over the episode, where every life (a round) ends by the last
+/// step: in a catch, a clear, or the episode running out.
 #[derive(Debug, Clone, Default)]
 struct PacmanMetrics {
     reward: f64,
     pellets_eaten: f64,
     ghosts_eaten: f64,
+    turns: f64,
     deaths: f64,
     clears: f64,
+    lives: f64,
 }
 
 /// Pac-Man on the classic maze, ported from the PufferLib C env: the same
@@ -786,22 +790,27 @@ impl Environment for Pacman {
         self.repaint();
 
         self.state.time += 1;
-        self.metrics.reward += f64::from(reward);
         timestep.reward.fill(reward);
         timestep.last_action.fill(action);
 
         self.encode_observations(timestep);
         timestep.terminated[0] |= caught || cleared;
+
+        self.metrics.reward += f64::from(reward);
+        self.metrics.turns += 1.0;
+        self.metrics.lives += f64::from(u8::from(timestep.terminated[0]));
     }
 
     fn consume_metrics(&mut self) -> serde_json::Value {
         let metrics = std::mem::take(&mut self.metrics);
+        let lives = metrics.lives.max(1.0);
         serde_json::json!({
-            "reward": metrics.reward,
-            "pellets_eaten": metrics.pellets_eaten,
-            "ghosts_eaten": metrics.ghosts_eaten,
-            "deaths": metrics.deaths,
-            "clears": metrics.clears,
+            "reward": metrics.reward / lives,
+            "pellets_eaten": metrics.pellets_eaten / lives,
+            "ghosts_eaten": metrics.ghosts_eaten / lives,
+            "turns_survived": metrics.turns / lives,
+            "deaths": metrics.deaths / lives,
+            "clears": metrics.clears / lives,
         })
     }
 
@@ -1190,7 +1199,17 @@ mod tests {
         assert_eq!(pellets_left(&env), PICKUPS);
         assert_eq!(env.state.ghosts[BLINKY].pos, env.state.ghosts[BLINKY].spawn);
         assert_eq!(view(&buffers)[cell(&env, 0, 0)], id(PacmanRight));
-        assert_eq!(env.metrics.deaths, 1.0);
+        assert_eq!(
+            env.consume_metrics(),
+            serde_json::json!({
+                "reward": -2.0,
+                "pellets_eaten": 1.0,
+                "ghosts_eaten": 0.0,
+                "turns_survived": 1.0,
+                "deaths": 1.0,
+                "clears": 0.0,
+            })
+        );
 
         // the round goes on from there
         step(&mut env, &mut buffers, RIGHT);
@@ -1249,6 +1268,7 @@ mod tests {
                 "reward": 11.0,
                 "pellets_eaten": 1.0,
                 "ghosts_eaten": 0.0,
+                "turns_survived": 1.0,
                 "deaths": 0.0,
                 "clears": 1.0,
             })
