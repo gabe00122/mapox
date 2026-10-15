@@ -41,6 +41,8 @@ pub const TILE_APPLE_TREE: &str = "tile/apple_tree";
 /// A bush with ripe berries on it. [`TILE_BUSH`] is the same bush picked bare.
 pub const TILE_BERRY_BUSH: &str = "tile/berry_bush";
 pub const TILE_BUSH: &str = "tile/bush";
+/// Brambles: walked through, but they hurt whoever stands in them.
+pub const TILE_THORN_BUSH: &str = "tile/thorn_bush";
 /// Tall grass: walked through, and taken from for an [`ITEM_CUT_GRASS`],
 /// which leaves it [`TILE_CUT_GRASS`] until it grows back.
 pub const TILE_TALL_GRASS: &str = "tile/tall_grass";
@@ -67,6 +69,8 @@ pub const ITEM_WOOD: &str = "item/wood";
 /// A bundle of cut grass.
 pub const ITEM_CUT_GRASS: &str = "item/cut_grass";
 pub const ITEM_STONE_AXE: &str = "item/stone_axe";
+/// Digs out a [`TILE_DESTRUCTIBLE_WALL`].
+pub const ITEM_STONE_PICKAXE: &str = "item/stone_pickaxe";
 /// An unlit campfire, carried; using it sets down a [`TILE_FIRE`].
 pub const ITEM_CAMPFIRE_KIT: &str = "item/campfire_kit";
 pub const ITEM_BERRY: &str = "item/berry";

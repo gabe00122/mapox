@@ -144,6 +144,9 @@ LEAF_LIGHT = hex_color("6fd26a")
 LEAF_DARK = hex_color("25602e")
 LEAF_EDGE = hex_color("14301a")
 
+THORN_CANE = hex_color("6b3a2e")
+THORN = hex_color("e8d9b0")
+
 BERRY = hex_color("d6336c")
 BERRY_DARK = hex_color("8a1c44")
 BERRY_LIGHT = hex_color("ff9ec0")
@@ -1089,6 +1092,26 @@ STONE_AXE = check(
     "stone axe",
 )
 
+# Upright where the axe leans, so the two tools read apart: an arched stone
+# head whose tips curl down, on a straight haft.
+STONE_PICKAXE = check(
+    [
+        "............",
+        "...OOOOOO...",
+        "..OLLsssSO..",
+        ".OLsOwlOSSO.",
+        ".OsO.wl.OSO.",
+        "..O..wl..O..",
+        ".....wl.....",
+        ".....wl.....",
+        ".....wl.....",
+        ".....wl.....",
+        ".....wl.....",
+        "............",
+    ],
+    "stone pickaxe",
+)
+
 TREE = check(
     [
         "....OOOO....",
@@ -1124,6 +1147,26 @@ APPLE_TREE = check(
         "....OOOO....",
     ],
     "apple tree",
+)
+
+# A spiky tangle of bare canes and pale thorns, ragged where the berry bush
+# is round, so the one that hurts reads apart from the one that feeds.
+THORN_BUSH = check(
+    [
+        "............",
+        "..t.....t...",
+        "...b..t.b...",
+        ".t.bb.b.bb.t",
+        "..bGb.bGb.b.",
+        ".bGgbbGgbGb.",
+        "t.bGgGbgGbbt",
+        ".bbgGbGgbGb.",
+        "..bGbgbbGbb.",
+        ".tbbGbbGbbt.",
+        "..bbbbbbbb..",
+        "............",
+    ],
+    "thorn bush",
 )
 
 # A ripe bush carries berries on R and h; picked bare, those are leaf.
@@ -1410,6 +1453,12 @@ def build_sheet() -> list[list[Sprite]]:
                 "w": APPLE_PALETTE["w"],
             },
         ),
+        stamp(
+            floor(),
+            THORN_BUSH,
+            {"b": THORN_CANE, "t": THORN, "G": LEAF_DARK, "g": LEAF_EDGE},
+        ),
+        stamp(floor(), STONE_PICKAXE, {**STONE_PALETTE, "w": WOOD, "l": WOOD_LIGHT}),
     ]
 
     return [

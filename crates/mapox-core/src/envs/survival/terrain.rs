@@ -28,7 +28,8 @@ enum Biome {
 impl Biome {
     /// What the biome's ground grows, one roll per cell: dense trees with
     /// sticks under them in forest, berry bushes and tall grass in meadow,
-    /// rocks in scrub, and apple trees scattered through forest and meadow.
+    /// rocks and thorn bushes in scrub, and apple trees scattered through
+    /// forest and meadow.
     /// Each also has its own decor, so bare ground shows which biome it is.
     fn growth(self) -> &'static [(SurvivalObs, f64)] {
         use SurvivalObs::*;
@@ -48,10 +49,12 @@ impl Biome {
                 (TileAppleTree, 0.004),
                 (ItemStick, 0.004),
                 (ItemRock, 0.002),
+                (TileThornBush, 0.004),
                 (TileDecor1, 0.12),
             ],
             Biome::Scrub => &[
                 (ItemRock, 0.025),
+                (TileThornBush, 0.02),
                 (TileTallGrass, 0.03),
                 (TileTree, 0.006),
                 (ItemStick, 0.004),
@@ -69,6 +72,7 @@ fn prototype(tile: SurvivalObs) -> Option<Prototype> {
         TileTree => Prototype::Tree,
         TileAppleTree => Prototype::AppleTree,
         TileBerryBush => Prototype::BerryBush,
+        TileThornBush => Prototype::ThornBush,
         TileTallGrass => Prototype::TallGrass,
         ItemStick => Prototype::Item(ItemType::Stick),
         ItemRock => Prototype::Item(ItemType::Rock),
@@ -208,6 +212,7 @@ mod tests {
             SurvivalObs::TileTree,
             SurvivalObs::TileAppleTree,
             SurvivalObs::TileBerryBush,
+            SurvivalObs::TileThornBush,
             SurvivalObs::TileTallGrass,
             SurvivalObs::ItemStick,
             SurvivalObs::ItemRock,

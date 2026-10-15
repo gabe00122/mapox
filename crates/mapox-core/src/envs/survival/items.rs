@@ -1,4 +1,5 @@
 use hecs::Entity;
+use rand::RngExt;
 use strum::{EnumCount, EnumIter, IntoStaticStr};
 
 use crate::envs::{
@@ -30,6 +31,9 @@ pub(super) enum ItemType {
     Apple,
 }
 
+/// The chance digging out a wall leaves a rock behind.
+const DIG_ROCK_CHANCE: f64 = 0.1;
+
 // requirement, requirement, product
 const RECIPES: &[(ItemType, ItemType, ItemType)] = &[
     (ItemType::Rock, ItemType::Stick, ItemType::StoneAxe),
@@ -45,11 +49,11 @@ impl ItemType {
             ItemType::Wood => SurvivalObs::ItemWood,
             ItemType::CutGrass => SurvivalObs::ItemCutGrass,
             ItemType::StoneAxe => SurvivalObs::ItemStoneAxe,
+            ItemType::StonePickaxe => SurvivalObs::ItemStonePickaxe,
             ItemType::CampfireKit => SurvivalObs::ItemCampfireKit,
             ItemType::Berry => SurvivalObs::ItemBerry,
             ItemType::CookedBerry => SurvivalObs::ItemCookedBerry,
             ItemType::Apple => SurvivalObs::ItemApple,
-            _ => SurvivalObs::Digit0,
         }
     }
 
@@ -93,6 +97,7 @@ pub(super) enum UsePlan {
         at: Position,
         drop: Option<ItemType>,
     },
+    Dig(Position),
 }
 
 pub(super) enum PutPlan {
@@ -157,6 +162,9 @@ impl SurvivalState {
                     drop: chopable.item,
                 })
             }
+            ItemType::StonePickaxe => (self.tiles[target_pos.idx()]
+                == SurvivalObs::TileDestructibleWall)
+                .then_some(UsePlan::Dig(target_pos)),
             _ => None,
         }
     }
@@ -256,6 +264,13 @@ impl Survival {
                 self.state.despawn(target);
                 if let Some(drop) = drop {
                     self.state.spawn_prototype(Prototype::Item(drop), at);
+                }
+            }
+            UsePlan::Dig(at) => {
+                self.state.tiles[at.idx()] = SurvivalObs::TileEmpty;
+                if self.state.rngs.random_bool(DIG_ROCK_CHANCE) {
+                    self.state
+                        .spawn_prototype(Prototype::Item(ItemType::Rock), at);
                 }
             }
         }
@@ -390,6 +405,34 @@ mod tests {
     }
 
     #[test]
+    fn chopping_a_thorn_bush_leaves_a_stick() {
+        assert_eq!(chop(Prototype::ThornBush), Some(ItemType::Stick));
+    }
+
+    #[test]
+    fn a_thorn_bush_can_be_walked_into_and_hurts_while_stood_in() {
+        use crate::envs::survival::needs::Health;
+        let (mut env, _, agent, target_pos) = facing_bare_tile();
+        env.state.spawn_prototype(Prototype::ThornBush, target_pos);
+        let health = |env: &mut Survival| {
+            env.state
+                .world
+                .query_one_mut::<&Health>(agent)
+                .unwrap()
+                .amount
+        };
+        let before = health(&mut env);
+
+        env.tick_damage_to_above();
+        assert_eq!(health(&mut env), before, "only the agent in it is hurt");
+
+        assert!(!env.state.is_blocked(target_pos, Slot::Upper));
+        env.state.move_entity(agent, target_pos);
+        env.tick_damage_to_above();
+        assert_eq!(health(&mut env), before - 5);
+    }
+
+    #[test]
     fn taking_tall_grass_gives_cut_grass_and_leaves_it_cut() {
         let config = SurvivalConfig::default();
         let mut env = Survival::new(&config, 512);
@@ -505,6 +548,56 @@ mod tests {
         assert_eq!(legal_items(&mut env, &mut buffers), [ItemSwap, ItemUse]);
 
         assert_eq!(chop(Prototype::AppleTree), Some(ItemType::Wood));
+    }
+
+    #[test]
+    fn a_pickaxe_digs_out_a_wall_sometimes_leaving_a_rock() {
+        use SurvivalAction::*;
+        let (mut env, mut buffers, agent, target_pos) = facing_bare_tile();
+        hold(&mut env, agent, Some(ItemType::StonePickaxe), None);
+        assert_eq!(
+            legal_items(&mut env, &mut buffers),
+            [ItemPut, ItemSwap],
+            "nothing to dig"
+        );
+
+        let mut rocks = 0;
+        for _ in 0..100 {
+            env.state.tiles[target_pos.idx()] = SurvivalObs::TileDestructibleWall;
+            assert_eq!(legal_items(&mut env, &mut buffers), [ItemSwap, ItemUse]);
+
+            env.item_use(agent);
+            assert_eq!(env.state.tiles[target_pos.idx()], SurvivalObs::TileEmpty);
+            assert_eq!(
+                env.state
+                    .world
+                    .query_one_mut::<&Inventory>(agent)
+                    .unwrap()
+                    .hand,
+                Some(ItemType::StonePickaxe),
+                "the pickaxe is kept"
+            );
+            if let Some(rock) = env.state.spatial_index[target_pos.idx()][0] {
+                assert_eq!(
+                    *env.state.world.query_one_mut::<&ItemType>(rock).unwrap(),
+                    ItemType::Rock
+                );
+                env.state.despawn(rock);
+                rocks += 1;
+            }
+        }
+        assert!((20..80).contains(&rocks), "{rocks} rocks from 100 digs");
+    }
+
+    #[test]
+    fn a_pickaxe_cannot_dig_the_border_wall() {
+        let (mut env, mut buffers, agent, target_pos) = facing_bare_tile();
+        hold(&mut env, agent, Some(ItemType::StonePickaxe), None);
+        env.state.tiles[target_pos.idx()] = SurvivalObs::TileWall;
+        assert_eq!(
+            legal_items(&mut env, &mut buffers),
+            [SurvivalAction::ItemSwap]
+        );
     }
 
     /// A fresh env whose first agent is empty-handed and faces a bare tile.
