@@ -56,12 +56,12 @@ impl Survival {
                         }
                     }
                 }
-                SurvivalAction::ItemTake => self.state.item_take(agent_id),
-                SurvivalAction::ItemSwap => self.state.item_swap(agent_id),
-                SurvivalAction::ItemPut => self.state.item_put(agent_id),
-                SurvivalAction::ItemCombine => self.state.item_craft(agent_id),
-                SurvivalAction::ItemUse => self.state.item_use(agent_id),
-                SurvivalAction::ItemRefine => self.state.item_refine(agent_id),
+                SurvivalAction::ItemTake => self.item_take(agent_id),
+                SurvivalAction::ItemSwap => self.item_swap(agent_id),
+                SurvivalAction::ItemPut => self.item_put(agent_id),
+                SurvivalAction::ItemCombine => self.item_craft(agent_id),
+                SurvivalAction::ItemUse => self.item_use(agent_id),
+                SurvivalAction::ItemRefine => self.item_refine(agent_id),
                 SurvivalAction::Noop => {}
             }
         }

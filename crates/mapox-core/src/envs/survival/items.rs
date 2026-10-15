@@ -4,7 +4,7 @@ use strum::{EnumCount, EnumIter, IntoStaticStr};
 use crate::envs::{
     common::{Direction, Position},
     survival::{
-        Slot, SurvivalObs, SurvivalState,
+        Slot, Survival, SurvivalObs, SurvivalState,
         fire::{Active, Fueled},
         needs::Hunger,
         plants::{Chopable, ItemProducer},
@@ -130,17 +130,6 @@ impl SurvivalState {
         refine_type.refine(hand)
     }
 
-    pub(super) fn item_refine(&mut self, id: Entity) {
-        let Some(output) = self.plan_refine(id) else {
-            return;
-        };
-
-        if let Ok(inventory) = self.world.query_one_mut::<&mut Inventory>(id) {
-            inventory.hand = Some(output);
-        }
-        self.unlock_achievement(id, output);
-    }
-
     pub(super) fn plan_use(&mut self, id: Entity) -> Option<UsePlan> {
         let (target_pos, inventory) = self.item_context(id)?;
         let item = inventory.hand?;
@@ -169,41 +158,6 @@ impl SurvivalState {
         }
     }
 
-    pub(crate) fn item_use(&mut self, id: Entity) {
-        let Some(plan) = self.plan_use(id) else {
-            return;
-        };
-
-        match plan {
-            UsePlan::Eat(hunger_restore) => {
-                if let Ok((inventory, hunger)) = self
-                    .world
-                    .query_one_mut::<(&mut Inventory, &mut Hunger)>(id)
-                {
-                    hunger.update(hunger_restore);
-                    inventory.hand = None;
-                }
-            }
-            UsePlan::PlaceCampfire(at) => {
-                //temporary reward
-                if let Ok(agent) = self.world.query_one_mut::<&mut Agent>(id) {
-                    agent.reward += 0.1;
-                }
-
-                if let Ok(inventory) = self.world.query_one_mut::<&mut Inventory>(id) {
-                    inventory.hand = None;
-                }
-                self.spawn_prototype(Prototype::Fire, at);
-            }
-            UsePlan::Chop { target, at, drop } => {
-                self.despawn(target);
-                if let Some(drop) = drop {
-                    self.spawn_prototype(Prototype::Item(drop), at);
-                }
-            }
-        }
-    }
-
     pub(super) fn plan_craft(&mut self, id: Entity) -> Option<ItemType> {
         let &inventory = self.world.query_one_mut::<&Inventory>(id).ok()?;
         let (Some(hand), Some(back)) = (inventory.hand, inventory.back) else {
@@ -216,29 +170,11 @@ impl SurvivalState {
             .map(|&(_, _, product)| product)
     }
 
-    pub(crate) fn item_craft(&mut self, id: Entity) {
-        let Some(product) = self.plan_craft(id) else {
-            return;
-        };
-
-        if let Ok(inventory) = self.world.query_one_mut::<&mut Inventory>(id) {
-            inventory.hand = Some(product);
-            inventory.back = None;
-        }
-        self.unlock_achievement(id, product);
-    }
-
     /// Swapping two empty slots is the only swap that does nothing.
     pub(super) fn can_swap(&mut self, id: Entity) -> bool {
         self.world
             .query_one_mut::<&Inventory>(id)
             .is_ok_and(|inventory| inventory.hand.is_some() || inventory.back.is_some())
-    }
-
-    pub(super) fn item_swap(&mut self, id: Entity) {
-        if let Ok(inventory) = self.world.query_one_mut::<&mut Inventory>(id) {
-            std::mem::swap(&mut inventory.hand, &mut inventory.back);
-        }
     }
 
     pub(super) fn plan_put(&mut self, id: Entity) -> Option<PutPlan> {
@@ -256,31 +192,6 @@ impl SurvivalState {
             item,
             at: target_pos,
         })
-    }
-
-    pub(super) fn item_put(&mut self, id: Entity) {
-        let Some(plan) = self.plan_put(id) else {
-            return;
-        };
-
-        match plan {
-            PutPlan::Fuel { target, fuel } => {
-                if let Ok((active, fueled)) = self
-                    .world
-                    .query_one_mut::<(&mut Active, &mut Fueled)>(target)
-                {
-                    fueled.fuel = (fueled.fuel + fuel).min(fueled.max_fuel);
-                    active.is_active = true;
-                }
-            }
-            PutPlan::Drop { item, at } => {
-                self.spawn_prototype(Prototype::Item(item), at);
-            }
-        }
-
-        if let Ok(inventory) = self.world.query_one_mut::<&mut Inventory>(id) {
-            inventory.hand = inventory.back.take();
-        }
     }
 
     pub(super) fn plan_take(&mut self, id: Entity) -> Option<TakePlan> {
@@ -302,26 +213,114 @@ impl SurvivalState {
             .is_active
             .then_some(TakePlan::Harvest(target, producer.item))
     }
+}
+
+impl Survival {
+    pub(super) fn item_refine(&mut self, id: Entity) {
+        let Some(output) = self.state.plan_refine(id) else {
+            return;
+        };
+
+        if let Ok(inventory) = self.state.world.query_one_mut::<&mut Inventory>(id) {
+            inventory.hand = Some(output);
+        }
+        self.unlock_achievement(id, output);
+    }
+
+    pub(crate) fn item_use(&mut self, id: Entity) {
+        let Some(plan) = self.state.plan_use(id) else {
+            return;
+        };
+
+        match plan {
+            UsePlan::Eat(hunger_restore) => {
+                if let Ok((inventory, hunger)) = self
+                    .state
+                    .world
+                    .query_one_mut::<(&mut Inventory, &mut Hunger)>(id)
+                {
+                    hunger.update(hunger_restore);
+                    inventory.hand = None;
+                }
+            }
+            UsePlan::PlaceCampfire(at) => {
+                if let Ok(inventory) = self.state.world.query_one_mut::<&mut Inventory>(id) {
+                    inventory.hand = None;
+                }
+                self.state.spawn_prototype(Prototype::Fire, at);
+            }
+            UsePlan::Chop { target, at, drop } => {
+                self.state.despawn(target);
+                if let Some(drop) = drop {
+                    self.state.spawn_prototype(Prototype::Item(drop), at);
+                }
+            }
+        }
+    }
+
+    pub(crate) fn item_craft(&mut self, id: Entity) {
+        let Some(product) = self.state.plan_craft(id) else {
+            return;
+        };
+
+        if let Ok(inventory) = self.state.world.query_one_mut::<&mut Inventory>(id) {
+            inventory.hand = Some(product);
+            inventory.back = None;
+        }
+        self.unlock_achievement(id, product);
+    }
+
+    pub(super) fn item_swap(&mut self, id: Entity) {
+        if let Ok(inventory) = self.state.world.query_one_mut::<&mut Inventory>(id) {
+            std::mem::swap(&mut inventory.hand, &mut inventory.back);
+        }
+    }
+
+    pub(super) fn item_put(&mut self, id: Entity) {
+        let Some(plan) = self.state.plan_put(id) else {
+            return;
+        };
+
+        match plan {
+            PutPlan::Fuel { target, fuel } => {
+                if let Ok((active, fueled)) = self
+                    .state
+                    .world
+                    .query_one_mut::<(&mut Active, &mut Fueled)>(target)
+                {
+                    fueled.fuel = (fueled.fuel + fuel).min(fueled.max_fuel);
+                    active.is_active = true;
+                }
+            }
+            PutPlan::Drop { item, at } => {
+                self.state.spawn_prototype(Prototype::Item(item), at);
+            }
+        }
+
+        if let Ok(inventory) = self.state.world.query_one_mut::<&mut Inventory>(id) {
+            inventory.hand = inventory.back.take();
+        }
+    }
 
     pub(super) fn item_take(&mut self, id: Entity) {
-        let Some(plan) = self.plan_take(id) else {
+        let Some(plan) = self.state.plan_take(id) else {
             return;
         };
 
         let item = match plan {
             TakePlan::Pick(target, item) => {
-                self.despawn(target);
+                self.state.despawn(target);
                 item
             }
             TakePlan::Harvest(target, item) => {
-                if let Ok(active) = self.world.query_one_mut::<&mut Active>(target) {
+                if let Ok(active) = self.state.world.query_one_mut::<&mut Active>(target) {
                     active.is_active = false;
                 }
                 item
             }
         };
 
-        if let Ok(inventory) = self.world.query_one_mut::<&mut Inventory>(id) {
+        if let Ok(inventory) = self.state.world.query_one_mut::<&mut Inventory>(id) {
             if inventory.hand.is_some() {
                 inventory.back = inventory.hand.take();
             }
@@ -363,7 +362,9 @@ mod tests {
             .query_one_mut::<&mut Inventory>(agent)
             .unwrap()
             .hand = Some(ItemType::StoneAxe);
-        state.item_use(agent);
+        env.item_use(agent);
+
+        let state = &mut env.state;
 
         assert!(!state.world.contains(target), "the chopped entity is gone");
         assert_eq!(
@@ -405,7 +406,9 @@ mod tests {
         *state.world.query_one_mut::<&mut Inventory>(agent).unwrap() = Inventory::default();
 
         let grass = state.spawn_prototype(Prototype::TallGrass, target_pos);
-        state.item_take(agent);
+        env.item_take(agent);
+
+        let state = &mut env.state;
         assert!(state.world.contains(grass), "the grass stays");
         assert_eq!(
             state.world.query_one_mut::<&Inventory>(agent).unwrap().hand,
@@ -450,7 +453,7 @@ mod tests {
                 .is_active
         };
 
-        env.state.item_take(agent);
+        env.item_take(agent);
         assert!(env.state.world.contains(bush), "the bush stays");
         assert!(!is_active(&mut env), "the bush is picked");
         assert_eq!(
@@ -462,7 +465,7 @@ mod tests {
             Some(ItemType::Berry)
         );
 
-        env.state.item_take(agent);
+        env.item_take(agent);
         let inventory = env.state.world.query_one_mut::<&Inventory>(agent).unwrap();
         assert_eq!(inventory.back, None, "a picked bush gives nothing");
 
@@ -540,7 +543,7 @@ mod tests {
             [ItemPut, ItemSwap, ItemCombine]
         );
 
-        env.state.item_craft(agent);
+        env.item_craft(agent);
         assert_eq!(
             legal_items(&mut env, &mut buffers),
             [ItemPut, ItemSwap],
@@ -558,7 +561,7 @@ mod tests {
         let bush = env.state.spawn_prototype(Prototype::BerryBush, target_pos);
         assert_eq!(legal_items(&mut env, &mut buffers), [ItemTake]);
 
-        env.state.item_take(agent);
+        env.item_take(agent);
         // a berry is eaten, not put on the occupied tile
         assert_eq!(legal_items(&mut env, &mut buffers), [ItemSwap, ItemUse]);
 

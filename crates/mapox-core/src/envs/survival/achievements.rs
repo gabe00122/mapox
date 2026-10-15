@@ -1,14 +1,13 @@
 use hecs::Entity;
 use strum::EnumCount;
 
-use crate::envs::survival::{Survival, SurvivalState, items::ItemType, world::Agent};
+use crate::envs::survival::{Survival, items::ItemType, world::Agent};
 
 /// The items that have been in a survivor's inventory this life. It lives on
 /// the survivor entity, so a respawn starts it fresh.
 #[derive(Debug, Default, Clone, Copy)]
 pub(super) struct Achievements {
     unlocked: [bool; ItemType::COUNT],
-    pub changed: i32, // items unlocked this step
 }
 
 impl Achievements {
@@ -22,28 +21,17 @@ impl Achievements {
     }
 }
 
-impl SurvivalState {
-    /// Records the first time this life `item` enters the inventory of `id`.
+impl Survival {
+    /// Records the first time this life `item` enters the inventory of `id`,
+    /// paying the achievement reward for it.
     pub(super) fn unlock_achievement(&mut self, id: Entity, item: ItemType) {
-        if let Ok(achievements) = self.world.query_one_mut::<&mut Achievements>(id)
+        if let Ok((agent, achievements)) = self
+            .state
+            .world
+            .query_one_mut::<(&mut Agent, &mut Achievements)>(id)
             && achievements.unlock(item)
         {
-            achievements.changed += 1;
-        }
-    }
-}
-
-impl Survival {
-    pub(super) fn reset_achievements_changed(&mut self) {
-        for achievements in self.state.world.query_mut::<&mut Achievements>() {
-            achievements.changed = 0;
-        }
-    }
-
-    /// Pays `scale` for each item unlocked this step.
-    pub(super) fn calculate_achievement_reward(&mut self, scale: f32) {
-        for (agent, achievements) in self.state.world.query_mut::<(&mut Agent, &Achievements)>() {
-            agent.reward += scale * achievements.changed as f32;
+            agent.reward += self.config.achievement_reward;
         }
     }
 }
@@ -64,8 +52,6 @@ mod tests {
 
     /// The achievement reward `id` has earned since the last call.
     fn take_reward(env: &mut Survival, id: Entity) -> f32 {
-        env.calculate_achievement_reward(1.0);
-        env.reset_achievements_changed();
         let agent = env.state.world.query_one_mut::<&mut Agent>(id).unwrap();
         std::mem::take(&mut agent.reward)
     }
@@ -109,25 +95,25 @@ mod tests {
         for expected in [1.0, 0.0] {
             env.state
                 .spawn_prototype(Prototype::Item(ItemType::Rock), target_pos);
-            env.state.item_take(id);
+            env.item_take(id);
             assert_eq!(take_reward(&mut env, id), expected, "taking a rock");
         }
 
         // crafting, with each product its own achievement
         for expected in [1.0, 0.0] {
             hold(&mut env, id, ItemType::Rock, Some(ItemType::Stick));
-            env.state.item_craft(id);
+            env.item_craft(id);
             assert_eq!(take_reward(&mut env, id), expected, "crafting an axe");
         }
         hold(&mut env, id, ItemType::StoneAxe, Some(ItemType::Rock));
-        env.state.item_craft(id);
+        env.item_craft(id);
         assert_eq!(take_reward(&mut env, id), 1.0, "crafting a pickaxe");
 
         // refining at a fire
         env.state.spawn_prototype(Prototype::Fire, target_pos);
         for expected in [1.0, 0.0] {
             hold(&mut env, id, ItemType::Berry, None);
-            env.state.item_refine(id);
+            env.item_refine(id);
             assert_eq!(take_reward(&mut env, id), expected, "cooking a berry");
         }
 
@@ -136,7 +122,7 @@ mod tests {
         env.tick_respawn();
         let id = env.state.agents[0];
         hold(&mut env, id, ItemType::Rock, Some(ItemType::Stick));
-        env.state.item_craft(id);
+        env.item_craft(id);
         assert_eq!(take_reward(&mut env, id), 1.0, "crafting an axe again");
     }
 
@@ -152,7 +138,7 @@ mod tests {
 
         let id = env.state.agents[0];
         hold(&mut env, id, ItemType::Rock, Some(ItemType::Stick));
-        env.state.item_craft(id);
+        env.item_craft(id);
         // ends this life on the next step
         env.state
             .world

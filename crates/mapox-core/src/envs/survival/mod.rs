@@ -255,7 +255,6 @@ impl Environment for Survival {
     fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
         self.reset_health_changed();
         self.reset_hunger_changed();
-        self.reset_achievements_changed();
 
         self.tick_survivors(actions, timestep);
         self.tick_starvation();
@@ -274,7 +273,6 @@ impl Environment for Survival {
         self.tick_time(); // day night cycle
         self.prepare_render();
         self.calculate_survival_reward(self.config.survival_reward);
-        self.calculate_achievement_reward(self.config.achievement_reward);
         self.encode_observations(timestep);
         self.record_lives(timestep);
         self.tick_death();
