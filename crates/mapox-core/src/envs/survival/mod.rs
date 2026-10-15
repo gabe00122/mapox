@@ -241,46 +241,44 @@ impl Environment for Survival {
         self.state.tiles.fill(SurvivalObs::TileWall);
         self.generate_map();
         self.place_portal();
-        self.state.tick_respawn();
+        self.tick_respawn();
 
         timestep.reward.fill(0.0);
         timestep.last_action.fill(0);
 
-        self.state.tick_direction_tiles();
+        self.tick_direction_tiles();
         self.prepare_render();
         self.encode_observations(timestep);
         self.encode_action_mask(timestep);
     }
 
     fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
-        self.state.reset_health_changed();
-        self.state.reset_hunger_changed();
-        self.state.reset_achievements_changed();
+        self.reset_health_changed();
+        self.reset_hunger_changed();
+        self.reset_achievements_changed();
 
-        self.state.tick_survivors(actions, timestep);
-        self.state.tick_starvation();
-        self.state.tick_hunger();
+        self.tick_survivors(actions, timestep);
+        self.tick_starvation();
+        self.tick_hunger();
 
         // buildings
-        self.state.tick_damage_to_above();
-        self.state.tick_fueled();
+        self.tick_damage_to_above();
+        self.tick_fueled();
         self.tick_reactivate_after();
 
         //update obs
-        self.state.tick_direction_tiles();
-        self.state.tick_active_obs();
+        self.tick_direction_tiles();
+        self.tick_active_obs();
         //
 
         self.tick_time(); // day night cycle
         self.prepare_render();
-        self.state
-            .calculae_survival_reward(self.config.survival_reward);
-        self.state
-            .calculate_achievement_reward(self.config.achievement_reward);
+        self.calculate_survival_reward(self.config.survival_reward);
+        self.calculate_achievement_reward(self.config.achievement_reward);
         self.encode_observations(timestep);
         self.record_lives(timestep);
-        self.state.tick_death();
-        self.state.tick_respawn();
+        self.tick_death();
+        self.tick_respawn();
         // the next action goes to the respawned entity, so mask against it
         self.encode_action_mask(timestep);
     }

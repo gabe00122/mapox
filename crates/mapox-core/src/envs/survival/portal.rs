@@ -41,6 +41,18 @@ impl Survival {
         self.state.spawn_prototype(Prototype::Portal, portal);
         self.state.portal = portal;
     }
+
+    /// Brings every dead agent back at the portal, fresh; one there is no
+    /// room for tries again next step.
+    pub(super) fn tick_respawn(&mut self) {
+        for agent_index in 0..self.state.agents.len() {
+            if !self.state.world.contains(self.state.agents[agent_index])
+                && let Some(id) = self.state.spawn_survivor(agent_index)
+            {
+                self.state.agents[agent_index] = id;
+            }
+        }
+    }
 }
 
 impl SurvivalState {
@@ -89,17 +101,5 @@ impl SurvivalState {
     pub(super) fn spawn_survivor(&mut self, agent_index: usize) -> Option<Entity> {
         let position = self.nearest_spawn(self.portal)?;
         Some(self.spawn_prototype(Prototype::Survivor { agent_index }, position))
-    }
-
-    /// Brings every dead agent back at the portal, fresh; one there is no
-    /// room for tries again next step.
-    pub(super) fn tick_respawn(&mut self) {
-        for agent_index in 0..self.agents.len() {
-            if !self.world.contains(self.agents[agent_index])
-                && let Some(id) = self.spawn_survivor(agent_index)
-            {
-                self.agents[agent_index] = id;
-            }
-        }
     }
 }

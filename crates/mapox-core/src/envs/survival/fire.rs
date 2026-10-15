@@ -1,6 +1,6 @@
 use crate::envs::{
     common::Position,
-    survival::{SurvivalObs, SurvivalState, needs::Health},
+    survival::{Survival, SurvivalObs, needs::Health},
 };
 
 // fire could be replaced by a Fuel and Active component which could be reused for things like a furnace and lights
@@ -38,9 +38,9 @@ pub(super) struct DamageToAbove {
     pub amount: i32,
 }
 
-impl SurvivalState {
+impl Survival {
     pub(super) fn tick_fueled(&mut self) {
-        for (active, fire) in self.world.query_mut::<(&mut Active, &mut Fueled)>() {
+        for (active, fire) in self.state.world.query_mut::<(&mut Active, &mut Fueled)>() {
             if !active.is_active {
                 continue;
             }
@@ -53,6 +53,7 @@ impl SurvivalState {
 
     pub(super) fn tick_active_obs(&mut self) {
         for (active, active_obs, obs) in self
+            .state
             .world
             .query_mut::<(&Active, &ActiveObs, &mut SurvivalObs)>()
         {
@@ -66,13 +67,14 @@ impl SurvivalState {
 
     pub(super) fn tick_damage_to_above(&mut self) {
         for (active, damage_to_above, position) in self
+            .state
             .world
             .query::<(Option<&Active>, &DamageToAbove, &Position)>()
             .iter()
         {
             if Active::is_on(active)
-                && let Some(mut target_health) = self.spatial_index[position.idx()][1]
-                    .and_then(|target_id| self.world.get::<&mut Health>(target_id).ok())
+                && let Some(mut target_health) = self.state.spatial_index[position.idx()][1]
+                    .and_then(|target_id| self.state.world.get::<&mut Health>(target_id).ok())
             {
                 target_health.update(-damage_to_above.amount);
             }

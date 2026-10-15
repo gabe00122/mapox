@@ -1,7 +1,7 @@
 use hecs::Entity;
 use strum::EnumCount;
 
-use crate::envs::survival::{SurvivalState, items::ItemType, world::Agent};
+use crate::envs::survival::{Survival, SurvivalState, items::ItemType, world::Agent};
 
 /// The items that have been in a survivor's inventory this life. It lives on
 /// the survivor entity, so a respawn starts it fresh.
@@ -31,16 +31,18 @@ impl SurvivalState {
             achievements.changed += 1;
         }
     }
+}
 
+impl Survival {
     pub(super) fn reset_achievements_changed(&mut self) {
-        for achievements in self.world.query_mut::<&mut Achievements>() {
+        for achievements in self.state.world.query_mut::<&mut Achievements>() {
             achievements.changed = 0;
         }
     }
 
     /// Pays `scale` for each item unlocked this step.
     pub(super) fn calculate_achievement_reward(&mut self, scale: f32) {
-        for (agent, achievements) in self.world.query_mut::<(&mut Agent, &Achievements)>() {
+        for (agent, achievements) in self.state.world.query_mut::<(&mut Agent, &Achievements)>() {
             agent.reward += scale * achievements.changed as f32;
         }
     }
@@ -62,8 +64,8 @@ mod tests {
 
     /// The achievement reward `id` has earned since the last call.
     fn take_reward(env: &mut Survival, id: Entity) -> f32 {
-        env.state.calculate_achievement_reward(1.0);
-        env.state.reset_achievements_changed();
+        env.calculate_achievement_reward(1.0);
+        env.reset_achievements_changed();
         let agent = env.state.world.query_one_mut::<&mut Agent>(id).unwrap();
         std::mem::take(&mut agent.reward)
     }
@@ -131,7 +133,7 @@ mod tests {
 
         // a new life starts the achievements fresh
         env.state.despawn(id);
-        env.state.tick_respawn();
+        env.tick_respawn();
         let id = env.state.agents[0];
         hold(&mut env, id, ItemType::Rock, Some(ItemType::Stick));
         env.state.item_craft(id);

@@ -412,7 +412,7 @@ mod tests {
             Some(ItemType::CutGrass)
         );
 
-        env.state.tick_active_obs();
+        env.tick_active_obs();
         assert_eq!(
             *env.state
                 .world
