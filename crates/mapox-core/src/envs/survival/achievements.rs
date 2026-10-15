@@ -165,6 +165,7 @@ mod tests {
                 "campfire_kit": 0.0,
                 "berry": 0.0,
                 "cooked_berry": 0.0,
+                "apple": 0.0,
             })
         );
         assert_eq!(

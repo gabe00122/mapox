@@ -22,6 +22,7 @@ pub(super) enum Prototype {
     BerryBush,
     TallGrass,
     Tree,
+    AppleTree,
     Portal,
     Item(ItemType),
 }
@@ -101,6 +102,23 @@ impl SurvivalState {
                 position,
                 Slot::Both,
                 SurvivalObs::TileTree,
+                Chopable {
+                    item: Some(ItemType::Wood),
+                },
+            )),
+            Prototype::AppleTree => self.spawn((
+                position,
+                Slot::Both,
+                SurvivalObs::TileAppleTree,
+                Active::default(),
+                ActiveObs {
+                    enabled: SurvivalObs::TileAppleTree,
+                    disabled: SurvivalObs::TileTree,
+                },
+                ItemProducer {
+                    item: ItemType::Apple,
+                },
+                ReactiveAfter::new(300),
                 Chopable {
                     item: Some(ItemType::Wood),
                 },

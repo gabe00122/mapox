@@ -67,9 +67,7 @@ impl WebHandle {
             .start(
                 canvas,
                 eframe::WebOptions::default(),
-                Box::new(move |_cc| {
-                    Ok(Box::new(RenderApp::new(env, length, seed.into(), policy)))
-                }),
+                Box::new(move |_cc| Ok(Box::new(RenderApp::new(env, length, seed.into(), policy)))),
             )
             .await
     }

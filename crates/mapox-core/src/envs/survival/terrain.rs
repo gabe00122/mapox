@@ -28,13 +28,14 @@ enum Biome {
 impl Biome {
     /// What the biome's ground grows, one roll per cell: dense trees with
     /// sticks under them in forest, berry bushes and tall grass in meadow,
-    /// rocks in scrub. Each also has its own decor, so bare ground shows
-    /// which biome it is.
+    /// rocks in scrub, and apple trees scattered through forest and meadow.
+    /// Each also has its own decor, so bare ground shows which biome it is.
     fn growth(self) -> &'static [(SurvivalObs, f64)] {
         use SurvivalObs::*;
         match self {
             Biome::Forest => &[
                 (TileTree, 0.25),
+                (TileAppleTree, 0.01),
                 (ItemStick, 0.02),
                 (TileBerryBush, 0.004),
                 (TileTallGrass, 0.02),
@@ -44,6 +45,7 @@ impl Biome {
                 (TileBerryBush, 0.02),
                 (TileTallGrass, 0.08),
                 (TileTree, 0.012),
+                (TileAppleTree, 0.004),
                 (ItemStick, 0.004),
                 (ItemRock, 0.002),
                 (TileDecor1, 0.12),
@@ -65,6 +67,7 @@ fn prototype(tile: SurvivalObs) -> Option<Prototype> {
     use SurvivalObs::*;
     Some(match tile {
         TileTree => Prototype::Tree,
+        TileAppleTree => Prototype::AppleTree,
         TileBerryBush => Prototype::BerryBush,
         TileTallGrass => Prototype::TallGrass,
         ItemStick => Prototype::Item(ItemType::Stick),
@@ -80,7 +83,7 @@ fn dig_cost(tile: SurvivalObs) -> u32 {
     use SurvivalObs::*;
     match tile {
         // trees block by filling both slots, not by their tile
-        TileTree => 1,
+        TileTree | TileAppleTree => 1,
         _ if !tile.move_blocked() => 0,
         TileWall | TileDestructibleWall => 2,
         TileWater => 3,
@@ -183,7 +186,10 @@ mod tests {
             // trees fill both slots, so they block like walls do
             let open = Array2::from_shape_fn(env.state.tiles.dim(), |cell| {
                 !env.state.tiles[cell].move_blocked()
-                    && env.state.render_map[cell] != SurvivalObs::TileTree
+                    && !matches!(
+                        env.state.render_map[cell],
+                        SurvivalObs::TileTree | SurvivalObs::TileAppleTree
+                    )
             });
             let (labels, sizes) = label_regions(&open);
             assert_eq!(sizes.len(), 2, "seed {seed}: open ground is split up");
@@ -200,6 +206,7 @@ mod tests {
         let env = generated(0);
         for tile in [
             SurvivalObs::TileTree,
+            SurvivalObs::TileAppleTree,
             SurvivalObs::TileBerryBush,
             SurvivalObs::TileTallGrass,
             SurvivalObs::ItemStick,

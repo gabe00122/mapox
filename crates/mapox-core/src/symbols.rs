@@ -36,6 +36,8 @@ pub const TILE_FOOD: &str = "tile/food";
 pub const TILE_PELLET: &str = "tile/pellet";
 pub const TILE_POWER_PELLET: &str = "tile/power_pellet";
 pub const TILE_TREE: &str = "tile/tree";
+/// A tree with apples on it. Picked bare it is a plain [`TILE_TREE`].
+pub const TILE_APPLE_TREE: &str = "tile/apple_tree";
 /// A bush with ripe berries on it. [`TILE_BUSH`] is the same bush picked bare.
 pub const TILE_BERRY_BUSH: &str = "tile/berry_bush";
 pub const TILE_BUSH: &str = "tile/bush";
@@ -69,6 +71,7 @@ pub const ITEM_STONE_AXE: &str = "item/stone_axe";
 pub const ITEM_CAMPFIRE_KIT: &str = "item/campfire_kit";
 pub const ITEM_BERRY: &str = "item/berry";
 pub const ITEM_COOKED_BERRY: &str = "item/cooked_berry";
+pub const ITEM_APPLE: &str = "item/apple";
 
 pub const AGENT_GENERIC: &str = "agent/generic";
 /// The generic agent by facing, in `MOVES` order, for envs where what an

@@ -1107,6 +1107,25 @@ TREE = check(
     "tree",
 )
 
+# The tree with three apples in its crown; picked bare it draws as TREE.
+APPLE_TREE = check(
+    [
+        "....OOOO....",
+        "..OOLLLGOO..",
+        ".OLLLGGwRGO.",
+        ".OLGGGGRrGO.",
+        "OLwRGgGGGGgO",
+        "OGRrGGGwRGgO",
+        ".OGgGGGRrgO.",
+        "..OOgGGgOO..",
+        "....OTTO....",
+        "....OTtO....",
+        "...OTTTtO...",
+        "....OOOO....",
+    ],
+    "apple tree",
+)
+
 # A ripe bush carries berries on R and h; picked bare, those are leaf.
 BUSH = check(
     [
@@ -1379,6 +1398,16 @@ def build_sheet() -> list[list[Sprite]]:
                 "L": PORTAL_LIGHT,
                 "c": PORTAL_CORE,
                 "W": PORTAL_SPARK,
+            },
+        ),
+        stamp(
+            floor(),
+            APPLE_TREE,
+            {
+                **TREE_PALETTE,
+                "R": APPLE_PALETTE["R"],
+                "r": APPLE_PALETTE["r"],
+                "w": APPLE_PALETTE["w"],
             },
         ),
     ]

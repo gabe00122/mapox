@@ -27,6 +27,7 @@ pub(super) enum ItemType {
     CampfireKit,
     Berry,
     CookedBerry,
+    Apple,
 }
 
 // requirement, requirement, product
@@ -47,6 +48,7 @@ impl ItemType {
             ItemType::CampfireKit => SurvivalObs::ItemCampfireKit,
             ItemType::Berry => SurvivalObs::ItemBerry,
             ItemType::CookedBerry => SurvivalObs::ItemCookedBerry,
+            ItemType::Apple => SurvivalObs::ItemApple,
             _ => SurvivalObs::Digit0,
         }
     }
@@ -55,6 +57,7 @@ impl ItemType {
         match self {
             ItemType::Berry => Some(10),
             ItemType::CookedBerry => Some(40),
+            ItemType::Apple => Some(20),
             _ => None,
         }
     }
@@ -473,6 +476,35 @@ mod tests {
             env.tick_reactivate_after();
         }
         assert!(is_active(&mut env), "the bush regrows");
+    }
+
+    #[test]
+    fn an_apple_tree_gives_apples_until_picked_and_chops_to_wood() {
+        use SurvivalAction::*;
+        let (mut env, mut buffers, agent, target_pos) = facing_bare_tile();
+        let tree = env.state.spawn_prototype(Prototype::AppleTree, target_pos);
+        assert_eq!(legal_items(&mut env, &mut buffers), [ItemTake]);
+
+        env.item_take(agent);
+        assert!(env.state.world.contains(tree), "the tree stays");
+        assert_eq!(
+            env.state
+                .world
+                .query_one_mut::<&Inventory>(agent)
+                .unwrap()
+                .hand,
+            Some(ItemType::Apple)
+        );
+        env.tick_active_obs();
+        assert_eq!(
+            *env.state.world.query_one_mut::<&SurvivalObs>(tree).unwrap(),
+            SurvivalObs::TileTree,
+            "a picked apple tree looks like any other"
+        );
+        // an apple is eaten, not put on the tree
+        assert_eq!(legal_items(&mut env, &mut buffers), [ItemSwap, ItemUse]);
+
+        assert_eq!(chop(Prototype::AppleTree), Some(ItemType::Wood));
     }
 
     /// A fresh env whose first agent is empty-handed and faces a bare tile.

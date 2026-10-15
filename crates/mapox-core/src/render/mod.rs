@@ -36,6 +36,8 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::TILE_FLAG, 0, 1),
     (symbols::TILE_FLAG_UNLOCKED, 1, 1),
     (symbols::TILE_FOOD, 2, 1),
+    // survival's apple is snake's food
+    (symbols::ITEM_APPLE, 2, 1),
     (symbols::AGENT_GENERIC, 7, 1),
     (symbols::AGENT_SCOUT, 8, 1),
     (symbols::AGENT_HARVESTER, 9, 1),
@@ -93,6 +95,7 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::TILE_TALL_GRASS, 5, 8),
     (symbols::TILE_CUT_GRASS, 6, 8),
     (symbols::TILE_PORTAL, 7, 8),
+    (symbols::TILE_APPLE_TREE, 8, 8),
 ];
 
 pub(crate) fn resolve_art(vocab: &Vocabulary) -> Vec<(u32, u32)> {
