@@ -12,6 +12,7 @@ from mapox.envs.rust_env_numpy import (
     RustEnvConfig,
     RustEnvNumpy,
     RustFindReturnConfig,
+    RustMazeConfig,
     RustPacmanConfig,
     RustScoutsConfig,
     RustSnakeConfig,
@@ -118,6 +119,7 @@ CONFIGS = {
     "snake": RustSnakeConfig(),
     "pacman": RustPacmanConfig(),
     "survival": RustSurvivalConfig(),
+    "maze": RustMazeConfig(),
 }
 
 

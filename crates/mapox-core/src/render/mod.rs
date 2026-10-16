@@ -119,6 +119,7 @@ mod tests {
     use super::*;
     use crate::env::Environment;
     use crate::envs::find_return::{FindReturn, FindReturnConfig};
+    use crate::envs::maze::{Maze, MazeConfig};
     use crate::envs::pacman::{Pacman, PacmanConfig};
     use crate::envs::scouts::{Scouts, ScoutsConfig};
     use crate::envs::snake::{Snake, SnakeConfig};
@@ -138,6 +139,7 @@ mod tests {
             Box::new(Snake::new(&SnakeConfig::default(), 512)),
             Box::new(Pacman::new(&PacmanConfig::default(), 512)),
             Box::new(Survival::new(&SurvivalConfig::default(), 512)),
+            Box::new(Maze::new(&MazeConfig::default(), 512)),
         ]
     }
 

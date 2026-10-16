@@ -6,6 +6,7 @@ use crate::{
     env::Environment,
     envs::{
         find_return::{FindReturn, FindReturnConfig},
+        maze::{Maze, MazeConfig},
         pacman::{Pacman, PacmanConfig},
         scouts::{Scouts, ScoutsConfig},
         snake::{Snake, SnakeConfig},
@@ -23,6 +24,7 @@ pub enum EnvConfig {
     RustSnake(Box<SnakeConfig>),
     RustPacman(Box<PacmanConfig>),
     RustSurvival(Box<SurvivalConfig>),
+    RustMaze(Box<MazeConfig>),
     #[cfg(not(target_arch = "wasm32"))]
     RustVideo(Box<VideoConfig>),
     RustVec {
@@ -48,6 +50,7 @@ pub fn make(config: &EnvConfig, length: usize) -> MapoxResult<Box<dyn Environmen
         EnvConfig::RustSnake(config) => Ok(Box::new(Snake::new(config, length))),
         EnvConfig::RustPacman(config) => Ok(Box::new(Pacman::new(config, length))),
         EnvConfig::RustSurvival(config) => Ok(Box::new(Survival::new(config, length))),
+        EnvConfig::RustMaze(config) => Ok(Box::new(Maze::new(config, length))),
         #[cfg(not(target_arch = "wasm32"))]
         EnvConfig::RustVideo(config) => Ok(Box::new(VideoWrapper::new(config, length)?)),
         EnvConfig::RustVec { num, env } => Ok(Box::new(VectorWrapper::new(*num, env, length)?)),
@@ -109,6 +112,16 @@ mod tests {
 
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();
         assert_eq!(parsed, EnvConfig::RustPacman(Box::default()));
+    }
+
+    /// And for the maze, whose map is all walls and passages.
+    #[test]
+    fn a_maze_config_dump_parses() {
+        let json = r#"{"env_type":"rust_maze","num_agents":8,"width":31,"height":31,
+            "view_width":15,"view_height":15,"goal_reward":1.0,"shared_spawn":false}"#;
+
+        let parsed: EnvConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed, EnvConfig::RustMaze(Box::default()));
     }
 
     /// The vectorized shape: `num` copies of a plain env config.

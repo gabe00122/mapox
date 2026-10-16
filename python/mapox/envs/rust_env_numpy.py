@@ -169,6 +169,27 @@ class RustSurvivalConfig(BaseModel):
     achievement_reward: float = 1.0
 
 
+class RustMazeConfig(BaseModel):
+    """A generated perfect maze with one goal. Agents pass through each other,
+    and reaching the goal sends an agent back to its spawn."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    env_type: Literal["rust_maze"] = "rust_maze"
+
+    num_agents: int = 8
+
+    # maze cells sit on even interior coordinates, so odd sizes use every
+    # row and column
+    width: int = 31
+    height: int = 31
+    view_width: int = 15
+    view_height: int = 15
+
+    goal_reward: float = 1.0
+    # every agent shares one spawn instead of having its own
+    shared_spawn: bool = False
+
+
 class RustVecConfig(BaseModel):
     """Vectorized copies of one rust env; the rust side steps them in parallel."""
 
@@ -207,6 +228,7 @@ type RustEnvConfig = (
     | RustSnakeConfig
     | RustPacmanConfig
     | RustSurvivalConfig
+    | RustMazeConfig
     | RustVideoConfig
     | RustVecConfig
     | RustMultiConfig
