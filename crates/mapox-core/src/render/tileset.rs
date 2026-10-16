@@ -22,7 +22,7 @@ const TILE_PAD: f32 = 1.0;
 
 /// Sheet is 157x118 px = `COLS * 13 + 1` by `ROWS * 13 + 1`.
 pub const TILESET_COLS: u32 = 12;
-pub const TILESET_ROWS: u32 = 9;
+pub const TILESET_ROWS: u32 = 8;
 
 /// The sheet, uploaded once and sampled per tile.
 pub struct Tileset {

@@ -9,7 +9,6 @@ use crate::{
         maze::{Maze, MazeConfig},
         pacman::{Pacman, PacmanConfig},
         scouts::{Scouts, ScoutsConfig},
-        snake::{Snake, SnakeConfig},
         survival::{Survival, config::SurvivalConfig},
     },
     error::MapoxResult,
@@ -21,7 +20,6 @@ use crate::{
 pub enum EnvConfig {
     RustFindReturn(Box<FindReturnConfig>),
     RustScouts(Box<ScoutsConfig>),
-    RustSnake(Box<SnakeConfig>),
     RustPacman(Box<PacmanConfig>),
     RustSurvival(Box<SurvivalConfig>),
     RustMaze(Box<MazeConfig>),
@@ -47,7 +45,6 @@ pub fn make(config: &EnvConfig, length: usize) -> MapoxResult<Box<dyn Environmen
     match config {
         EnvConfig::RustFindReturn(config) => Ok(Box::new(FindReturn::new(config, length))),
         EnvConfig::RustScouts(config) => Ok(Box::new(Scouts::new(config, length))),
-        EnvConfig::RustSnake(config) => Ok(Box::new(Snake::new(config, length))),
         EnvConfig::RustPacman(config) => Ok(Box::new(Pacman::new(config, length))),
         EnvConfig::RustSurvival(config) => Ok(Box::new(Survival::new(config, length))),
         EnvConfig::RustMaze(config) => Ok(Box::new(Maze::new(config, length))),
@@ -90,17 +87,6 @@ mod tests {
         assert_eq!(parsed, EnvConfig::RustFindReturn(Box::default()));
     }
 
-    /// Same again for the snake, whose config carries no mapgen keys.
-    #[test]
-    fn a_snake_config_dump_parses() {
-        let json = r#"{"env_type":"rust_snake","num_agents":16,"width":80,"height":70,
-            "view_width":15,"view_height":15,"food_spawn_prob":0.0001,
-            "food_reward":0.01,"death_reward":0.0}"#;
-
-        let parsed: EnvConfig = serde_json::from_str(json).unwrap();
-        assert_eq!(parsed, EnvConfig::RustSnake(Box::default()));
-    }
-
     /// And for pac-man, which plays on a fixed maze with no size keys.
     #[test]
     fn a_pacman_config_dump_parses() {
@@ -118,7 +104,7 @@ mod tests {
     #[test]
     fn a_maze_config_dump_parses() {
         let json = r#"{"env_type":"rust_maze","num_agents":8,"width":31,"height":31,
-            "view_width":15,"view_height":15,"goal_reward":1.0,"shared_spawn":false}"#;
+            "view_width":15,"view_height":15,"goal_reward":1.0}"#;
 
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();
         assert_eq!(parsed, EnvConfig::RustMaze(Box::default()));
@@ -271,32 +257,29 @@ mod tests {
 
     #[test]
     fn metrics_average_nested_copies_and_drain_every_task() {
-        // A one-cell board makes every step a death, independently of the seed
-        // or chosen action. Unequal copy counts expose incorrect group bounds.
-        let task = |name: &str, num, death_reward| MultiEnvSpec {
+        // Pac-Man counts one turn per step whatever the seed or action, and no
+        // ghost reaches it within the first few. Unequal copy counts expose
+        // incorrect group bounds.
+        let task = |name: &str, num| MultiEnvSpec {
             name: name.into(),
             num,
-            env: Box::new(EnvConfig::RustSnake(Box::new(SnakeConfig {
-                num_agents: 1,
-                width: 1,
-                height: 1,
-                food_spawn_prob: 0.0,
-                death_reward,
-                ..SnakeConfig::default()
-            }))),
+            env: Box::new(EnvConfig::RustPacman(Box::default())),
         };
         let config = EnvConfig::RustVec {
             num: 2,
             env: Box::new(EnvConfig::RustMulti {
-                envs: vec![task("snake", 2, -4.0), task("other", 3, -6.0)],
+                envs: vec![task("pacman", 2), task("other", 3)],
             }),
         };
         let mut env = make(&config, 32).unwrap();
-        let zeros = serde_json::json!({
-            "snake": {"reward": 0.0, "food_eaten": 0.0, "deaths": 0.0},
-            "other": {"reward": 0.0, "food_eaten": 0.0, "deaths": 0.0},
-        });
-        assert_eq!(env.consume_metrics(), zeros);
+        let turns = |metrics: serde_json::Value| {
+            serde_json::json!({
+                "pacman": metrics["pacman"]["turns_survived"],
+                "other": metrics["other"]["turns_survived"],
+            })
+        };
+        let zeros = serde_json::json!({"pacman": 0.0, "other": 0.0});
+        assert_eq!(turns(env.consume_metrics()), zeros);
 
         // Enjoy mode steps one copy only, but consume must drain and average
         // every configured copy, retaining inactive task keys as well.
@@ -311,13 +294,10 @@ mod tests {
             env.reset(43, &mut buffers.view_mut());
         }
         assert_eq!(
-            env.consume_metrics(),
-            serde_json::json!({
-                "snake": {"reward": -1.0, "food_eaten": 0.0, "deaths": 0.25},
-                "other": {"reward": -3.0, "food_eaten": 0.0, "deaths": 0.5},
-            }),
+            turns(env.consume_metrics()),
+            serde_json::json!({"pacman": 0.25, "other": 0.5}),
         );
-        assert_eq!(env.consume_metrics(), zeros);
+        assert_eq!(turns(env.consume_metrics()), zeros);
 
         env.set_enjoy_mode(None);
         assert_eq!(env.enjoy_task(), None);
@@ -325,13 +305,10 @@ mod tests {
         env.reset(44, &mut buffers.view_mut());
         env.step(&vec![0; env.num_agents()], &mut buffers.view_mut());
         assert_eq!(
-            env.consume_metrics(),
-            serde_json::json!({
-                "snake": {"reward": -4.0, "food_eaten": 0.0, "deaths": 1.0},
-                "other": {"reward": -6.0, "food_eaten": 0.0, "deaths": 1.0},
-            }),
+            turns(env.consume_metrics()),
+            serde_json::json!({"pacman": 1.0, "other": 1.0}),
         );
-        assert_eq!(env.consume_metrics(), zeros);
+        assert_eq!(turns(env.consume_metrics()), zeros);
     }
 
     #[test]

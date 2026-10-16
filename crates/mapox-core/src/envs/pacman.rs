@@ -304,8 +304,7 @@ struct PacmanMetrics {
 ///
 /// A round ends when a ghost catches Pac-Man or the last pellet is eaten.
 /// Pac-Man is flagged terminated on that step and the next round starts on
-/// a fresh maze at once, as the dead snake respawns in the snake env; the
-/// episode itself runs until `length`, like every env here.
+/// a fresh maze at once; the episode itself runs until `length`, like every env here.
 #[derive(Debug, Clone)]
 pub struct Pacman {
     pub config: PacmanConfig,

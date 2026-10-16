@@ -6,7 +6,6 @@ from mapox.envs.find_return import FindReturnConfig, FindReturnEnv
 from mapox.envs.king_hill import KingHillConfig, KingHillEnv
 from mapox.envs.prey import PreyConfig, PreyEnv
 from mapox.envs.scouts import ScoutsConfig, ScoutsEnv
-from mapox.envs.snake import SnakeConfig, SnakeEnv
 from mapox.envs.traveling_salesman import TravelingSalesmanConfig, TravelingSalesmanEnv
 
 LENGTH = 32
@@ -54,12 +53,6 @@ def _make_envs():
         (
             "prey",
             PreyEnv(PreyConfig(num_sneakers=2, num_chasers=1, num_food=3), LENGTH),
-        ),
-        (
-            "snake",
-            SnakeEnv(
-                SnakeConfig(num_agents=2, width=12, height=12, initial_food=3), LENGTH
-            ),
         ),
     ]
 

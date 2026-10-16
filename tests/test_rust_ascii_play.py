@@ -7,8 +7,8 @@ from mapox.ascii import UNKNOWN_CHAR, AsciiRenderer
 from mapox.envs.rust_env_numpy import (
     RustEnvNumpy,
     RustFindReturnConfig,
+    RustMazeConfig,
     RustScoutsConfig,
-    RustSnakeConfig,
 )
 from mapox.rust_play import ascii_frame, run_ascii
 
@@ -24,7 +24,7 @@ CONFIGS = {
         view_width=9,
         view_height=7,
     ),
-    "snake": RustSnakeConfig(
+    "maze": RustMazeConfig(
         num_agents=2, width=14, height=12, view_width=9, view_height=7
     ),
 }

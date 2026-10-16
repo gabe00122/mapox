@@ -15,9 +15,8 @@ pub use keys::{Command, Input};
 use crate::{symbols, vocab::Vocabulary};
 
 /// Symbol -> (col, row) on the sheet `scripts/make_tileset.py` draws. Row 0
-/// is terrain, row 1 items and characters, row 2 the snake colours, rows 3
-/// and 4 the soldiers, row 5 the UI digits and stat labels, row 6 pac-man,
-/// and rows 7 and 8 survival.
+/// is terrain, row 1 items and characters, rows 2 and 3 the soldiers, row 4
+/// the UI digits and stat labels, row 5 pac-man, and rows 6 and 7 survival.
 const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::TILE_UI, 0, 0),
     (symbols::TILE_MASK, 1, 0),
@@ -35,69 +34,57 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     // gold once claimable.
     (symbols::TILE_FLAG, 0, 1),
     (symbols::TILE_FLAG_UNLOCKED, 1, 1),
-    (symbols::TILE_FOOD, 2, 1),
-    // survival's apple is snake's food
     (symbols::ITEM_APPLE, 2, 1),
     (symbols::AGENT_GENERIC, 7, 1),
     (symbols::AGENT_SCOUT, 8, 1),
     (symbols::AGENT_HARVESTER, 9, 1),
-    (symbols::AGENT_SNAKE_RED, 0, 2),
-    (symbols::AGENT_SNAKE_ORANGE, 1, 2),
-    (symbols::AGENT_SNAKE_YELLOW, 2, 2),
-    (symbols::AGENT_SNAKE_GOLD, 3, 2),
-    (symbols::AGENT_SNAKE_GREEN, 4, 2),
-    (symbols::AGENT_SNAKE_BLUE, 5, 2),
-    (symbols::AGENT_SNAKE_PURPLE, 6, 2),
-    (symbols::AGENT_SNAKE_PINK, 7, 2),
-    (symbols::AGENT_SNAKE_GRAY, 8, 2),
-    (symbols::AGENT_SNAKE_WHITE, 9, 2),
-    (symbols::UI_DIGITS[0], 0, 5),
-    (symbols::UI_DIGITS[1], 1, 5),
-    (symbols::UI_DIGITS[2], 2, 5),
-    (symbols::UI_DIGITS[3], 3, 5),
-    (symbols::UI_DIGITS[4], 4, 5),
-    (symbols::UI_DIGITS[5], 5, 5),
-    (symbols::UI_DIGITS[6], 6, 5),
-    (symbols::UI_DIGITS[7], 7, 5),
-    (symbols::UI_DIGITS[8], 8, 5),
-    (symbols::UI_DIGITS[9], 9, 5),
-    (symbols::UI_HEALTH, 10, 5),
-    (symbols::UI_HUNGER, 11, 5),
-    (symbols::TILE_PELLET, 0, 6),
-    (symbols::TILE_POWER_PELLET, 1, 6),
-    (symbols::AGENT_PACMAN_UP, 2, 6),
-    (symbols::AGENT_PACMAN_RIGHT, 3, 6),
-    (symbols::AGENT_PACMAN_DOWN, 4, 6),
-    (symbols::AGENT_PACMAN_LEFT, 5, 6),
-    (symbols::AGENT_GHOST_PINKY, 6, 6),
-    (symbols::AGENT_GHOST_BLINKY, 7, 6),
-    (symbols::AGENT_GHOST_INKY, 8, 6),
-    (symbols::AGENT_GHOST_CLYDE, 9, 6),
-    (symbols::AGENT_GHOST_FRIGHTENED, 10, 6),
-    (symbols::AGENT_GHOST_EYES, 11, 6),
-    (symbols::TILE_FIRE, 0, 7),
-    (symbols::AGENT_GENERIC_UP, 1, 7),
-    (symbols::AGENT_GENERIC_RIGHT, 2, 7),
-    (symbols::AGENT_GENERIC_DOWN, 3, 7),
-    (symbols::AGENT_GENERIC_LEFT, 4, 7),
-    (symbols::ITEM_ROCK, 5, 7),
-    (symbols::ITEM_STICK, 6, 7),
-    (symbols::ITEM_WOOD, 7, 7),
-    (symbols::ITEM_CUT_GRASS, 8, 7),
-    (symbols::ITEM_STONE_AXE, 9, 7),
-    (symbols::TILE_FIRE_OUT, 10, 7),
-    (symbols::TILE_TREE, 11, 7),
-    (symbols::TILE_BERRY_BUSH, 0, 8),
-    (symbols::TILE_BUSH, 1, 8),
-    (symbols::ITEM_BERRY, 2, 8),
-    (symbols::ITEM_COOKED_BERRY, 3, 8),
-    (symbols::ITEM_CAMPFIRE_KIT, 4, 8),
-    (symbols::TILE_TALL_GRASS, 5, 8),
-    (symbols::TILE_CUT_GRASS, 6, 8),
-    (symbols::TILE_PORTAL, 7, 8),
-    (symbols::TILE_APPLE_TREE, 8, 8),
-    (symbols::TILE_THORN_BUSH, 9, 8),
-    (symbols::ITEM_STONE_PICKAXE, 10, 8),
+    (symbols::UI_DIGITS[0], 0, 4),
+    (symbols::UI_DIGITS[1], 1, 4),
+    (symbols::UI_DIGITS[2], 2, 4),
+    (symbols::UI_DIGITS[3], 3, 4),
+    (symbols::UI_DIGITS[4], 4, 4),
+    (symbols::UI_DIGITS[5], 5, 4),
+    (symbols::UI_DIGITS[6], 6, 4),
+    (symbols::UI_DIGITS[7], 7, 4),
+    (symbols::UI_DIGITS[8], 8, 4),
+    (symbols::UI_DIGITS[9], 9, 4),
+    (symbols::UI_HEALTH, 10, 4),
+    (symbols::UI_HUNGER, 11, 4),
+    (symbols::TILE_PELLET, 0, 5),
+    (symbols::TILE_POWER_PELLET, 1, 5),
+    (symbols::AGENT_PACMAN_UP, 2, 5),
+    (symbols::AGENT_PACMAN_RIGHT, 3, 5),
+    (symbols::AGENT_PACMAN_DOWN, 4, 5),
+    (symbols::AGENT_PACMAN_LEFT, 5, 5),
+    (symbols::AGENT_GHOST_PINKY, 6, 5),
+    (symbols::AGENT_GHOST_BLINKY, 7, 5),
+    (symbols::AGENT_GHOST_INKY, 8, 5),
+    (symbols::AGENT_GHOST_CLYDE, 9, 5),
+    (symbols::AGENT_GHOST_FRIGHTENED, 10, 5),
+    (symbols::AGENT_GHOST_EYES, 11, 5),
+    (symbols::TILE_FIRE, 0, 6),
+    (symbols::AGENT_GENERIC_UP, 1, 6),
+    (symbols::AGENT_GENERIC_RIGHT, 2, 6),
+    (symbols::AGENT_GENERIC_DOWN, 3, 6),
+    (symbols::AGENT_GENERIC_LEFT, 4, 6),
+    (symbols::ITEM_ROCK, 5, 6),
+    (symbols::ITEM_STICK, 6, 6),
+    (symbols::ITEM_WOOD, 7, 6),
+    (symbols::ITEM_CUT_GRASS, 8, 6),
+    (symbols::ITEM_STONE_AXE, 9, 6),
+    (symbols::TILE_FIRE_OUT, 10, 6),
+    (symbols::TILE_TREE, 11, 6),
+    (symbols::TILE_BERRY_BUSH, 0, 7),
+    (symbols::TILE_BUSH, 1, 7),
+    (symbols::ITEM_BERRY, 2, 7),
+    (symbols::ITEM_COOKED_BERRY, 3, 7),
+    (symbols::ITEM_CAMPFIRE_KIT, 4, 7),
+    (symbols::TILE_TALL_GRASS, 5, 7),
+    (symbols::TILE_CUT_GRASS, 6, 7),
+    (symbols::TILE_PORTAL, 7, 7),
+    (symbols::TILE_APPLE_TREE, 8, 7),
+    (symbols::TILE_THORN_BUSH, 9, 7),
+    (symbols::ITEM_STONE_PICKAXE, 10, 7),
 ];
 
 pub(crate) fn resolve_art(vocab: &Vocabulary) -> Vec<(u32, u32)> {
@@ -122,11 +109,9 @@ mod tests {
     use crate::envs::maze::{Maze, MazeConfig};
     use crate::envs::pacman::{Pacman, PacmanConfig};
     use crate::envs::scouts::{Scouts, ScoutsConfig};
-    use crate::envs::snake::{Snake, SnakeConfig};
     use crate::envs::survival::{Survival, config::SurvivalConfig};
     use crate::make::{EnvConfig, MultiEnvSpec};
     use crate::render::env::GridRenderState;
-    use crate::symbols::AGENT_SNAKE_RED;
     use crate::timestep::TimeStepBuffers;
     use crate::wrappers::multitask::MultitaskWrapper;
     use tileset::{TILESET_COLS, TILESET_ROWS};
@@ -136,7 +121,6 @@ mod tests {
         vec![
             Box::new(FindReturn::new(&FindReturnConfig::default(), 512)),
             Box::new(Scouts::new(&ScoutsConfig::default(), 512)),
-            Box::new(Snake::new(&SnakeConfig::default(), 512)),
             Box::new(Pacman::new(&PacmanConfig::default(), 512)),
             Box::new(Survival::new(&SurvivalConfig::default(), 512)),
             Box::new(Maze::new(&MazeConfig::default(), 512)),
@@ -172,15 +156,12 @@ mod tests {
 
     /// The art table is indexed by the ids the renderer reads back, which a
     /// multitask wrapper remaps into its union vocab. Reporting the inner
-    /// env's vocab instead sizes the table for pre-remap ids: snake's colours
-    /// start at union id 16 (find_return contributes 15 symbols first), which
-    /// runs off the end of snake's 14-entry table on the first POV frame.
+    /// env's vocab instead sizes the table for pre-remap ids: pac-man's own
+    /// symbols start past the ones find_return contributes first, which runs
+    /// off the end of pac-man's table on the first POV frame.
     #[test]
     fn wrapped_env_render_ids_index_the_settings_vocab() {
-        let snake = EnvConfig::RustSnake(Box::new(SnakeConfig {
-            num_agents: 1,
-            width: 16,
-            height: 16,
+        let pacman = EnvConfig::RustPacman(Box::new(PacmanConfig {
             view_width: 15,
             view_height: 15,
             ..Default::default()
@@ -199,9 +180,9 @@ mod tests {
                 env: Box::new(find_return),
             },
             MultiEnvSpec {
-                name: "snake".to_owned(),
+                name: "pacman".to_owned(),
                 num: 1,
-                env: Box::new(snake),
+                env: Box::new(pacman),
             },
         ];
 
@@ -224,19 +205,14 @@ mod tests {
             );
         }
 
-        // The ids are the union ones, not the inner env's: the snake sitting
-        // on the focused tile draws as a red snake, and sees its own head.
+        // The ids are the union ones, not the inner env's: pac-man on the
+        // focused tile draws as pac-man, and sees itself.
         let tile = render_state.tilemap[render_state.agent_positions[0].idx()];
-        assert_eq!(
-            settings.obs_vocab.symbols()[usize::from(tile)],
-            AGENT_SNAKE_RED
-        );
+        let symbol = &settings.obs_vocab.symbols()[usize::from(tile)];
+        assert!(symbol.starts_with("agent/pacman_"), "focused tile is {symbol}");
         assert!(
-            buffers
-                .obs
-                .iter()
-                .any(|&id| id == settings.obs_vocab.get(AGENT_SNAKE_RED).unwrap()),
-            "the agent's own head is in its observation"
+            buffers.obs.iter().any(|&id| id == tile),
+            "pac-man is in its own observation"
         );
     }
 }

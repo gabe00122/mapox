@@ -947,7 +947,7 @@ mod tests {
 
         let (app, _) = recording_app(MultitaskWrapper::new(&specs, 8).unwrap(), 8, 0);
         assert_eq!(app.task, Some(0));
-        assert_eq!(app.task_names, ["scouts", "fr", "snake"]);
+        assert_eq!(app.task_names, ["scouts", "fr", "maze"]);
         assert_eq!(app.env.enjoy_task(), Some(0));
         assert_eq!(app.buffers.num_agents(), 3, "one scouts env");
 
@@ -955,7 +955,7 @@ mod tests {
         env.set_enjoy_mode(Some(2));
         let (app, _) = recording_app(env, 8, 0);
         assert_eq!(app.task, Some(2));
-        assert_eq!(app.buffers.num_agents(), 4, "one snake env");
+        assert_eq!(app.buffers.num_agents(), 4, "one maze env");
     }
 
     #[test]

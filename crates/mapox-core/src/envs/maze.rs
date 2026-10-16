@@ -1,5 +1,5 @@
 use ndarray::{Array2, s};
-use rand::{RngExt, SeedableRng, rngs::SmallRng, seq::SliceRandom};
+use rand::{RngExt, SeedableRng, rngs::SmallRng};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -29,9 +29,6 @@ pub struct MazeConfig {
     pub view_height: i32,
 
     pub goal_reward: f32,
-    /// Every agent starts, and restarts after each goal, from one shared
-    /// spawn instead of a spawn of its own.
-    pub shared_spawn: bool,
 }
 
 impl Default for MazeConfig {
@@ -43,27 +40,21 @@ impl Default for MazeConfig {
             view_width: 15,
             view_height: 15,
             goal_reward: 1.0,
-            shared_spawn: false,
         }
     }
-}
-
-#[derive(Debug, Default, Clone)]
-struct MazeAgent {
-    position: Position,
-    /// Where the agent starts, and where reaching the goal sends it back to.
-    spawn: Position,
 }
 
 #[derive(Debug, Clone)]
 struct MazeState {
     rngs: SmallRng,
-    agents: Vec<MazeAgent>,
+    positions: Vec<Position>, // one per agent
+    /// Where every agent starts, and where reaching the goal sends it back
+    /// to: the cell the maze was carved from.
+    spawn: Position,
     time: usize,
 
     base_map: Array2<MazeObs>, // the bottom layer of the map without agents
     map: Array2<MazeObs>,      // the base map plus the agents
-    cells: Vec<Position>,      // every maze cell, for picking the goal and spawns
 }
 
 vocab_enum!(MazeObs {
@@ -91,6 +82,13 @@ vocab_enum!(MazeAction {
     Noop => NOOP,
 });
 
+const MOVES: [MazeAction; 4] = [
+    MazeAction::MoveUp,
+    MazeAction::MoveRight,
+    MazeAction::MoveDown,
+    MazeAction::MoveLeft,
+];
+
 impl MazeAction {
     fn direction(self) -> Position {
         use MazeAction::*;
@@ -110,9 +108,10 @@ struct MazeMetrics {
     goals_reached: f64,
 }
 
-/// A procedurally generated maze with a single goal. Agents never block one
-/// another; each walks from its own spawn to the goal and is sent straight
-/// back to that spawn to do it again.
+/// A procedurally generated maze with the spawn where carving started and
+/// the goal at the end of its deepest branch, as far a walk from the spawn as
+/// the maze has. Agents never block one another; all of them start
+/// on the spawn, and each is sent straight back there on reaching the goal.
 #[derive(Debug, Clone)]
 pub struct Maze {
     pub config: MazeConfig,
@@ -164,11 +163,11 @@ impl Maze {
             config: config.clone(),
             state: MazeState {
                 rngs: SmallRng::seed_from_u64(0),
-                agents: Vec::with_capacity(config.num_agents),
+                positions: Vec::with_capacity(config.num_agents),
+                spawn: Position::default(),
                 time: 0,
                 base_map: Array2::from_elem(dim, MazeObs::TileWall),
                 map: Array2::from_elem(dim, MazeObs::TileWall),
-                cells: Vec::new(),
             },
             metrics: MazeMetrics::default(),
             length,
@@ -190,16 +189,14 @@ impl Maze {
     /// search: every cell is reachable from every other by exactly one path.
     /// Cells sit on the even interior coordinates, and the wall padding
     /// around the interior is the maze's outer wall.
-    fn carve_maze(&mut self) {
-        let MazeState {
-            rngs,
-            base_map,
-            cells,
-            ..
-        } = &mut self.state;
-
+    ///
+    /// Returns the cell the search started from and the deepest one it
+    /// reached. With no loops, the stack always holds the one path from the
+    /// start to the current cell, so the deepest cell is the furthest walk
+    /// from the start.
+    fn carve_maze(&mut self) -> (Position, Position) {
+        let MazeState { rngs, base_map, .. } = &mut self.state;
         base_map.fill(MazeObs::TileWall);
-        cells.clear();
 
         let cells_x = (self.config.width + 1) / 2;
         let cells_y = (self.config.height + 1) / 2;
@@ -210,20 +207,14 @@ impl Maze {
         let start = Position::new(rngs.random_range(0..cells_x), rngs.random_range(0..cells_y));
         visited[start.idx()] = true;
         base_map[to_map(start).idx()] = MazeObs::TileEmpty;
-        cells.push(to_map(start));
         let mut stack = vec![start];
+        let (mut deepest, mut depth) = (start, 0);
 
-        let steps = [
-            Position::new(0, 1),
-            Position::new(1, 0),
-            Position::new(0, -1),
-            Position::new(-1, 0),
-        ];
         while let Some(&cell) = stack.last() {
             let mut options = [Position::default(); 4];
             let mut count = 0;
-            for step in steps {
-                let next = cell + step;
+            for action in MOVES {
+                let next = cell + action.direction();
                 if next.x >= 0
                     && next.x < cells_x
                     && next.y >= 0
@@ -245,17 +236,22 @@ impl Maze {
             // knock out the wall between the two cells, then open the new one
             base_map[(to_map(cell) + next - cell).idx()] = MazeObs::TileEmpty;
             base_map[to_map(next).idx()] = MazeObs::TileEmpty;
-            cells.push(to_map(next));
             stack.push(next);
+
+            if stack.len() > depth {
+                (deepest, depth) = (next, stack.len());
+            }
         }
+
+        (to_map(start), to_map(deepest))
     }
 
     fn encode_observations(&self, timestep: &mut TimeStepMut) {
         let fov_height = self.config.view_height as usize;
-        for (agent_id, agent) in self.state.agents.iter().enumerate() {
+        for (agent_id, &position) in self.state.positions.iter().enumerate() {
             // wall padding keeps the view window inside the map
             let mut view = timestep.obs.slice_mut(s![agent_id, .., ..fov_height, 0]);
-            fov::observe(&self.state.map, agent.position, &mut view);
+            fov::observe(&self.state.map, position, &mut view);
 
             let mut ui = timestep.obs.slice_mut(s![agent_id, .., fov_height.., 0]);
             ui.fill(MazeObs::UI as VocabId);
@@ -267,10 +263,10 @@ impl Maze {
     }
 
     fn encode_action_mask(&self, timestep: &mut TimeStepMut) {
-        for (agent_id, agent) in self.state.agents.iter().enumerate() {
+        for (agent_id, &position) in self.state.positions.iter().enumerate() {
             let mut mask = timestep.action_mask.row_mut(agent_id);
             for &action in MazeAction::TABLE {
-                let target = agent.position + action.direction();
+                let target = position + action.direction();
                 mask[action as usize] = self.state.base_map[target.idx()] != MazeObs::TileWall;
             }
         }
@@ -282,40 +278,23 @@ impl Environment for Maze {
         self.state.rngs = SmallRng::seed_from_u64(seed);
         self.state.time = 0;
 
-        self.carve_maze();
+        let goal;
+        (self.state.spawn, goal) = self.carve_maze();
 
-        // the goal and the spawns are all distinct cells while there are
-        // enough to go round; past that, spawns double up
         let MazeState {
-            rngs,
-            cells,
-            agents,
+            positions,
+            spawn,
             base_map,
             map,
             ..
         } = &mut self.state;
-        cells.shuffle(rngs);
-        let goal = cells[0];
         base_map[goal.idx()] = MazeObs::TileGoal;
 
-        let spawns = &cells[1..];
-        agents.clear();
-        for agent_id in 0..self.config.num_agents {
-            let spawn = if self.config.shared_spawn {
-                spawns[0]
-            } else {
-                spawns[agent_id % spawns.len()]
-            };
-            agents.push(MazeAgent {
-                position: spawn,
-                spawn,
-            });
-        }
+        positions.clear();
+        positions.resize(self.config.num_agents, *spawn);
 
         map.assign(base_map);
-        for agent in agents.iter() {
-            map[agent.position.idx()] = MazeObs::AgentGeneric;
-        }
+        map[spawn.idx()] = MazeObs::AgentGeneric;
 
         timestep.reward.fill(0.0);
         timestep.last_action.fill(0);
@@ -325,7 +304,8 @@ impl Environment for Maze {
 
     fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
         let MazeState {
-            agents,
+            positions,
+            spawn,
             base_map,
             map,
             ..
@@ -333,31 +313,30 @@ impl Environment for Maze {
 
         // agents can share a cell, so lift them all off before any move and
         // paint them all back after
-        for agent in agents.iter() {
-            map[agent.position.idx()] = base_map[agent.position.idx()];
+        for position in positions.iter() {
+            map[position.idx()] = base_map[position.idx()];
         }
 
-        for (agent_id, agent) in agents.iter_mut().enumerate() {
+        for (agent_id, position) in positions.iter_mut().enumerate() {
             timestep.last_action[agent_id] = actions[agent_id];
             timestep.reward[agent_id] = 0.0;
 
             let action = MazeAction::from_id(actions[agent_id]);
-            let target = agent.position + action.direction();
-            if base_map[target.idx()] == MazeObs::TileWall {
-                continue;
-            }
-            agent.position = target;
-
-            if base_map[target.idx()] == MazeObs::TileGoal {
-                agent.position = agent.spawn;
-                timestep.reward[agent_id] = self.config.goal_reward;
-                self.metrics.reward += f64::from(self.config.goal_reward);
-                self.metrics.goals_reached += 1.0;
+            let target = *position + action.direction();
+            match base_map[target.idx()] {
+                MazeObs::TileWall => {}
+                MazeObs::TileGoal => {
+                    *position = *spawn;
+                    timestep.reward[agent_id] = self.config.goal_reward;
+                    self.metrics.reward += f64::from(self.config.goal_reward);
+                    self.metrics.goals_reached += 1.0;
+                }
+                _ => *position = target,
             }
         }
 
-        for agent in agents.iter() {
-            map[agent.position.idx()] = MazeObs::AgentGeneric;
+        for position in positions.iter() {
+            map[position.idx()] = MazeObs::AgentGeneric;
         }
 
         self.state.time += 1;
@@ -418,8 +397,8 @@ impl Environment for Maze {
         tilemap.zip_mut_with(&interior, |dst, &tile| *dst = tile.into());
 
         grid_render_state.agent_positions.clear();
-        for agent in &self.state.agents {
-            let local_pos = agent.position - Position::new(self.pad_width, self.pad_height);
+        for &position in &self.state.positions {
+            let local_pos = position - Position::new(self.pad_width, self.pad_height);
             grid_render_state.agent_positions.push(local_pos);
         }
     }
@@ -436,8 +415,7 @@ mod tests {
     use crate::timestep::TimeStepBuffers;
     use MazeAction::*;
     use MazeObs::*;
-    use rand::RngExt;
-    use std::collections::HashSet;
+    use std::collections::{HashSet, VecDeque};
 
     fn reset_env(config: MazeConfig, seed: u64) -> (Maze, TimeStepBuffers) {
         let mut env = Maze::new(&config, 512);
@@ -446,25 +424,40 @@ mod tests {
         (env, buffers)
     }
 
+    fn sized(width: i32, height: i32) -> MazeConfig {
+        MazeConfig {
+            width,
+            height,
+            ..Default::default()
+        }
+    }
+
     fn step(env: &mut Maze, buffers: &mut TimeStepBuffers, actions: &[MazeAction]) {
         let actions: Vec<VocabId> = actions.iter().map(|&a| a.into()).collect();
         env.step(&actions, &mut buffers.view_mut());
     }
 
     fn goal(env: &Maze) -> Position {
-        let ([x, y], _) = env
+        let ((x, y), _) = env
             .state
             .base_map
             .indexed_iter()
-            .map(|((x, y), &tile)| ([x, y], tile))
-            .find(|&(_, tile)| tile == TileGoal)
+            .find(|&(_, &tile)| tile == TileGoal)
             .expect("the maze has a goal");
         Position::new(x as i32, y as i32)
     }
 
-    /// The open cells next to `position`, as the move that reaches each.
+    fn open_tiles(env: &Maze) -> impl Iterator<Item = Position> + '_ {
+        env.state
+            .base_map
+            .indexed_iter()
+            .filter(|&(_, &tile)| tile != TileWall)
+            .map(|((x, y), _)| Position::new(x as i32, y as i32))
+    }
+
+    /// The moves out of `position` that do not walk into a wall.
     fn open_moves(env: &Maze, position: Position) -> Vec<MazeAction> {
-        [MoveUp, MoveRight, MoveDown, MoveLeft]
+        MOVES
             .into_iter()
             .filter(|&a| env.state.base_map[(position + a.direction()).idx()] != TileWall)
             .collect()
@@ -475,39 +468,65 @@ mod tests {
     #[test]
     fn the_maze_is_a_spanning_tree_over_every_cell() {
         for (width, height) in [(31, 31), (20, 9), (3, 1), (1, 7)] {
-            let (env, _) = reset_env(
-                MazeConfig {
-                    width,
-                    height,
-                    ..Default::default()
-                },
-                3,
-            );
-            let cells = ((width + 1) / 2 * ((height + 1) / 2)) as usize;
-            let open = env.state.base_map.map(|&tile| tile != TileWall);
-            let (_, sizes) = label_regions(&open);
+            for seed in 0..50 {
+                let (env, _) = reset_env(sized(width, height), seed);
+                let cells = ((width + 1) / 2 * ((height + 1) / 2)) as usize;
+                let open = env.state.base_map.map(|&tile| tile != TileWall);
+                let (_, sizes) = label_regions(&open);
 
-            assert_eq!(env.state.cells.len(), cells);
-            assert_eq!(sizes.iter().filter(|&&size| size > 0).count(), 1);
-            assert_eq!(
-                open.iter().filter(|&&o| o).count(),
-                2 * cells - 1,
-                "{width}x{height}"
-            );
-
-            // nothing open outside the interior
-            for ((x, y), &o) in open.indexed_iter() {
-                let (x, y) = (x as i32, y as i32);
-                if o {
-                    assert!(x >= env.pad_width && x < env.width - env.pad_width);
-                    assert!(y >= env.pad_height && y < env.height - env.pad_height);
+                assert_eq!(sizes.iter().filter(|&&size| size > 0).count(), 1);
+                assert_eq!(
+                    open_tiles(&env).count(),
+                    2 * cells - 1,
+                    "{width}x{height} seed {seed}"
+                );
+                for p in open_tiles(&env) {
+                    assert!(p.x >= env.pad_width && p.x < env.width - env.pad_width);
+                    assert!(p.y >= env.pad_height && p.y < env.height - env.pad_height);
                 }
             }
         }
     }
 
+    /// Walking distance from `from` to every open tile, by breadth-first
+    /// search; walls are `u32::MAX`.
+    fn walking_distances(map: &Array2<MazeObs>, from: Position) -> Array2<u32> {
+        let mut dist = Array2::from_elem(map.dim(), u32::MAX);
+        dist[from.idx()] = 0;
+        let mut queue = VecDeque::from([from]);
+        while let Some(position) = queue.pop_front() {
+            for action in MOVES {
+                let next = position + action.direction();
+                if map[next.idx()] != TileWall && dist[next.idx()] == u32::MAX {
+                    dist[next.idx()] = dist[position.idx()] + 1;
+                    queue.push_back(next);
+                }
+            }
+        }
+        dist
+    }
+
+    /// The deepest branch of the carving is the furthest walk from the
+    /// spawn: no open tile is further, checked by a separate search.
     #[test]
-    fn reset_places_one_goal_and_every_agent_on_its_own_spawn() {
+    fn the_goal_is_the_furthest_walk_from_the_spawn() {
+        for (width, height) in [(31, 31), (20, 9), (3, 1)] {
+            for seed in 0..50 {
+                let (env, _) = reset_env(sized(width, height), seed);
+                let dist = walking_distances(&env.state.base_map, env.state.spawn);
+                let furthest = open_tiles(&env).map(|p| dist[p.idx()]).max().unwrap();
+
+                assert_eq!(
+                    dist[goal(&env).idx()],
+                    furthest,
+                    "{width}x{height} seed {seed}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn reset_puts_every_agent_on_the_spawn() {
         let (env, buffers) = reset_env(MazeConfig::default(), 7);
 
         let goals = env
@@ -517,46 +536,26 @@ mod tests {
             .filter(|&&t| t == TileGoal)
             .count();
         assert_eq!(goals, 1);
+        assert_ne!(env.state.spawn, goal(&env));
+        assert_eq!(env.state.map[env.state.spawn.idx()], AgentGeneric);
 
-        let spawns: HashSet<_> = env.state.agents.iter().map(|a| a.spawn).collect();
-        assert_eq!(spawns.len(), env.num_agents(), "spawns are distinct");
-        assert!(!spawns.contains(&goal(&env)));
-        for agent in &env.state.agents {
-            assert_eq!(agent.position, agent.spawn);
-            assert_eq!(env.state.map[agent.position.idx()], AgentGeneric);
-        }
+        let open = open_moves(&env, env.state.spawn);
+        for (agent_id, &position) in env.state.positions.iter().enumerate() {
+            assert_eq!(position, env.state.spawn);
 
-        // walls are masked out, the noop never is
-        for (agent_id, agent) in env.state.agents.iter().enumerate() {
+            // walls are masked out, the noop never is
             let mask = buffers.action_mask.row(agent_id);
             assert!(mask[Noop as usize]);
-            for action in [MoveUp, MoveRight, MoveDown, MoveLeft] {
-                assert_eq!(
-                    mask[action as usize],
-                    open_moves(&env, agent.position).contains(&action)
-                );
+            for action in MOVES {
+                assert_eq!(mask[action as usize], open.contains(&action));
             }
         }
     }
 
+    /// Reaching the goal pays and sends the agent back to the spawn, every
+    /// time.
     #[test]
-    fn a_shared_spawn_starts_everyone_together() {
-        let (env, _) = reset_env(
-            MazeConfig {
-                shared_spawn: true,
-                ..Default::default()
-            },
-            7,
-        );
-        let spawns: HashSet<_> = env.state.agents.iter().map(|a| a.spawn).collect();
-        assert_eq!(spawns.len(), 1);
-        assert!(!spawns.contains(&goal(&env)));
-    }
-
-    /// Reaching the goal pays and sends the agent back to its own spawn, the
-    /// same one every time.
-    #[test]
-    fn the_goal_pays_and_returns_the_agent_to_its_spawn() {
+    fn the_goal_pays_and_returns_the_agent_to_the_spawn() {
         let (mut env, mut buffers) = reset_env(
             MazeConfig {
                 num_agents: 2,
@@ -565,24 +564,23 @@ mod tests {
             1,
         );
         let goal = goal(&env);
+        let spawn = env.state.spawn;
         // stand the agent next to the goal by hand, then step onto it
         let stand = goal + open_moves(&env, goal)[0].direction();
         let into_goal = open_moves(&env, stand)
             .into_iter()
             .find(|a| stand + a.direction() == goal)
             .unwrap();
-        let spawn = env.state.agents[0].spawn;
 
         for _ in 0..2 {
-            env.state.map[env.state.agents[0].position.idx()] = TileEmpty;
-            env.state.agents[0].position = stand;
+            env.state.positions[0] = stand;
             step(&mut env, &mut buffers, &[into_goal, Noop]);
 
             assert_eq!(buffers.reward[0], env.config.goal_reward);
             assert_eq!(buffers.reward[1], 0.0);
-            assert_eq!(env.state.agents[0].position, spawn);
+            assert_eq!(env.state.positions[0], spawn);
             assert_eq!(env.state.map[spawn.idx()], AgentGeneric);
-            assert_eq!(env.state.base_map[goal.idx()], TileGoal);
+            assert_eq!(env.state.map[goal.idx()], TileGoal);
         }
 
         assert_eq!(
@@ -598,12 +596,11 @@ mod tests {
         let (mut env, mut buffers) = reset_env(
             MazeConfig {
                 num_agents: 2,
-                shared_spawn: true,
                 ..Default::default()
             },
             5,
         );
-        let start = env.state.agents[0].position;
+        let start = env.state.spawn;
         let away = open_moves(&env, start)[0];
 
         step(&mut env, &mut buffers, &[away, Noop]);
@@ -614,7 +611,7 @@ mod tests {
         );
 
         step(&mut env, &mut buffers, &[Noop, away]);
-        assert_eq!(env.state.agents[0].position, env.state.agents[1].position);
+        assert_eq!(env.state.positions[0], env.state.positions[1]);
         assert_ne!(env.state.map[start.idx()], AgentGeneric);
     }
 
@@ -627,27 +624,22 @@ mod tests {
             },
             2,
         );
-        let start = env.state.agents[0].position;
+        let start = env.state.spawn;
         let open = open_moves(&env, start);
-        let blocked = [MoveUp, MoveRight, MoveDown, MoveLeft]
+        let blocked = MOVES
             .into_iter()
             .find(|a| !open.contains(a))
             .expect("a maze cell has a wall on some side");
 
         step(&mut env, &mut buffers, &[blocked]);
-        assert_eq!(env.state.agents[0].position, start);
+        assert_eq!(env.state.positions[0], start);
     }
 
     /// A full episode of random moves keeps every agent on open ground and
     /// painted on the map, and the maze itself never changes.
     #[test]
     fn a_random_rollout_keeps_the_world_consistent() {
-        let config = MazeConfig {
-            width: 15,
-            height: 15,
-            ..Default::default()
-        };
-        let mut env = Maze::new(&config, 512);
+        let mut env = Maze::new(&sized(15, 15), 512);
         let mut buffers = TimeStepBuffers::new(&env);
         let mut rng = SmallRng::seed_from_u64(11);
 
@@ -663,13 +655,13 @@ mod tests {
             }
 
             assert_eq!(env.state.base_map, maze, "on seed {seed}");
-            for agent in &env.state.agents {
-                assert_ne!(env.state.base_map[agent.position.idx()], TileWall);
-                assert_ne!(env.state.base_map[agent.position.idx()], TileGoal);
-                assert_eq!(env.state.map[agent.position.idx()], AgentGeneric);
+            for &position in &env.state.positions {
+                assert_ne!(env.state.base_map[position.idx()], TileWall);
+                assert_ne!(env.state.base_map[position.idx()], TileGoal);
+                assert_eq!(env.state.map[position.idx()], AgentGeneric);
             }
             let painted = env.state.map.iter().filter(|&&t| t == AgentGeneric).count();
-            let occupied: HashSet<_> = env.state.agents.iter().map(|a| a.position).collect();
+            let occupied: HashSet<_> = env.state.positions.iter().collect();
             assert_eq!(painted, occupied.len());
         }
         assert!(buffers.terminated.iter().all(|&t| t));

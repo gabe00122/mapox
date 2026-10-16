@@ -15,7 +15,6 @@ from mapox.envs.rust_env_numpy import (
     RustMazeConfig,
     RustPacmanConfig,
     RustScoutsConfig,
-    RustSnakeConfig,
     RustSurvivalConfig,
     RustVideoConfig,
 )
@@ -116,7 +115,6 @@ def run_ascii(
 CONFIGS = {
     "find_return": RustFindReturnConfig(),
     "scouts": RustScoutsConfig(),
-    "snake": RustSnakeConfig(),
     "pacman": RustPacmanConfig(),
     "survival": RustSurvivalConfig(),
     "maze": RustMazeConfig(),

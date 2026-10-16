@@ -92,23 +92,6 @@ class RustVideoConfig(BaseModel):
     crf: int = 23
 
 
-class RustSnakeConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-    env_type: Literal["rust_snake"] = "rust_snake"
-
-    num_agents: int = 16
-    width: int = 80
-    height: int = 70
-    view_width: int = 15
-    view_height: int = 15
-
-    # every open tile independently grows a pellet with this probability
-    # each step; snakes always start as a single cell on a bare board
-    food_spawn_prob: float = 0.0001
-    food_reward: float = 0.01
-    death_reward: float = 0.0
-
-
 class RustPacmanConfig(BaseModel):
     """Pac-Man on the classic maze. The maze is fixed, so there are no size
     keys; the view wraps through the side tunnel the way Pac-Man does."""
@@ -170,8 +153,10 @@ class RustSurvivalConfig(BaseModel):
 
 
 class RustMazeConfig(BaseModel):
-    """A generated perfect maze with one goal. Agents pass through each other,
-    and reaching the goal sends an agent back to its spawn."""
+    """A generated perfect maze with the spawn where carving started and the
+    goal at the end of its deepest branch, the furthest walk from the spawn.
+    Agents pass through each other, and reaching the goal sends an agent back
+    to the spawn."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
     env_type: Literal["rust_maze"] = "rust_maze"
@@ -186,8 +171,6 @@ class RustMazeConfig(BaseModel):
     view_height: int = 15
 
     goal_reward: float = 1.0
-    # every agent shares one spawn instead of having its own
-    shared_spawn: bool = False
 
 
 class RustVecConfig(BaseModel):
@@ -225,7 +208,6 @@ class RustMultiConfig(BaseModel):
 type RustEnvConfig = (
     RustFindReturnConfig
     | RustScoutsConfig
-    | RustSnakeConfig
     | RustPacmanConfig
     | RustSurvivalConfig
     | RustMazeConfig

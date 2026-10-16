@@ -134,7 +134,6 @@ mod tests {
     use crate::envs::find_return::{FindReturn, FindReturnConfig};
     use crate::envs::pacman::{Pacman, PacmanConfig};
     use crate::envs::scouts::{Scouts, ScoutsConfig};
-    use crate::envs::snake::{Snake, SnakeConfig};
     use crate::envs::survival::{Survival, config::SurvivalConfig};
     use egui::{Event, Modifiers};
 
@@ -142,7 +141,6 @@ mod tests {
         vec![
             Box::new(FindReturn::new(&FindReturnConfig::default(), 512)),
             Box::new(Scouts::new(&ScoutsConfig::default(), 512)),
-            Box::new(Snake::new(&SnakeConfig::default(), 512)),
             Box::new(Pacman::new(&PacmanConfig::default(), 512)),
             Box::new(Survival::new(&SurvivalConfig::default(), 512)),
         ]

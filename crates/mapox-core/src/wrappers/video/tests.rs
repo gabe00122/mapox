@@ -1,6 +1,6 @@
 use super::*;
 use crate::{
-    envs::snake::{Snake, SnakeConfig},
+    envs::maze::{Maze, MazeConfig},
     timestep::TimeStepBuffers,
 };
 use std::path::Path;
@@ -32,8 +32,8 @@ impl Drop for TestDir {
     }
 }
 
-fn snake_config() -> SnakeConfig {
-    SnakeConfig {
+fn maze_config() -> MazeConfig {
+    MazeConfig {
         num_agents: 1,
         width: 8,
         height: 8,
@@ -41,12 +41,12 @@ fn snake_config() -> SnakeConfig {
     }
 }
 
-fn snake() -> Snake {
-    Snake::new(&snake_config(), 64)
+fn maze() -> Maze {
+    Maze::new(&maze_config(), 64)
 }
 
 struct ObservedEnv {
-    inner: Snake,
+    inner: Maze,
     settings_calls: Arc<AtomicUsize>,
     render_calls: Arc<AtomicUsize>,
 }
@@ -91,10 +91,10 @@ impl Environment for ObservedEnv {
     }
 }
 
-/// The python `RustVideoConfig` defaults, wrapping the same snake board [`snake`] builds.
+/// The python `RustVideoConfig` defaults, wrapping the same maze [`maze`] builds.
 fn video_config() -> VideoConfig {
     VideoConfig {
-        env: EnvConfig::RustSnake(Box::new(snake_config())),
+        env: EnvConfig::RustMaze(Box::new(maze_config())),
         output_dir: PathBuf::from("videos"),
         record_steps: 256,
         interval_steps: Some(10_000),
@@ -110,7 +110,7 @@ fn observed(config: VideoConfig) -> (VideoWrapper, Arc<AtomicUsize>, Arc<AtomicU
     let settings = Arc::new(AtomicUsize::new(0));
     let renders = Arc::new(AtomicUsize::new(0));
     let env = ObservedEnv {
-        inner: snake(),
+        inner: maze(),
         settings_calls: settings.clone(),
         render_calls: renders.clone(),
     };
@@ -138,7 +138,7 @@ fn inactive_and_failed_recording_preserve_training_without_rendering_or_retries(
         height: 96,
         ..video_config()
     });
-    let mut plain = snake();
+    let mut plain = maze();
     let mut actual = TimeStepBuffers::new(&video);
     let mut expected = TimeStepBuffers::new(&plain);
     video.reset(7, &mut actual.view_mut());

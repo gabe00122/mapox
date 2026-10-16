@@ -106,7 +106,7 @@ impl RgbRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::symbols::{AGENT_SNAKE_BLUE, TILE_WALL};
+    use crate::symbols::{AGENT_SCOUT, TILE_WALL};
     use ndarray::Array2;
 
     #[test]
@@ -114,7 +114,7 @@ mod tests {
         let settings = GridRenderSettings {
             tile_width: 1,
             tile_height: 1,
-            obs_vocab: [TILE_WALL, AGENT_SNAKE_BLUE].into_iter().collect(),
+            obs_vocab: [TILE_WALL, AGENT_SCOUT].into_iter().collect(),
             ..Default::default()
         };
         let mut tile = RgbRenderer::new(&settings, 12, 12).unwrap();
@@ -124,8 +124,8 @@ mod tests {
         };
         let wall = tile.render(&state).unwrap().to_vec();
         state.tilemap.fill(1);
-        let blue = tile.render(&state).unwrap().to_vec();
-        assert_ne!(wall, blue);
+        let scout = tile.render(&state).unwrap().to_vec();
+        assert_ne!(wall, scout);
 
         let mut renderer = RgbRenderer::new(
             &GridRenderSettings {
@@ -141,7 +141,7 @@ mod tests {
         for y in 0..24 {
             let row = &frame[y * 72..(y + 1) * 72];
             assert!(row[..18].iter().chain(&row[54..]).all(|&p| p == 0));
-            let expected = if y < 12 { &blue } else { &wall };
+            let expected = if y < 12 { &scout } else { &wall };
             assert_eq!(&row[18..54], &expected[(y % 12) * 36..(y % 12 + 1) * 36]);
         }
         state.tilemap.fill(2);

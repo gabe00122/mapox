@@ -9,13 +9,11 @@ from mapox.envs.rust_env_numpy import (
     RustMazeConfig,
     RustPacmanConfig,
     RustScoutsConfig,
-    RustSnakeConfig,
 )
 
 CONFIGS = {
     "find_return": RustFindReturnConfig(num_agents=2, width=12, height=12),
     "scouts": RustScoutsConfig(num_scouts=1, num_harvesters=1, width=12, height=12),
-    "snake": RustSnakeConfig(num_agents=2, width=12, height=12),
     "pacman": RustPacmanConfig(),
     "maze": RustMazeConfig(num_agents=2, width=11, height=11),
 }

@@ -104,20 +104,6 @@ GRASS_DIM_LIGHT = hex_color("3b6343")
 GRASS = hex_color("3f9a4a")
 GRASS_LIGHT = hex_color("6fd26a")
 
-# Snake colours, in the order of the AGENT_SNAKE_* symbols they draw.
-SNAKE_COLORS = {
-    "red": "e5383f",
-    "orange": "f77f22",
-    "yellow": "fae255",
-    "gold": "c99a1e",
-    "green": "3ec54b",
-    "blue": "3a78ff",
-    "purple": "9d4edd",
-    "pink": "ff6fb5",
-    "gray": "8b93a1",
-    "white": "f2f2ee",
-}
-
 UI_DIGIT = hex_color("e8ecf4")
 UI_DIGIT_SHADOW = hex_color("161a26")
 
@@ -644,39 +630,6 @@ TURTLE_PALETTE = {
     "S": hex_color("a6c77a"),
     "E": EYE,
 }
-
-
-def snake_segment(base: Color, eyes: bool = False) -> Sprite:
-    """A rounded body scale. Heads and tails share this tile, so the colour
-    alone carries the owner; the 1px floor gap shows each segment."""
-    sprite = floor()
-    light = mix(base, (255, 255, 255), 0.35)
-    shade = scale(base, 0.62)
-    edge = scale(base, 0.35)
-    lo, hi = 1, TILE - 2
-    for y in range(lo, hi + 1):
-        for x in range(lo, hi + 1):
-            corner = (x in (lo, hi)) and (y in (lo, hi))
-            if corner:
-                continue
-            if x in (lo, hi) or y in (lo, hi):
-                color = edge
-            elif y == lo + 1 or x == lo + 1:
-                color = light
-            elif y == hi - 1 or x == hi - 1:
-                color = shade
-            else:
-                color = base
-            sprite[y][x] = color
-    # a diamond of scale texture in the middle
-    for x, y in [(5, 4), (4, 5), (6, 5), (5, 6)]:
-        sprite[y][x] = shade
-    if eyes:
-        for x in (3, 7):
-            sprite[3][x] = sprite[3][x + 1] = (255, 255, 255)
-            sprite[4][x] = (255, 255, 255)
-            sprite[4][x + 1] = OUTLINE
-    return sprite
 
 
 def facing_pip(sprite: Sprite, direction: int, color: Color) -> Sprite:
@@ -1327,11 +1280,9 @@ def build_sheet() -> list[list[Sprite]]:
         stamp(floor(), AGENT, AGENT_PALETTE),
         stamp(floor(), RABBIT, RABBIT_PALETTE),
         stamp(floor(), TURTLE, TURTLE_PALETTE),
-        snake_segment(hex_color(SNAKE_COLORS["green"]), eyes=True),
         # Lush grass is terrain, but row 0 is full.
         decor(GRASS_TILE, {"g": GRASS, "l": GRASS_LIGHT}),
     ]
-    snakes = [snake_segment(hex_color(c)) for c in SNAKE_COLORS.values()]
 
     def team_row(team: Color) -> list[Sprite]:
         knights = [
@@ -1464,7 +1415,6 @@ def build_sheet() -> list[list[Sprite]]:
     return [
         terrain,
         items,
-        snakes,
         team_row(TEAM_RED),
         team_row(TEAM_BLUE),
         digits,

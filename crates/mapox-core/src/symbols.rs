@@ -32,7 +32,6 @@ pub const TILE_FLAG_UNLOCKED: &str = "tile/flag_unlocked";
 pub const TILE_ARROW: &str = "tile/arrow";
 pub const TILE_GRASS: &str = "tile/grass";
 pub const TILE_WATER: &str = "tile/water";
-pub const TILE_FOOD: &str = "tile/food";
 pub const TILE_PELLET: &str = "tile/pellet";
 pub const TILE_POWER_PELLET: &str = "tile/power_pellet";
 pub const TILE_TREE: &str = "tile/tree";
@@ -90,16 +89,6 @@ pub const AGENT_PREY: &str = "agent/prey";
 pub const AGENT_PREDATOR: &str = "agent/predator";
 pub const AGENT_KNIGHT: &str = "agent/knight";
 pub const AGENT_ARCHER: &str = "agent/archer";
-pub const AGENT_SNAKE_RED: &str = "agent/snake_red";
-pub const AGENT_SNAKE_ORANGE: &str = "agent/snake_orange";
-pub const AGENT_SNAKE_YELLOW: &str = "agent/snake_yellow";
-pub const AGENT_SNAKE_GOLD: &str = "agent/snake_gold";
-pub const AGENT_SNAKE_GREEN: &str = "agent/snake_green";
-pub const AGENT_SNAKE_BLUE: &str = "agent/snake_blue";
-pub const AGENT_SNAKE_PURPLE: &str = "agent/snake_purple";
-pub const AGENT_SNAKE_PINK: &str = "agent/snake_pink";
-pub const AGENT_SNAKE_GRAY: &str = "agent/snake_gray";
-pub const AGENT_SNAKE_WHITE: &str = "agent/snake_white";
 /// Pac-Man by heading, in `MOVES` order: the heading is state (a move into a
 /// wall keeps it going that way), so the tile carries it.
 pub const AGENT_PACMAN_UP: &str = "agent/pacman_up";
