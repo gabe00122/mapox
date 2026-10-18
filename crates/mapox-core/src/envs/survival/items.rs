@@ -11,7 +11,6 @@ use crate::envs::{
         plants::{Chopable, ItemProducer},
         prototypes::Prototype,
         refine::RefineType,
-        world::Agent,
     },
 };
 
@@ -31,8 +30,26 @@ pub(super) enum ItemType {
     Apple,
 }
 
-/// The chance digging out a wall leaves a rock behind.
-const DIG_ROCK_CHANCE: f64 = 0.1;
+pub(super) struct ItemDrop {
+    drop: ItemType,
+    prob: f64,
+}
+
+impl SurvivalObs {
+    fn is_minable(&self) -> bool {
+        matches!(self, SurvivalObs::TileDestructibleWall)
+    }
+
+    fn mine_drop(&self) -> Option<ItemDrop> {
+        match self {
+            SurvivalObs::TileDestructibleWall => Some(ItemDrop {
+                drop: ItemType::Rock,
+                prob: 0.1,
+            }),
+            _ => None,
+        }
+    }
+}
 
 // requirement, requirement, product
 const RECIPES: &[(ItemType, ItemType, ItemType)] = &[
@@ -83,12 +100,6 @@ pub(super) struct Inventory {
     pub back: Option<ItemType>,
 }
 
-// Each item action is split in two: a `plan_*` works out what it would do
-// without changing anything, or `None` when it would do nothing, and the
-// `item_*` applies that plan. The action mask is `plan_*(id).is_some()`, so the mask and the action
-// can't disagree. The plans run again when the action does: other agents move
-// first, so a plan made when the mask was encoded may no longer hold.
-
 pub(super) enum UsePlan {
     Eat(i32),
     PlaceCampfire(Position),
@@ -97,7 +108,10 @@ pub(super) enum UsePlan {
         at: Position,
         drop: Option<ItemType>,
     },
-    Dig(Position),
+    Dig {
+        at: Position,
+        drop: Option<ItemDrop>,
+    },
 }
 
 pub(super) enum PutPlan {
@@ -162,9 +176,12 @@ impl SurvivalState {
                     drop: chopable.item,
                 })
             }
-            ItemType::StonePickaxe => (self.tiles[target_pos.idx()]
-                == SurvivalObs::TileDestructibleWall)
-                .then_some(UsePlan::Dig(target_pos)),
+            ItemType::StonePickaxe if self.tiles[target_pos.idx()].is_minable() => {
+                Some(UsePlan::Dig {
+                    at: target_pos,
+                    drop: self.tiles[target_pos.idx()].mine_drop(),
+                })
+            }
             _ => None,
         }
     }
@@ -266,11 +283,12 @@ impl Survival {
                     self.state.spawn_prototype(Prototype::Item(drop), at);
                 }
             }
-            UsePlan::Dig(at) => {
+            UsePlan::Dig { at, drop } => {
                 self.state.tiles[at.idx()] = SurvivalObs::TileEmpty;
-                if self.state.rngs.random_bool(DIG_ROCK_CHANCE) {
-                    self.state
-                        .spawn_prototype(Prototype::Item(ItemType::Rock), at);
+                if let Some(drop) = drop
+                    && self.state.rngs.random_bool(drop.prob)
+                {
+                    self.state.spawn_prototype(Prototype::Item(drop.drop), at);
                 }
             }
         }

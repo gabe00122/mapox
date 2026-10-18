@@ -313,8 +313,6 @@ class RustEnvNumpy:
         return self._timestep
 
     def step(self, action: np.ndarray) -> TimeStep:
-        if np.any(action < 0) or np.any(action > np.iinfo(np.uint16).max):
-            raise ValueError("action id outside the Rust VocabId range")
         self._inner.step(
             np.ascontiguousarray(action, dtype=np.uint16),
             self._obs,
