@@ -6,12 +6,6 @@ use crate::{
     vocab_enum,
 };
 
-// pub const TAKE: &str = "item/take";
-// pub const PUT: &str = "item/put";
-// pub const SWAP: &str = "item/swap";
-// pub const COMBINE: &str = "item/combine";
-// pub const USE: &str = "item/use";
-
 vocab_enum!(pub(super) SurvivalAction {
     MoveUp => MOVE_UP,
     MoveRight => MOVE_RIGHT,

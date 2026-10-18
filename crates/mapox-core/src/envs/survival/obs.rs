@@ -173,12 +173,12 @@ impl Survival {
                 );
             }
 
-            // draw inventory
-            if let Some(hands) = inventory.hand {
-                ui[(0, 0)] = hands.obs().into();
-            }
-            if let Some(back) = inventory.back {
-                ui[(1, 0)] = back.obs().into();
+            for (i, slot) in inventory.slots.iter().enumerate() {
+                ui[(i, 0)] = if let Some(slot) = slot {
+                    slot.obs().into()
+                } else {
+                    SurvivalObs::TileEmpty.into()
+                }
             }
 
             timestep.reward[agent_index] = agent.reward;

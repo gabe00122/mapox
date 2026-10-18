@@ -12,9 +12,9 @@ use crate::{
     render::env::{GridRenderSettings, GridRenderState},
     spec::{ActionSpec, ObservationSpec},
     symbols::{
-        AGENT_HARVESTER, AGENT_SCOUT, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, NOOP,
-        TILE_DECOR_1, TILE_DECOR_2, TILE_DECOR_3, TILE_DECOR_4, TILE_EMPTY, TILE_FLAG,
-        TILE_FLAG_UNLOCKED, TILE_MASK, TILE_UI, TILE_WALL, TILE_WATER,
+        AGENT_HARVESTER, AGENT_SCOUT, DIG_ACTION, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, NOOP,
+        TILE_DECOR_1, TILE_DECOR_2, TILE_DECOR_3, TILE_DECOR_4, TILE_DESTRUCTIBLE_WALL, TILE_EMPTY,
+        TILE_FLAG, TILE_FLAG_UNLOCKED, TILE_MASK, TILE_UI, TILE_WALL, TILE_WATER,
     },
     timestep::TimeStepMut,
     vocab::{VocabId, Vocabulary},
@@ -36,6 +36,8 @@ pub struct ScoutsConfig {
     pub water_threshold: f32,
 
     pub harvesters_move_every: u32,
+    /// Steps a harvester stands frozen after digging out a wall.
+    pub digging_timeout: u32,
 
     pub scout_reward: f32,
     pub harvester_reward: f32,
@@ -54,6 +56,7 @@ impl Default for ScoutsConfig {
             mapgen_threshold: 0.07,
             water_threshold: -0.45,
             harvesters_move_every: 6,
+            digging_timeout: 5,
             scout_reward: 1.0,
             harvester_reward: 1.0,
         }
@@ -79,6 +82,7 @@ impl Role {
 struct ScoutsAgent {
     role: Role,
     position: Position,
+    dir: Position, // the way it last tried to move, which is where it digs
     timeout: u32,
 }
 
@@ -98,6 +102,7 @@ vocab_enum!(ScoutsObs {
     UI => TILE_UI,
     Mask => TILE_MASK,
     TileEmpty => TILE_EMPTY,
+    TileDestructibleWall => TILE_DESTRUCTIBLE_WALL,
     TileWall => TILE_WALL,
     TileWater => TILE_WATER,
     TileFlag => TILE_FLAG,
@@ -113,12 +118,16 @@ vocab_enum!(ScoutsObs {
 impl ScoutsObs {
     fn blocked(self) -> bool {
         use ScoutsObs::*;
-        matches!(self, TileWall | TileWater)
+        matches!(self, TileWall | TileDestructibleWall | TileWater)
     }
 
     fn spawnable(self) -> bool {
         use ScoutsObs::*;
         !self.blocked() && !matches!(self, TileFlag | TileFlagUnlocked)
+    }
+
+    fn destructible(self) -> bool {
+        matches!(self, ScoutsObs::TileDestructibleWall)
     }
 }
 
@@ -126,7 +135,7 @@ impl fov::ViewTile for ScoutsObs {
     const MASK: Self = ScoutsObs::Mask;
 
     fn opaque(self) -> bool {
-        matches!(self, ScoutsObs::TileWall)
+        matches!(self, ScoutsObs::TileWall | ScoutsObs::TileDestructibleWall)
     }
 }
 
@@ -135,6 +144,7 @@ vocab_enum!(ScoutsAction {
     MoveRight => MOVE_RIGHT,
     MoveDown => MOVE_DOWN,
     MoveLeft => MOVE_LEFT,
+    Dig => DIG_ACTION,
     Noop => NOOP,
 });
 
@@ -146,8 +156,13 @@ impl ScoutsAction {
             MoveRight => Position::new(1, 0),
             MoveDown => Position::new(0, -1),
             MoveLeft => Position::new(-1, 0),
-            Noop => Position::new(0, 0),
+            Dig | Noop => Position::new(0, 0),
         }
+    }
+
+    fn is_move(self) -> bool {
+        use ScoutsAction::*;
+        matches!(self, MoveUp | MoveRight | MoveDown | MoveLeft)
     }
 }
 
@@ -300,15 +315,22 @@ impl Scouts {
         timestep.task_ids.fill(0);
     }
 
+    /// Only a harvester digs, and only with a destructible wall in front of
+    /// it; a scout's dig is always masked out.
     fn encode_action_mask(&self, timestep: &mut TimeStepMut) {
         timestep.action_mask.fill(true);
 
         for (agent_id, agent) in self.state.agents.iter().enumerate() {
+            let mut mask = timestep.action_mask.row_mut(agent_id);
             if agent.timeout > 0 {
-                let mut mask = timestep.action_mask.row_mut(agent_id);
                 mask.fill(false);
                 mask[ScoutsAction::Noop as usize] = true;
+                continue;
             }
+
+            let target = agent.position + agent.dir;
+            mask[ScoutsAction::Dig as usize] =
+                agent.role == Role::Harvester && self.state.base_map[target.idx()].destructible();
         }
     }
 }
@@ -337,7 +359,7 @@ impl Environment for Scouts {
             &mut self.state.rngs,
             |x, y, sample| {
                 interior[[x, y]] = if sample > self.config.mapgen_threshold {
-                    ScoutsObs::TileWall
+                    ScoutsObs::TileDestructibleWall
                 } else if sample < self.config.water_threshold {
                     ScoutsObs::TileWater
                 } else {
@@ -383,6 +405,7 @@ impl Environment for Scouts {
             self.state.agents.push(ScoutsAgent {
                 role,
                 position,
+                dir: Position::new(0, 0),
                 timeout: 0,
             });
         }
@@ -411,8 +434,23 @@ impl Environment for Scouts {
                 agent.timeout = self.config.harvesters_move_every.saturating_sub(1);
             }
 
-            let (role, from) = (agent.role, agent.position);
-            let target = from + ScoutsAction::from_id(actions[agent_id]).direction();
+            let action = ScoutsAction::from_id(actions[agent_id]);
+            if action.is_move() {
+                agent.dir = action.direction();
+            }
+
+            if action == ScoutsAction::Dig {
+                let target = agent.position + agent.dir;
+                if agent.role == Role::Harvester && self.state.base_map[target.idx()].destructible()
+                {
+                    self.state.base_map[target.idx()] = ScoutsObs::TileEmpty;
+                    agent.timeout = self.config.digging_timeout;
+                }
+                continue;
+            }
+
+            let role = agent.role;
+            let target = agent.position + action.direction();
 
             // Only terrain stops an agent: agents walk over each other,
             // whichever role they are.
@@ -552,6 +590,7 @@ mod tests {
             env.state.agents.push(ScoutsAgent {
                 role,
                 position,
+                dir: Position::new(0, 0),
                 timeout: 0,
             });
             env.state.map[position.idx()] = role.tile();
@@ -835,7 +874,7 @@ mod tests {
 
     /// A resting harvester is frozen, and the mask says so: through the steps
     /// between its moves the noop is the only action it may send, while the
-    /// scout beside it keeps the full set.
+    /// scout beside it keeps every move.
     #[test]
     fn a_resting_harvester_is_masked_to_the_noop() {
         let mut env = empty_env_with(ScoutsConfig {
@@ -866,7 +905,7 @@ mod tests {
                 "a resting harvester has one action"
             );
             assert!(mask[ScoutsAction::Noop as usize]);
-            assert!(buffers.action_mask.row(0).iter().all(|&legal| legal));
+            assert_eq!(buffers.action_mask.row(0), free_mask(false));
 
             step(
                 &mut env,
@@ -876,11 +915,129 @@ mod tests {
         }
 
         // ... and it is free again on the step it may move
-        assert!(buffers.action_mask.row(1).iter().all(|&legal| legal));
+        assert_eq!(buffers.action_mask.row(1), free_mask(false));
     }
 
-    /// Water stops feet but not eyes, and unlike find_return's terrain there is
-    /// no digging here, so a lake is a permanent divide.
+    /// The mask of an agent free to act: every move and the noop, and the
+    /// dig only when `can_dig`.
+    fn free_mask(can_dig: bool) -> ndarray::Array1<bool> {
+        ScoutsAction::TABLE
+            .iter()
+            .map(|&action| action != ScoutsAction::Dig || can_dig)
+            .collect()
+    }
+
+    /// A harvester digs out the wall it is facing for good, and pays
+    /// `digging_timeout` frozen steps for it, masked to the noop throughout;
+    /// the first free step after walks into the hole.
+    #[test]
+    fn a_harvester_digs_through_a_wall_and_freezes() {
+        let mut env = empty_env_with(ScoutsConfig {
+            num_scouts: 1,
+            num_harvesters: 1,
+            num_treasures: 0,
+            width: 21,
+            height: 21,
+            harvesters_move_every: 1,
+            digging_timeout: 3,
+            ..Default::default()
+        });
+        let start = center(&env);
+        let wall = start + Position::new(1, 0);
+        place_treasure(&mut env, wall, TileDestructibleWall);
+        spawn_agents(&mut env, &[start + Position::new(0, 5), start]);
+
+        use ScoutsAction::*;
+        let mut buffers = TimeStepBuffers::new(&env);
+        step(&mut env, &mut buffers, &[Noop, MoveRight]); // face the wall, do not pass
+        assert_eq!(env.state.agents[1].position.idx(), start.idx());
+        assert_eq!(buffers.action_mask.row(1), free_mask(true));
+
+        step(&mut env, &mut buffers, &[Noop, Dig]);
+        assert_eq!(env.state.base_map[wall.idx()], TileEmpty);
+        assert_eq!(env.state.map[wall.idx()], TileEmpty);
+
+        for _ in 0..env.config.digging_timeout {
+            let mask = buffers.action_mask.row(1);
+            assert_eq!(mask.iter().filter(|&&legal| legal).count(), 1);
+            assert!(mask[Noop as usize]);
+            step(&mut env, &mut buffers, &[Noop, MoveRight]); // frozen: ignored
+            assert_eq!(env.state.agents[1].position.idx(), start.idx());
+        }
+
+        step(&mut env, &mut buffers, &[Noop, MoveRight]);
+        assert_eq!(env.state.agents[1].position.idx(), wall.idx());
+    }
+
+    /// Scouts have no dig: facing a destructible wall the action stays
+    /// masked, and sent anyway it leaves the wall standing and the scout free.
+    #[test]
+    fn a_scout_cannot_dig() {
+        let mut env = empty_env();
+        let start = center(&env);
+        let wall = start + Position::new(1, 0);
+        place_treasure(&mut env, wall, TileDestructibleWall);
+        spawn_agents(&mut env, &[start, start + Position::new(0, 5)]);
+
+        use ScoutsAction::*;
+        let mut buffers = TimeStepBuffers::new(&env);
+        step(&mut env, &mut buffers, &[MoveRight, Noop]);
+        assert_eq!(env.state.agents[0].position.idx(), start.idx());
+        assert_eq!(buffers.action_mask.row(0), free_mask(false));
+
+        step(&mut env, &mut buffers, &[Dig, Noop]);
+        assert_eq!(env.state.base_map[wall.idx()], TileDestructibleWall);
+        assert_eq!(env.state.agents[0].timeout, 0);
+    }
+
+    /// A dig with nothing destructible in front is masked out, and the
+    /// border wall is not destructible: a harvester cannot dig off the map.
+    #[test]
+    fn harvesters_cannot_dig_the_border() {
+        let mut env = empty_env_with(ScoutsConfig {
+            num_scouts: 1,
+            num_harvesters: 1,
+            num_treasures: 0,
+            width: 21,
+            height: 21,
+            harvesters_move_every: 1,
+            ..Default::default()
+        });
+        let edge = Position::new(env.pad_width, env.height / 2);
+        spawn_agents(&mut env, &[edge + Position::new(0, 5), edge]);
+
+        use ScoutsAction::*;
+        let mut buffers = TimeStepBuffers::new(&env);
+        step(&mut env, &mut buffers, &[Noop, MoveLeft]);
+        assert_eq!(buffers.action_mask.row(1), free_mask(false));
+
+        step(&mut env, &mut buffers, &[Noop, Dig]);
+        assert_eq!(
+            env.state.base_map[(edge + Position::new(-1, 0)).idx()],
+            TileWall
+        );
+        assert_eq!(env.state.agents[1].timeout, 0);
+    }
+
+    /// Generated walls inside the map are all diggable; only the padding
+    /// around it is the solid kind.
+    #[test]
+    fn generated_inner_walls_are_destructible() {
+        let mut env = Scouts::new(&ScoutsConfig::default(), 256);
+        let mut buffers = TimeStepBuffers::new(&env);
+        env.reset(3, &mut buffers.view_mut());
+
+        let interior = env.state.base_map.slice(s![
+            env.pad_width as usize..(env.width - env.pad_width) as usize,
+            env.pad_height as usize..(env.height - env.pad_height) as usize,
+        ]);
+        assert!(!interior.iter().any(|&tile| tile == TileWall));
+        assert!(interior.iter().any(|&tile| tile == TileDestructibleWall));
+        assert_eq!(env.state.base_map[[0, 0]], TileWall);
+    }
+
+    /// Water stops feet but not eyes, and unlike a wall no one can dig
+    /// through it, so a lake is a permanent divide.
     #[test]
     fn water_blocks_movement_but_not_sight() {
         let mut env = empty_env();

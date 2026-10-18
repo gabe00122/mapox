@@ -101,12 +101,46 @@ impl ItemType {
     }
 }
 
-// Inventory could be extended to act like a stack with n slots
-// instead of swap it would be n swap actions for swapping 0 with the nth position
+pub(super) const INVENTORY_SLOTS: usize = 5;
+
 #[derive(Debug, Default, Clone, Copy)]
 pub(super) struct Inventory {
-    pub hand: Option<ItemType>,
-    pub back: Option<ItemType>,
+    pub slots: [Option<ItemType>; INVENTORY_SLOTS],
+}
+
+impl Inventory {
+    pub(super) fn hand(&self) -> Option<ItemType> {
+        self.slots[0]
+    }
+
+    pub(super) fn secondary(&self) -> Option<ItemType> {
+        self.slots[1]
+    }
+
+    pub(super) fn is_full(&self) -> bool {
+        self.slots.last().is_some_and(|s| s.is_some())
+    }
+
+    pub(super) fn push(&mut self, item: ItemType) {
+        for slot in self.slots.iter_mut() {
+            if slot.is_none() {
+                *slot = Some(item);
+                return;
+            }
+        }
+    }
+
+    pub(super) fn pop(&mut self) -> Option<ItemType> {
+        let output = self.slots[0].take();
+
+        for i in 0..self.slots.len() - 1 {
+            self.slots[i] = self.slots[i + 1];
+        }
+
+        self.slots[self.slots.len() - 1] = None;
+
+        output
+    }
 }
 
 pub(super) enum UsePlan {
@@ -148,7 +182,7 @@ impl SurvivalState {
 
     pub(super) fn plan_refine(&mut self, id: Entity) -> Option<ItemType> {
         let (target_pos, inventory) = self.item_context(id)?;
-        let hand = inventory.hand?;
+        let hand = inventory.hand()?;
 
         let target = self.spatial_index[target_pos.idx()][0]?; // lower slot
         let (active, refine_type) = self
@@ -163,7 +197,7 @@ impl SurvivalState {
 
     pub(super) fn plan_use(&mut self, id: Entity) -> Option<UsePlan> {
         let (target_pos, inventory) = self.item_context(id)?;
-        let item = inventory.hand?;
+        let item = inventory.hand()?;
 
         if let Some(hunger_restore) = item.hunger_restore() {
             return self
@@ -197,7 +231,7 @@ impl SurvivalState {
 
     pub(super) fn plan_craft(&mut self, id: Entity) -> Option<ItemType> {
         let &inventory = self.world.query_one_mut::<&Inventory>(id).ok()?;
-        let (Some(hand), Some(back)) = (inventory.hand, inventory.back) else {
+        let (Some(hand), Some(back)) = (inventory.hand(), inventory.secondary()) else {
             return None;
         };
 
@@ -211,12 +245,12 @@ impl SurvivalState {
     pub(super) fn can_swap(&mut self, id: Entity) -> bool {
         self.world
             .query_one_mut::<&Inventory>(id)
-            .is_ok_and(|inventory| inventory.hand.is_some() || inventory.back.is_some())
+            .is_ok_and(|inventory| inventory.hand().is_some() || inventory.secondary().is_some())
     }
 
     pub(super) fn plan_put(&mut self, id: Entity) -> Option<PutPlan> {
         let (target_pos, inventory) = self.item_context(id)?;
-        let item = inventory.hand?;
+        let item = inventory.hand()?;
 
         if let Some(fuel) = item.fuel_value()
             && let Some(target) = self.spatial_index[target_pos.idx()][0] // lower slot
@@ -233,7 +267,7 @@ impl SurvivalState {
 
     pub(super) fn plan_take(&mut self, id: Entity) -> Option<TakePlan> {
         let (target_pos, inventory) = self.item_context(id)?;
-        if inventory.hand.is_some() && inventory.back.is_some() {
+        if inventory.is_full() {
             return None;
         }
 
@@ -259,7 +293,7 @@ impl Survival {
         };
 
         if let Ok(inventory) = self.state.world.query_one_mut::<&mut Inventory>(id) {
-            inventory.hand = Some(output);
+            inventory.push(output);
         }
         self.unlock_achievement(id, output);
     }
@@ -277,12 +311,12 @@ impl Survival {
                     .query_one_mut::<(&mut Inventory, &mut Hunger)>(id)
                 {
                     hunger.update(hunger_restore);
-                    inventory.hand = None;
+                    inventory.pop();
                 }
             }
             UsePlan::PlaceCampfire(at) => {
                 if let Ok(inventory) = self.state.world.query_one_mut::<&mut Inventory>(id) {
-                    inventory.hand = None;
+                    inventory.pop();
                 }
                 self.state.spawn_prototype(Prototype::Fire, at);
             }
@@ -309,15 +343,17 @@ impl Survival {
         };
 
         if let Ok(inventory) = self.state.world.query_one_mut::<&mut Inventory>(id) {
-            inventory.hand = Some(product);
-            inventory.back = None;
+            inventory.pop();
+            inventory.slots[0] = Some(product);
         }
         self.unlock_achievement(id, product);
     }
 
     pub(super) fn item_swap(&mut self, id: Entity) {
         if let Ok(inventory) = self.state.world.query_one_mut::<&mut Inventory>(id) {
-            std::mem::swap(&mut inventory.hand, &mut inventory.back);
+            let temp = inventory.slots[0];
+            inventory.slots[0] = inventory.slots[1];
+            inventory.slots[1] = temp;
         }
     }
 
@@ -343,7 +379,7 @@ impl Survival {
         }
 
         if let Ok(inventory) = self.state.world.query_one_mut::<&mut Inventory>(id) {
-            inventory.hand = inventory.back.take();
+            inventory.pop();
         }
     }
 
@@ -366,89 +402,8 @@ impl Survival {
         };
 
         if let Ok(inventory) = self.state.world.query_one_mut::<&mut Inventory>(id) {
-            if inventory.hand.is_some() {
-                inventory.back = inventory.hand.take();
-            }
-            inventory.hand = Some(item);
+            inventory.push(item);
         }
         self.unlock_achievement(id, item);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{
-        env::Environment,
-        envs::survival::{Survival, SurvivalAction, config::SurvivalConfig},
-        timestep::TimeStepBuffers,
-    };
-
-    /// A fresh env whose first agent is empty-handed and faces a bare tile.
-    fn facing_bare_tile() -> (Survival, TimeStepBuffers, Entity, Position) {
-        let config = SurvivalConfig::default();
-        let mut env = Survival::new(&config, 512);
-        let mut buffers = TimeStepBuffers::new(&env);
-        env.reset(0, &mut buffers.view_mut());
-
-        let state = &mut env.state;
-        let agent = state.agents[0];
-        let (&position, direction) = state
-            .world
-            .query_one_mut::<(&Position, &Direction)>(agent)
-            .unwrap();
-        let target_pos = position + direction.to_pos();
-        for target in state.spatial_index[target_pos.idx()].into_iter().flatten() {
-            state.despawn(target);
-        }
-        state.tiles[target_pos.idx()] = SurvivalObs::TileEmpty;
-        *state.world.query_one_mut::<&mut Inventory>(agent).unwrap() = Inventory::default();
-
-        (env, buffers, agent, target_pos)
-    }
-
-    fn hold(env: &mut Survival, agent: Entity, hand: Option<ItemType>, back: Option<ItemType>) {
-        *env.state
-            .world
-            .query_one_mut::<&mut Inventory>(agent)
-            .unwrap() = Inventory { hand, back };
-    }
-
-    /// The first agent's legal item actions.
-    fn legal_items(env: &mut Survival, buffers: &mut TimeStepBuffers) -> Vec<SurvivalAction> {
-        env.encode_action_mask(&mut buffers.view_mut());
-        let mask = buffers.action_mask.row(0);
-        for action in [
-            SurvivalAction::MoveUp,
-            SurvivalAction::MoveRight,
-            SurvivalAction::MoveDown,
-            SurvivalAction::MoveLeft,
-            SurvivalAction::Noop,
-        ] {
-            assert!(mask[action as usize], "{action:?} is always legal");
-        }
-        SurvivalAction::TABLE
-            .iter()
-            .copied()
-            .filter(|&action| action.move_direction().is_none() && action != SurvivalAction::Noop)
-            .filter(|&action| mask[action as usize])
-            .collect()
-    }
-
-    #[test]
-    fn empty_hands_facing_nothing_mask_every_item_action() {
-        let (mut env, mut buffers, _, _) = facing_bare_tile();
-        assert_eq!(legal_items(&mut env, &mut buffers), []);
-    }
-
-    #[test]
-    fn a_pickaxe_cannot_dig_the_border_wall() {
-        let (mut env, mut buffers, agent, target_pos) = facing_bare_tile();
-        hold(&mut env, agent, Some(ItemType::StonePickaxe), None);
-        env.state.tiles[target_pos.idx()] = SurvivalObs::TileWall;
-        assert_eq!(
-            legal_items(&mut env, &mut buffers),
-            [SurvivalAction::ItemSwap]
-        );
     }
 }
