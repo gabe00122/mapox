@@ -7,9 +7,9 @@ use crate::envs::{
         achievements::Achievements,
         fire::{Active, ActiveObs, DamageToAbove, Fueled},
         items::{Inventory, ItemType},
-        lightning::LightEmitter,
+        lighting::LightEmitter,
         needs::{Health, Hunger},
-        plants::{Chopable, ItemProducer, ReactiveAfter},
+        plants::{Choppable, ItemProducer, ReactiveAfter},
         refine::RefineType,
         survivor::DirectionObs,
         world::{Agent, Slot},
@@ -81,7 +81,7 @@ impl SurvivalState {
                     item: ItemType::Berry,
                 },
                 ReactiveAfter::new(200),
-                Chopable {
+                Choppable {
                     item: Some(ItemType::Stick),
                 },
             )),
@@ -91,7 +91,7 @@ impl SurvivalState {
                 Slot::Lower,
                 SurvivalObs::TileThornBush,
                 DamageToAbove { amount: 10 },
-                Chopable {
+                Choppable {
                     item: Some(ItemType::Stick),
                 },
             )),
@@ -113,7 +113,7 @@ impl SurvivalState {
                 position,
                 Slot::Both,
                 SurvivalObs::TileTree,
-                Chopable {
+                Choppable {
                     item: Some(ItemType::Wood),
                 },
             )),
@@ -130,7 +130,7 @@ impl SurvivalState {
                     item: ItemType::Apple,
                 },
                 ReactiveAfter::new(300),
-                Chopable {
+                Choppable {
                     item: Some(ItemType::Wood),
                 },
             )),

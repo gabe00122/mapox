@@ -8,7 +8,7 @@ use crate::envs::{
         Slot, Survival, SurvivalObs, SurvivalState,
         fire::{Active, Fueled},
         needs::Hunger,
-        plants::{Chopable, ItemProducer},
+        plants::{Choppable, ItemProducer},
         prototypes::Prototype,
         refine::RefineType,
     },
@@ -178,11 +178,11 @@ impl SurvivalState {
             ItemType::StoneAxe => {
                 // the lower slot also holds Slot::Both entities like trees
                 let target = self.spatial_index[target_pos.idx()][0]?;
-                let chopable = self.world.query_one_mut::<&Chopable>(target).ok()?;
+                let choppable = self.world.query_one_mut::<&Choppable>(target).ok()?;
                 Some(UsePlan::Chop {
                     target,
                     at: target_pos,
-                    drop: chopable.item,
+                    drop: choppable.item,
                 })
             }
             ItemType::StonePickaxe if self.tiles[target_pos.idx()].is_minable() => {

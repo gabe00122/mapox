@@ -7,13 +7,13 @@ pub(super) enum RefineType {
 
 impl RefineType {
     pub(super) fn refine(&self, input: ItemType) -> Option<ItemType> {
-        REFINE_RECEPIES[*self as usize]
+        REFINE_RECIPES[*self as usize]
             .iter()
             .find(|(req, _)| *req == input)
             .map(|(_, out)| *out)
     }
 }
 
-pub(super) const REFINE_RECEPIES: &[&[(ItemType, ItemType)]] = &[
+pub(super) const REFINE_RECIPES: &[&[(ItemType, ItemType)]] = &[
     &[(ItemType::Berry, ItemType::CookedBerry)], // cooking
 ];

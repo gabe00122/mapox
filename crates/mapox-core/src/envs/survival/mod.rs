@@ -5,7 +5,7 @@ pub mod obs;
 mod achievements;
 mod fire;
 mod items;
-mod lightning;
+mod lighting;
 mod needs;
 mod plants;
 mod portal;
@@ -223,6 +223,8 @@ impl Environment for Survival {
             self.state.tiles = Array2::from_elem(dim, SurvivalObs::TileEmpty);
             self.state.spatial_index = Array2::from_elem(dim, [None; 2]);
         }
+
+        self.state.dusk = None;
 
         for i in 0..self.num_agents() {
             // reset this so the seed is the source of truth for agent order

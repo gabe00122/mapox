@@ -20,7 +20,7 @@ impl ReactiveAfter {
     }
 }
 
-pub(super) struct Chopable {
+pub(super) struct Choppable {
     pub item: Option<ItemType>, // the resource dropped when chopped if any
 }
 
