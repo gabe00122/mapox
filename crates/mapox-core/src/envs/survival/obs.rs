@@ -19,12 +19,12 @@ use crate::{
     },
     symbols::{
         AGENT_GENERIC_DOWN, AGENT_GENERIC_LEFT, AGENT_GENERIC_RIGHT, AGENT_GENERIC_UP, ITEM_APPLE,
-        ITEM_BERRY, ITEM_CAMPFIRE_KIT, ITEM_COOKED_BERRY, ITEM_CUT_GRASS, ITEM_ROCK, ITEM_STICK,
-        ITEM_STONE_AXE, ITEM_STONE_PICKAXE, ITEM_WOOD, TILE_APPLE_TREE, TILE_BERRY_BUSH, TILE_BUSH,
-        TILE_CUT_GRASS, TILE_DECOR_1, TILE_DECOR_2, TILE_DECOR_3, TILE_DECOR_4,
-        TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_FIRE, TILE_FIRE_OUT, TILE_MASK, TILE_PORTAL,
-        TILE_TALL_GRASS, TILE_THORN_BUSH, TILE_TREE, TILE_UI, TILE_WALL, TILE_WATER, UI_DIGITS,
-        UI_HEALTH, UI_HUNGER,
+        ITEM_BERRY, ITEM_CAMPFIRE_KIT, ITEM_COOKED_BERRY, ITEM_CUT_GRASS, ITEM_IRON_ORE, ITEM_ROCK,
+        ITEM_STICK, ITEM_STONE_AXE, ITEM_STONE_PICKAXE, ITEM_WOOD, TILE_APPLE_TREE,
+        TILE_BERRY_BUSH, TILE_BUSH, TILE_CUT_GRASS, TILE_DECOR_1, TILE_DECOR_2, TILE_DECOR_3,
+        TILE_DECOR_4, TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_FIRE, TILE_FIRE_OUT, TILE_IRON_ORE,
+        TILE_MASK, TILE_PORTAL, TILE_TALL_GRASS, TILE_THORN_BUSH, TILE_TREE, TILE_UI, TILE_WALL,
+        TILE_WATER, UI_DIGITS, UI_HEALTH, UI_HUNGER,
     },
     timestep::TimeStepMut,
     vocab::VocabId,
@@ -36,6 +36,7 @@ vocab_enum!(pub(super) SurvivalObs {
     Mask => TILE_MASK,
     TileEmpty => TILE_EMPTY,
     TileDestructibleWall => TILE_DESTRUCTIBLE_WALL,
+    TileIronOre => TILE_IRON_ORE,
     TileWall => TILE_WALL,
     TileWater => TILE_WATER,
     TileDecor1 => TILE_DECOR_1,
@@ -60,6 +61,7 @@ vocab_enum!(pub(super) SurvivalObs {
     ItemStick => ITEM_STICK,
     ItemWood => ITEM_WOOD,
     ItemCutGrass => ITEM_CUT_GRASS,
+    ItemIronOre => ITEM_IRON_ORE,
     ItemStoneAxe => ITEM_STONE_AXE,
     ItemStonePickaxe => ITEM_STONE_PICKAXE,
     ItemCampfireKit => ITEM_CAMPFIRE_KIT,
@@ -108,6 +110,7 @@ impl SurvivalObs {
             self,
             TileWall
                 | TileDestructibleWall
+                | TileIronOre
                 | TileWater
                 | AgentUp
                 | AgentRight
@@ -115,14 +118,6 @@ impl SurvivalObs {
                 | AgentLeft
         )
     }
-
-    // pub(super) fn spawnable(self) -> bool {
-    //     use SurvivalObs::*;
-    //     matches!(
-    //         self,
-    //         TileEmpty | TileDecor1 | TileDecor2 | TileDecor3 | TileDecor4
-    //     )
-    // }
 }
 
 impl ViewTile for SurvivalObs {
@@ -131,7 +126,7 @@ impl ViewTile for SurvivalObs {
     /// Water is the one blocking tile an agent can see straight over.
     fn opaque(self) -> bool {
         use SurvivalObs::*;
-        matches!(self, TileWall | TileDestructibleWall)
+        matches!(self, TileWall | TileDestructibleWall | TileIronOre)
     }
 }
 

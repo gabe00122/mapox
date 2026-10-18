@@ -139,6 +139,8 @@ class RustSurvivalConfig(BaseModel):
     # share of the map that is water (lowest ground) and rock (highest)
     water_fraction: float = 0.10
     rock_fraction: float = 0.15
+    # share of the rock that is iron ore, in seams through it
+    iron_ore_fraction: float = 0.1
     # share of the land between that is forest (wettest) and scrub (driest);
     # the rest is meadow
     forest_fraction: float = 0.25

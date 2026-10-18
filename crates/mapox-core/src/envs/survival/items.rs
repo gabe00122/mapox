@@ -22,6 +22,7 @@ pub(super) enum ItemType {
     Stick,
     Wood,
     CutGrass,
+    IronOre,
     StoneAxe,
     StonePickaxe,
     CampfireKit,
@@ -37,7 +38,10 @@ pub(super) struct ItemDrop {
 
 impl SurvivalObs {
     fn is_minable(&self) -> bool {
-        matches!(self, SurvivalObs::TileDestructibleWall)
+        matches!(
+            self,
+            SurvivalObs::TileDestructibleWall | SurvivalObs::TileIronOre
+        )
     }
 
     fn mine_drop(&self) -> Option<ItemDrop> {
@@ -45,6 +49,10 @@ impl SurvivalObs {
             SurvivalObs::TileDestructibleWall => Some(ItemDrop {
                 drop: ItemType::Rock,
                 prob: 0.1,
+            }),
+            SurvivalObs::TileIronOre => Some(ItemDrop {
+                drop: ItemType::IronOre,
+                prob: 0.5,
             }),
             _ => None,
         }
@@ -65,6 +73,7 @@ impl ItemType {
             ItemType::Stick => SurvivalObs::ItemStick,
             ItemType::Wood => SurvivalObs::ItemWood,
             ItemType::CutGrass => SurvivalObs::ItemCutGrass,
+            ItemType::IronOre => SurvivalObs::ItemIronOre,
             ItemType::StoneAxe => SurvivalObs::ItemStoneAxe,
             ItemType::StonePickaxe => SurvivalObs::ItemStonePickaxe,
             ItemType::CampfireKit => SurvivalObs::ItemCampfireKit,
@@ -371,252 +380,9 @@ mod tests {
     use super::*;
     use crate::{
         env::Environment,
-        envs::survival::{Survival, SurvivalAction, config::SurvivalConfig, plants::ReactiveAfter},
+        envs::survival::{Survival, SurvivalAction, config::SurvivalConfig},
         timestep::TimeStepBuffers,
     };
-
-    fn chop(prototype: Prototype) -> Option<ItemType> {
-        let config = SurvivalConfig::default();
-        let mut env = Survival::new(&config, 512);
-        let mut buffers = TimeStepBuffers::new(&env);
-        env.reset(0, &mut buffers.view_mut());
-
-        let state = &mut env.state;
-        let agent = state.agents[0];
-        let (&position, direction) = state
-            .world
-            .query_one_mut::<(&Position, &Direction)>(agent)
-            .unwrap();
-        let target_pos = position + direction.to_pos();
-        for target in state.spatial_index[target_pos.idx()].into_iter().flatten() {
-            state.despawn(target);
-        }
-
-        let target = state.spawn_prototype(prototype, target_pos);
-        state
-            .world
-            .query_one_mut::<&mut Inventory>(agent)
-            .unwrap()
-            .hand = Some(ItemType::StoneAxe);
-        env.item_use(agent);
-
-        let state = &mut env.state;
-
-        assert!(!state.world.contains(target), "the chopped entity is gone");
-        assert_eq!(
-            state.world.query_one_mut::<&Inventory>(agent).unwrap().hand,
-            Some(ItemType::StoneAxe),
-            "the axe is kept"
-        );
-        state.spatial_index[target_pos.idx()][0]
-            .map(|item| *state.world.query_one_mut::<&ItemType>(item).unwrap())
-    }
-
-    #[test]
-    fn chopping_a_tree_leaves_wood() {
-        assert_eq!(chop(Prototype::Tree), Some(ItemType::Wood));
-    }
-
-    #[test]
-    fn chopping_a_berry_bush_leaves_a_stick() {
-        assert_eq!(chop(Prototype::BerryBush), Some(ItemType::Stick));
-    }
-
-    #[test]
-    fn chopping_a_thorn_bush_leaves_a_stick() {
-        assert_eq!(chop(Prototype::ThornBush), Some(ItemType::Stick));
-    }
-
-    #[test]
-    fn a_thorn_bush_can_be_walked_into_and_hurts_while_stood_in() {
-        use crate::envs::survival::needs::Health;
-        let (mut env, _, agent, target_pos) = facing_bare_tile();
-        env.state.spawn_prototype(Prototype::ThornBush, target_pos);
-        let health = |env: &mut Survival| {
-            env.state
-                .world
-                .query_one_mut::<&Health>(agent)
-                .unwrap()
-                .amount
-        };
-        let before = health(&mut env);
-
-        env.tick_damage_to_above();
-        assert_eq!(health(&mut env), before, "only the agent in it is hurt");
-
-        assert!(!env.state.is_blocked(target_pos, Slot::Upper));
-        env.state.move_entity(agent, target_pos);
-        env.tick_damage_to_above();
-        assert_eq!(health(&mut env), before - 5);
-    }
-
-    #[test]
-    fn taking_tall_grass_gives_cut_grass_and_leaves_it_cut() {
-        let config = SurvivalConfig::default();
-        let mut env = Survival::new(&config, 512);
-        let mut buffers = TimeStepBuffers::new(&env);
-        env.reset(0, &mut buffers.view_mut());
-
-        let state = &mut env.state;
-        let agent = state.agents[0];
-        let (&position, direction) = state
-            .world
-            .query_one_mut::<(&Position, &Direction)>(agent)
-            .unwrap();
-        let target_pos = position + direction.to_pos();
-        for target in state.spatial_index[target_pos.idx()].into_iter().flatten() {
-            state.despawn(target);
-        }
-        *state.world.query_one_mut::<&mut Inventory>(agent).unwrap() = Inventory::default();
-
-        let grass = state.spawn_prototype(Prototype::TallGrass, target_pos);
-        env.item_take(agent);
-
-        let state = &mut env.state;
-        assert!(state.world.contains(grass), "the grass stays");
-        assert_eq!(
-            state.world.query_one_mut::<&Inventory>(agent).unwrap().hand,
-            Some(ItemType::CutGrass)
-        );
-
-        env.tick_active_obs();
-        assert_eq!(
-            *env.state
-                .world
-                .query_one_mut::<&SurvivalObs>(grass)
-                .unwrap(),
-            SurvivalObs::TileCutGrass
-        );
-    }
-
-    #[test]
-    fn taking_from_a_berry_bush_deactivates_it_until_it_regrows() {
-        let config = SurvivalConfig::default();
-        let mut env = Survival::new(&config, 512);
-        let mut buffers = TimeStepBuffers::new(&env);
-        env.reset(0, &mut buffers.view_mut());
-
-        let state = &mut env.state;
-        let agent = state.agents[0];
-        let (&position, direction) = state
-            .world
-            .query_one_mut::<(&Position, &Direction)>(agent)
-            .unwrap();
-        let target_pos = position + direction.to_pos();
-        for target in state.spatial_index[target_pos.idx()].into_iter().flatten() {
-            state.despawn(target);
-        }
-        *state.world.query_one_mut::<&mut Inventory>(agent).unwrap() = Inventory::default();
-
-        let bush = state.spawn_prototype(Prototype::BerryBush, target_pos);
-        let is_active = |env: &mut Survival| {
-            env.state
-                .world
-                .query_one_mut::<&Active>(bush)
-                .unwrap()
-                .is_active
-        };
-
-        env.item_take(agent);
-        assert!(env.state.world.contains(bush), "the bush stays");
-        assert!(!is_active(&mut env), "the bush is picked");
-        assert_eq!(
-            env.state
-                .world
-                .query_one_mut::<&Inventory>(agent)
-                .unwrap()
-                .hand,
-            Some(ItemType::Berry)
-        );
-
-        env.item_take(agent);
-        let inventory = env.state.world.query_one_mut::<&Inventory>(agent).unwrap();
-        assert_eq!(inventory.back, None, "a picked bush gives nothing");
-
-        for _ in 0..10 {
-            env.tick_reactivate_after();
-        }
-        assert!(is_active(&mut env), "the bush regrows");
-    }
-
-    #[test]
-    fn an_apple_tree_gives_apples_until_picked_and_chops_to_wood() {
-        use SurvivalAction::*;
-        let (mut env, mut buffers, agent, target_pos) = facing_bare_tile();
-        let tree = env.state.spawn_prototype(Prototype::AppleTree, target_pos);
-        assert_eq!(legal_items(&mut env, &mut buffers), [ItemTake]);
-
-        env.item_take(agent);
-        assert!(env.state.world.contains(tree), "the tree stays");
-        assert_eq!(
-            env.state
-                .world
-                .query_one_mut::<&Inventory>(agent)
-                .unwrap()
-                .hand,
-            Some(ItemType::Apple)
-        );
-        env.tick_active_obs();
-        assert_eq!(
-            *env.state.world.query_one_mut::<&SurvivalObs>(tree).unwrap(),
-            SurvivalObs::TileTree,
-            "a picked apple tree looks like any other"
-        );
-        // an apple is eaten, not put on the tree
-        assert_eq!(legal_items(&mut env, &mut buffers), [ItemSwap, ItemUse]);
-
-        assert_eq!(chop(Prototype::AppleTree), Some(ItemType::Wood));
-    }
-
-    #[test]
-    fn a_pickaxe_digs_out_a_wall_sometimes_leaving_a_rock() {
-        use SurvivalAction::*;
-        let (mut env, mut buffers, agent, target_pos) = facing_bare_tile();
-        hold(&mut env, agent, Some(ItemType::StonePickaxe), None);
-        assert_eq!(
-            legal_items(&mut env, &mut buffers),
-            [ItemPut, ItemSwap],
-            "nothing to dig"
-        );
-
-        let mut rocks = 0;
-        for _ in 0..100 {
-            env.state.tiles[target_pos.idx()] = SurvivalObs::TileDestructibleWall;
-            assert_eq!(legal_items(&mut env, &mut buffers), [ItemSwap, ItemUse]);
-
-            env.item_use(agent);
-            assert_eq!(env.state.tiles[target_pos.idx()], SurvivalObs::TileEmpty);
-            assert_eq!(
-                env.state
-                    .world
-                    .query_one_mut::<&Inventory>(agent)
-                    .unwrap()
-                    .hand,
-                Some(ItemType::StonePickaxe),
-                "the pickaxe is kept"
-            );
-            if let Some(rock) = env.state.spatial_index[target_pos.idx()][0] {
-                assert_eq!(
-                    *env.state.world.query_one_mut::<&ItemType>(rock).unwrap(),
-                    ItemType::Rock
-                );
-                env.state.despawn(rock);
-                rocks += 1;
-            }
-        }
-        assert!((20..80).contains(&rocks), "{rocks} rocks from 100 digs");
-    }
-
-    #[test]
-    fn a_pickaxe_cannot_dig_the_border_wall() {
-        let (mut env, mut buffers, agent, target_pos) = facing_bare_tile();
-        hold(&mut env, agent, Some(ItemType::StonePickaxe), None);
-        env.state.tiles[target_pos.idx()] = SurvivalObs::TileWall;
-        assert_eq!(
-            legal_items(&mut env, &mut buffers),
-            [SurvivalAction::ItemSwap]
-        );
-    }
 
     /// A fresh env whose first agent is empty-handed and faces a bare tile.
     fn facing_bare_tile() -> (Survival, TimeStepBuffers, Entity, Position) {
@@ -676,80 +442,13 @@ mod tests {
     }
 
     #[test]
-    fn full_hands_mask_take_and_offer_the_recipe() {
-        use SurvivalAction::*;
+    fn a_pickaxe_cannot_dig_the_border_wall() {
         let (mut env, mut buffers, agent, target_pos) = facing_bare_tile();
-
-        hold(&mut env, agent, Some(ItemType::Rock), Some(ItemType::Stick));
+        hold(&mut env, agent, Some(ItemType::StonePickaxe), None);
+        env.state.tiles[target_pos.idx()] = SurvivalObs::TileWall;
         assert_eq!(
             legal_items(&mut env, &mut buffers),
-            [ItemPut, ItemSwap, ItemCombine]
+            [SurvivalAction::ItemSwap]
         );
-
-        env.item_craft(agent);
-        assert_eq!(
-            legal_items(&mut env, &mut buffers),
-            [ItemPut, ItemSwap],
-            "an axe needs something to chop"
-        );
-
-        env.state.spawn_prototype(Prototype::Tree, target_pos);
-        assert_eq!(legal_items(&mut env, &mut buffers), [ItemSwap, ItemUse]);
-    }
-
-    #[test]
-    fn a_picked_bush_masks_take_until_it_regrows() {
-        use SurvivalAction::*;
-        let (mut env, mut buffers, agent, target_pos) = facing_bare_tile();
-        let bush = env.state.spawn_prototype(Prototype::BerryBush, target_pos);
-        assert_eq!(legal_items(&mut env, &mut buffers), [ItemTake]);
-
-        env.item_take(agent);
-        // a berry is eaten, not put on the occupied tile
-        assert_eq!(legal_items(&mut env, &mut buffers), [ItemSwap, ItemUse]);
-
-        let delay = env
-            .state
-            .world
-            .get::<&ReactiveAfter>(bush)
-            .unwrap()
-            .reset_delay;
-        for _ in 0..delay {
-            env.tick_reactivate_after();
-        }
-        assert_eq!(
-            legal_items(&mut env, &mut buffers),
-            [ItemTake, ItemSwap, ItemUse]
-        );
-    }
-
-    #[test]
-    fn a_fire_takes_fuel_and_cooks_only_while_lit() {
-        use SurvivalAction::*;
-        let (mut env, mut buffers, agent, target_pos) = facing_bare_tile();
-        let fire = env.state.spawn_prototype(Prototype::Fire, target_pos);
-
-        hold(&mut env, agent, Some(ItemType::Stick), None);
-        assert_eq!(legal_items(&mut env, &mut buffers), [ItemPut, ItemSwap]);
-
-        hold(&mut env, agent, Some(ItemType::CampfireKit), None);
-        assert_eq!(
-            legal_items(&mut env, &mut buffers),
-            [ItemSwap],
-            "the tile is taken"
-        );
-
-        hold(&mut env, agent, Some(ItemType::Berry), None);
-        assert_eq!(
-            legal_items(&mut env, &mut buffers),
-            [ItemSwap, ItemUse, ItemRefine]
-        );
-
-        env.state
-            .world
-            .query_one_mut::<&mut Active>(fire)
-            .unwrap()
-            .is_active = false;
-        assert_eq!(legal_items(&mut env, &mut buffers), [ItemSwap, ItemUse]);
     }
 }

@@ -16,6 +16,8 @@ pub struct SurvivalConfig {
     /// highest).
     pub water_fraction: f64,
     pub rock_fraction: f64,
+    /// Share of the rock that is iron ore, in seams through it.
+    pub iron_ore_fraction: f64,
     /// Share of the land between that is forest (the wettest) and scrub (the
     /// driest); the rest is meadow.
     pub forest_fraction: f64,
@@ -40,6 +42,7 @@ impl Default for SurvivalConfig {
             night_vision_radius: 1,
             water_fraction: 0.10,
             rock_fraction: 0.15,
+            iron_ore_fraction: 0.1,
             forest_fraction: 0.25,
             scrub_fraction: 0.25,
             survival_reward: 1.0,

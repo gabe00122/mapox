@@ -85,6 +85,8 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::TILE_APPLE_TREE, 8, 7),
     (symbols::TILE_THORN_BUSH, 9, 7),
     (symbols::ITEM_STONE_PICKAXE, 10, 7),
+    (symbols::TILE_IRON_ORE, 11, 7),
+    (symbols::ITEM_IRON_ORE, 11, 1),
 ];
 
 pub(crate) fn resolve_art(vocab: &Vocabulary) -> Vec<(u32, u32)> {
@@ -209,7 +211,10 @@ mod tests {
         // focused tile draws as pac-man, and sees itself.
         let tile = render_state.tilemap[render_state.agent_positions[0].idx()];
         let symbol = &settings.obs_vocab.symbols()[usize::from(tile)];
-        assert!(symbol.starts_with("agent/pacman_"), "focused tile is {symbol}");
+        assert!(
+            symbol.starts_with("agent/pacman_"),
+            "focused tile is {symbol}"
+        );
         assert!(
             buffers.obs.iter().any(|&id| id == tile),
             "pac-man is in its own observation"

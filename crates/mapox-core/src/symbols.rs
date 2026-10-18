@@ -25,6 +25,9 @@ pub const TILE_MASK: &str = "mask";
 pub const TILE_EMPTY: &str = "tile/empty";
 pub const TILE_WALL: &str = "tile/wall";
 pub const TILE_DESTRUCTIBLE_WALL: &str = "tile/destructible_wall";
+/// A wall seamed with iron, dug out like a [`TILE_DESTRUCTIBLE_WALL`] but
+/// sometimes leaving an [`ITEM_IRON_ORE`].
+pub const TILE_IRON_ORE: &str = "tile/iron_ore";
 /// A flag no one can score off yet. [`TILE_FLAG_UNLOCKED`] is the same flag
 /// once it is claimable.
 pub const TILE_FLAG: &str = "tile/flag";
@@ -67,8 +70,9 @@ pub const ITEM_STICK: &str = "item/stick";
 pub const ITEM_WOOD: &str = "item/wood";
 /// A bundle of cut grass.
 pub const ITEM_CUT_GRASS: &str = "item/cut_grass";
+pub const ITEM_IRON_ORE: &str = "item/iron_ore";
 pub const ITEM_STONE_AXE: &str = "item/stone_axe";
-/// Digs out a [`TILE_DESTRUCTIBLE_WALL`].
+/// Digs out a [`TILE_DESTRUCTIBLE_WALL`] or a [`TILE_IRON_ORE`].
 pub const ITEM_STONE_PICKAXE: &str = "item/stone_pickaxe";
 /// An unlit campfire, carried; using it sets down a [`TILE_FIRE`].
 pub const ITEM_CAMPFIRE_KIT: &str = "item/campfire_kit";

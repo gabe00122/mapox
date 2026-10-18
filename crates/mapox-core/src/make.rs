@@ -110,6 +110,18 @@ mod tests {
         assert_eq!(parsed, EnvConfig::RustMaze(Box::default()));
     }
 
+    /// And for survival, whose map is generated from its terrain fractions.
+    #[test]
+    fn a_survival_config_dump_parses() {
+        let json = r#"{"env_type":"rust_survival","num_agents":8,"width":40,"height":40,
+            "view_width":15,"view_height":15,"night_vision_radius":1,"water_fraction":0.1,
+            "rock_fraction":0.15,"iron_ore_fraction":0.1,"forest_fraction":0.25,
+            "scrub_fraction":0.25,"survival_reward":1.0,"achievement_reward":1.0}"#;
+
+        let parsed: EnvConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed, EnvConfig::RustSurvival(Box::default()));
+    }
+
     /// The vectorized shape: `num` copies of a plain env config.
     #[test]
     fn a_vec_config_parses() {

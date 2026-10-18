@@ -73,6 +73,10 @@ DIRT = hex_color("6e4a2c")
 DIRT_DARK = hex_color("54371f")
 DIRT_LIGHT = hex_color("87603a")
 PEBBLE = hex_color("a8875e")
+IRON = hex_color("6d7480")
+IRON_DARK = hex_color("3e434d")
+IRON_GLINT = hex_color("d3dae6")
+RUST = hex_color("c4622d")
 
 WATER = hex_color("1f3f86")
 WATER_MID = hex_color("2f5cb8")
@@ -282,6 +286,34 @@ def dirt() -> Sprite:
     return stamp(
         blank(DIRT), DIRT_CLODS, {"k": DIRT_DARK, "l": DIRT_LIGHT, "p": PEBBLE}
     )
+
+
+# Grey-blue lumps of ore, rust-stained with a bright glint, set into the
+# earth: cool and metallic against the warm dirt, so a seam reads at a glance.
+IRON_SEAM = check(
+    [
+        "............",
+        ".OO.....OOO.",
+        "OLsO...OLsSO",
+        "OsrSO..OsrSO",
+        ".OSO....OOO.",
+        "............",
+        "...OOO......",
+        "..OLssO..OO.",
+        "..OsrsSO.OLO",
+        "...OrSSO.OrO",
+        "....OOO...O.",
+        "............",
+    ],
+    "iron seam",
+)
+
+IRON_PALETTE = {"O": IRON_DARK, "L": IRON_GLINT, "s": IRON, "S": IRON_DARK, "r": RUST}
+
+
+def iron_ore() -> Sprite:
+    """Diggable earth with iron in it."""
+    return stamp(dirt(), IRON_SEAM, {**IRON_PALETTE, "O": DIRT_DARK})
 
 
 def water() -> Sprite:
@@ -952,6 +984,25 @@ ROCK = check(
     "rock",
 )
 
+# The rock again, but iron grey and streaked with rust.
+IRON_ORE_ITEM = check(
+    [
+        "............",
+        "............",
+        "............",
+        "....OOOO....",
+        "...OLLssO...",
+        "..OLrssrSO..",
+        ".OLssrrssSO.",
+        ".OsrsssrsSO.",
+        ".OSssrSSSSO.",
+        "..OOSSSSOO..",
+        "....OOOO....",
+        "............",
+    ],
+    "iron ore",
+)
+
 LOG = check(
     [
         "............",
@@ -1282,6 +1333,8 @@ def build_sheet() -> list[list[Sprite]]:
         stamp(floor(), TURTLE, TURTLE_PALETTE),
         # Lush grass is terrain, but row 0 is full.
         decor(GRASS_TILE, {"g": GRASS, "l": GRASS_LIGHT}),
+        # A survival item, but the survival rows are full.
+        stamp(floor(), IRON_ORE_ITEM, {**IRON_PALETTE, "O": OUTLINE}),
     ]
 
     def team_row(team: Color) -> list[Sprite]:
@@ -1410,6 +1463,7 @@ def build_sheet() -> list[list[Sprite]]:
             {"b": THORN_CANE, "t": THORN, "G": LEAF_DARK, "g": LEAF_EDGE},
         ),
         stamp(floor(), STONE_PICKAXE, {**STONE_PALETTE, "w": WOOD, "l": WOOD_LIGHT}),
+        iron_ore(),
     ]
 
     return [

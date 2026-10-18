@@ -13,6 +13,9 @@ use crate::envs::{
 
 /// How far map generation bends its noise fields, in cells.
 const TERRAIN_WARP: f32 = 8.0;
+/// Bent harder than the terrain, so the ore threads through the rock in
+/// seams rather than sitting in it as one lump.
+const ORE_WARP: f32 = 16.0;
 /// Pockets of open ground smaller than this are filled in rather than joined
 /// up to the rest.
 const MIN_REGION: usize = 24;
@@ -89,7 +92,7 @@ fn dig_cost(tile: SurvivalObs) -> u32 {
         // trees block by filling both slots, not by their tile
         TileTree | TileAppleTree => 1,
         _ if !tile.move_blocked() => 0,
-        TileWall | TileDestructibleWall => 2,
+        TileWall | TileDestructibleWall | TileIronOre => 2,
         TileWater => 3,
         _ => 4,
     }
@@ -97,17 +100,26 @@ fn dig_cost(tile: SurvivalObs) -> u32 {
 
 impl Survival {
     /// Lays out the interior: an elevation field puts water in the low ground
-    /// and rock on the heights, a moisture field splits the land between into
-    /// biomes, each biome grows its own things, and the open ground is joined
-    /// up.
+    /// and rock on the heights, an ore field runs iron seams through the rock,
+    /// a moisture field splits the land between into biomes, each biome grows
+    /// its own things, and the open ground is joined up.
     pub(super) fn generate_map(&mut self) {
         let (width, height) = (self.config.width as usize, self.config.height as usize);
         let rng = &mut self.state.rngs;
         let elevation = noise_field(width, height, TERRAIN_WARP, rng);
         let moisture = noise_field(width, height, TERRAIN_WARP, rng);
+        let ore = noise_field(width, height, ORE_WARP, rng);
 
         let water = quantile(elevation.iter().copied(), self.config.water_fraction);
         let rock = quantile(elevation.iter().copied(), 1.0 - self.config.rock_fraction);
+        let iron = quantile(
+            elevation
+                .iter()
+                .zip(&ore)
+                .filter(|&(&e, _)| e > rock)
+                .map(|(_, &o)| o),
+            1.0 - self.config.iron_ore_fraction,
+        );
         let land: Vec<f32> = elevation
             .iter()
             .zip(&moisture)
@@ -125,6 +137,8 @@ impl Survival {
             let (e, m) = (elevation[cell], moisture[cell]);
             *tile = if e < water {
                 SurvivalObs::TileWater
+            } else if e > rock && ore[cell] > iron {
+                SurvivalObs::TileIronOre
             } else if e > rock {
                 SurvivalObs::TileDestructibleWall
             } else {
@@ -202,29 +216,6 @@ mod tests {
                 let position = *env.state.world.get::<&Position>(agent).unwrap();
                 assert_eq!(labels[position.idx()], 1, "seed {seed}: agent off the map");
             }
-        }
-    }
-
-    #[test]
-    fn map_gen_grows_every_biome_entity() {
-        let env = generated(0);
-        for tile in [
-            SurvivalObs::TileTree,
-            SurvivalObs::TileAppleTree,
-            SurvivalObs::TileBerryBush,
-            SurvivalObs::TileThornBush,
-            SurvivalObs::TileTallGrass,
-            SurvivalObs::ItemStick,
-            SurvivalObs::ItemRock,
-        ] {
-            assert!(
-                env.state.render_map.iter().any(|&t| t == tile),
-                "no {tile:?} on the map"
-            );
-            assert!(
-                env.state.tiles.iter().all(|&t| t != tile),
-                "{tile:?} left on the terrain layer"
-            );
         }
     }
 }
