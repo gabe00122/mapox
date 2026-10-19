@@ -169,8 +169,8 @@ class RustMazeConfig(BaseModel):
 
     # maze cells sit on even interior coordinates, so odd sizes use every
     # row and column
-    width: int = 31
-    height: int = 31
+    width: int = 15
+    height: int = 15
     view_width: int = 15
     view_height: int = 15
 

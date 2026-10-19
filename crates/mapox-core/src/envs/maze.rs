@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use ndarray::{Array2, s};
 use rand::{RngExt, SeedableRng, rngs::SmallRng};
 use serde::{Deserialize, Serialize};
@@ -49,7 +51,7 @@ struct MazeState {
     rngs: SmallRng,
     positions: Vec<Position>, // one per agent
     /// Where every agent starts, and where reaching the goal sends it back
-    /// to: the cell the maze was carved from.
+    /// to: the root cell the maze was carved from.
     spawn: Position,
     time: usize,
 
@@ -108,8 +110,8 @@ struct MazeMetrics {
     goals_reached: f64,
 }
 
-/// A procedurally generated maze with the spawn where carving started and
-/// the goal at the end of its deepest branch, as far a walk from the spawn as
+/// A procedurally generated maze with the spawn at the root of its carving
+/// and the goal at the end of its deepest branch, as far a walk from the spawn as
 /// the maze has. Agents never block one another; all of them start
 /// on the spawn, and each is sent straight back there on reaching the goal.
 #[derive(Debug, Clone)]
@@ -185,15 +187,20 @@ impl Maze {
         }
     }
 
-    /// Carves a perfect maze into `base_map` with a randomized depth-first
-    /// search: every cell is reachable from every other by exactly one path.
-    /// Cells sit on the even interior coordinates, and the wall padding
-    /// around the interior is the maze's outer wall.
+    /// Carves a perfect maze into `base_map` with Wilson's algorithm: every
+    /// cell is reachable from every other by exactly one path, and every
+    /// such maze is equally likely, without the long winding corridors a
+    /// depth-first search favors. Cells sit on the even interior
+    /// coordinates, and the wall padding around the interior is the maze's
+    /// outer wall.
     ///
-    /// Returns the cell the search started from and the deepest one it
-    /// reached. With no loops, the stack always holds the one path from the
-    /// start to the current cell, so the deepest cell is the furthest walk
-    /// from the start.
+    /// The tree grows from a random root cell. Each cell not yet in it
+    /// starts a random walk that runs until it hits the tree; the walk
+    /// remembers only the last way it left each cell, which erases its
+    /// loops, and the loop-free path is then carved into the tree.
+    ///
+    /// Returns the root and the cell furthest from it. With no loops, the
+    /// furthest walk is the deepest branch of the tree from the root.
     fn carve_maze(&mut self) -> (Position, Position) {
         let MazeState { rngs, base_map, .. } = &mut self.state;
         base_map.fill(MazeObs::TileWall);
@@ -202,48 +209,63 @@ impl Maze {
         let cells_y = (self.config.height + 1) / 2;
         let origin = Position::new(self.pad_width, self.pad_height);
         let to_map = |cell: Position| origin + cell * 2;
+        let in_bounds =
+            |cell: Position| cell.x >= 0 && cell.x < cells_x && cell.y >= 0 && cell.y < cells_y;
 
-        let mut visited = Array2::from_elem((cells_x as usize, cells_y as usize), false);
-        let start = Position::new(rngs.random_range(0..cells_x), rngs.random_range(0..cells_y));
-        visited[start.idx()] = true;
-        base_map[to_map(start).idx()] = MazeObs::TileEmpty;
-        let mut stack = vec![start];
-        let (mut deepest, mut depth) = (start, 0);
+        let dim = (cells_x as usize, cells_y as usize);
+        let mut in_tree = Array2::from_elem(dim, false);
+        // the way the current walk last left each cell
+        let mut exits = Array2::from_elem(dim, Position::default());
 
-        while let Some(&cell) = stack.last() {
-            let mut options = [Position::default(); 4];
-            let mut count = 0;
-            for action in MOVES {
-                let next = cell + action.direction();
-                if next.x >= 0
-                    && next.x < cells_x
-                    && next.y >= 0
-                    && next.y < cells_y
-                    && !visited[next.idx()]
-                {
-                    options[count] = next;
-                    count += 1;
-                }
+        let root = Position::new(rngs.random_range(0..cells_x), rngs.random_range(0..cells_y));
+        in_tree[root.idx()] = true;
+        base_map[to_map(root).idx()] = MazeObs::TileEmpty;
+
+        for first in (0..cells_y).flat_map(|y| (0..cells_x).map(move |x| Position::new(x, y))) {
+            let mut cell = first;
+            while !in_tree[cell.idx()] {
+                let exit = loop {
+                    let exit = MOVES[rngs.random_range(0..MOVES.len())].direction();
+                    if in_bounds(cell + exit) {
+                        break exit;
+                    }
+                };
+                exits[cell.idx()] = exit;
+                cell += exit;
             }
 
-            if count == 0 {
-                stack.pop();
-                continue;
-            }
-
-            let next = options[rngs.random_range(0..count)];
-            visited[next.idx()] = true;
-            // knock out the wall between the two cells, then open the new one
-            base_map[(to_map(cell) + next - cell).idx()] = MazeObs::TileEmpty;
-            base_map[to_map(next).idx()] = MazeObs::TileEmpty;
-            stack.push(next);
-
-            if stack.len() > depth {
-                (deepest, depth) = (next, stack.len());
+            let mut cell = first;
+            while !in_tree[cell.idx()] {
+                let exit = exits[cell.idx()];
+                in_tree[cell.idx()] = true;
+                // open the cell, then knock out the wall toward the next one
+                base_map[to_map(cell).idx()] = MazeObs::TileEmpty;
+                base_map[(to_map(cell) + exit).idx()] = MazeObs::TileEmpty;
+                cell += exit;
             }
         }
 
-        (to_map(start), to_map(deepest))
+        // the furthest cell from the root, by breadth-first search
+        let mut seen = Array2::from_elem(dim, false);
+        seen[root.idx()] = true;
+        let mut queue = VecDeque::from([root]);
+        let mut furthest = root;
+        while let Some(cell) = queue.pop_front() {
+            furthest = cell;
+            for action in MOVES {
+                let step = action.direction();
+                let next = cell + step;
+                if in_bounds(next)
+                    && !seen[next.idx()]
+                    && base_map[(to_map(cell) + step).idx()] != MazeObs::TileWall
+                {
+                    seen[next.idx()] = true;
+                    queue.push_back(next);
+                }
+            }
+        }
+
+        (to_map(root), to_map(furthest))
     }
 
     fn encode_observations(&self, timestep: &mut TimeStepMut) {
@@ -506,8 +528,8 @@ mod tests {
         dist
     }
 
-    /// The deepest branch of the carving is the furthest walk from the
-    /// spawn: no open tile is further, checked by a separate search.
+    /// The goal is the furthest walk from the spawn: no open tile is
+    /// further, checked by a separate search.
     #[test]
     fn the_goal_is_the_furthest_walk_from_the_spawn() {
         for (width, height) in [(31, 31), (20, 9), (3, 1)] {
