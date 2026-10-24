@@ -126,9 +126,9 @@ pub const PLACE_PIPE: &str = "place_pipe";
 pub const TAKE: &str = "item/take";
 pub const PUT: &str = "item/put";
 pub const SWAP1: &str = "item/swap/1";
-pub const SWAP2: &str = "item/swap/1";
-pub const SWAP3: &str = "item/swap/1";
-pub const SWAP4: &str = "item/swap/1";
+pub const SWAP2: &str = "item/swap/2";
+pub const SWAP3: &str = "item/swap/3";
+pub const SWAP4: &str = "item/swap/4";
 
 pub const COMBINE: &str = "item/combine";
 pub const USE: &str = "item/use";
