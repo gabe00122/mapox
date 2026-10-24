@@ -242,10 +242,10 @@ impl SurvivalState {
     }
 
     /// Swapping two empty slots is the only swap that does nothing.
-    pub(super) fn can_swap(&mut self, id: Entity) -> bool {
+    pub(super) fn can_swap(&mut self, id: Entity, slot_id: usize) -> bool {
         self.world
             .query_one_mut::<&Inventory>(id)
-            .is_ok_and(|inventory| inventory.hand().is_some() || inventory.secondary().is_some())
+            .is_ok_and(|inventory| inventory.slots[slot_id].is_some())
     }
 
     pub(super) fn plan_put(&mut self, id: Entity) -> Option<PutPlan> {
@@ -349,11 +349,11 @@ impl Survival {
         self.unlock_achievement(id, product);
     }
 
-    pub(super) fn item_swap(&mut self, id: Entity) {
+    pub(super) fn item_swap(&mut self, id: Entity, slot_index: usize) {
         if let Ok(inventory) = self.state.world.query_one_mut::<&mut Inventory>(id) {
             let temp = inventory.slots[0];
-            inventory.slots[0] = inventory.slots[1];
-            inventory.slots[1] = temp;
+            inventory.slots[0] = inventory.slots[slot_index];
+            inventory.slots[slot_index] = temp;
         }
     }
 

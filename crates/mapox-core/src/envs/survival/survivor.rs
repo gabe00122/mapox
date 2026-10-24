@@ -57,7 +57,10 @@ impl Survival {
                     }
                 }
                 SurvivalAction::ItemTake => self.item_take(agent_id),
-                SurvivalAction::ItemSwap => self.item_swap(agent_id),
+                SurvivalAction::ItemSwap1 => self.item_swap(agent_id, 1),
+                SurvivalAction::ItemSwap2 => self.item_swap(agent_id, 2),
+                SurvivalAction::ItemSwap3 => self.item_swap(agent_id, 3),
+                SurvivalAction::ItemSwap4 => self.item_swap(agent_id, 4),
                 SurvivalAction::ItemPut => self.item_put(agent_id),
                 SurvivalAction::ItemCombine => self.item_craft(agent_id),
                 SurvivalAction::ItemUse => self.item_use(agent_id),

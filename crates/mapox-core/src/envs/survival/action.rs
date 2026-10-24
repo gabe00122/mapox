@@ -1,7 +1,8 @@
 use crate::{
     envs::common::Direction,
     symbols::{
-        COMBINE, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, NOOP, PUT, REFINE, SWAP, TAKE, USE,
+        COMBINE, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, NOOP, PUT, REFINE, SWAP1, SWAP2, SWAP3,
+        SWAP4, TAKE, USE,
     },
     vocab_enum,
 };
@@ -13,7 +14,10 @@ vocab_enum!(pub(super) SurvivalAction {
     MoveLeft => MOVE_LEFT,
     ItemTake => TAKE,
     ItemPut => PUT,
-    ItemSwap => SWAP,
+    ItemSwap1 => SWAP1,
+    ItemSwap2 => SWAP2,
+    ItemSwap3 => SWAP3,
+    ItemSwap4 => SWAP4,
     ItemCombine => COMBINE,
     ItemUse => USE,
     ItemRefine => REFINE,
