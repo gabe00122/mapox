@@ -65,6 +65,7 @@ const ACTION_KEYS: &[(&str, &str, &[Key])] = &[
     (symbols::PRIMARY_ACTION, "primary action", &[Key::F]),
     (symbols::DIG_ACTION, "dig", &[Key::E]),
     (symbols::PLACE_PIPE, "place pipe", &[Key::Q]),
+    (symbols::BUILD_WALL, "build wall", &[Key::Q]),
     (symbols::TAKE, "take", &[Key::E]),
     (symbols::PUT, "put", &[Key::Q]),
     (symbols::SWAP1, "swap2", &[Key::Num2]),
@@ -135,6 +136,7 @@ mod tests {
     use super::*;
     use crate::env::Environment;
     use crate::envs::find_return::{FindReturn, FindReturnConfig};
+    use crate::envs::hide_seek::{HideSeek, HideSeekConfig};
     use crate::envs::pacman::{Pacman, PacmanConfig};
     use crate::envs::scouts::{Scouts, ScoutsConfig};
     use crate::envs::survival::{Survival, config::SurvivalConfig};
@@ -146,6 +148,7 @@ mod tests {
             Box::new(Scouts::new(&ScoutsConfig::default(), 512)),
             Box::new(Pacman::new(&PacmanConfig::default(), 512)),
             Box::new(Survival::new(&SurvivalConfig::default(), 512)),
+            Box::new(HideSeek::new(&HideSeekConfig::default(), 512)),
         ]
     }
 

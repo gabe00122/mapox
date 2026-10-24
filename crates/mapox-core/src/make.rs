@@ -6,6 +6,7 @@ use crate::{
     env::Environment,
     envs::{
         find_return::{FindReturn, FindReturnConfig},
+        hide_seek::{HideSeek, HideSeekConfig},
         maze::{Maze, MazeConfig},
         pacman::{Pacman, PacmanConfig},
         scouts::{Scouts, ScoutsConfig},
@@ -23,6 +24,7 @@ pub enum EnvConfig {
     RustPacman(Box<PacmanConfig>),
     RustSurvival(Box<SurvivalConfig>),
     RustMaze(Box<MazeConfig>),
+    RustHideSeek(Box<HideSeekConfig>),
     #[cfg(not(target_arch = "wasm32"))]
     RustVideo(Box<VideoConfig>),
     RustVec {
@@ -48,6 +50,7 @@ pub fn make(config: &EnvConfig, length: usize) -> MapoxResult<Box<dyn Environmen
         EnvConfig::RustPacman(config) => Ok(Box::new(Pacman::new(config, length))),
         EnvConfig::RustSurvival(config) => Ok(Box::new(Survival::new(config, length))),
         EnvConfig::RustMaze(config) => Ok(Box::new(Maze::new(config, length))),
+        EnvConfig::RustHideSeek(config) => Ok(Box::new(HideSeek::new(config, length))),
         #[cfg(not(target_arch = "wasm32"))]
         EnvConfig::RustVideo(config) => Ok(Box::new(VideoWrapper::new(config, length)?)),
         EnvConfig::RustVec { num, env } => Ok(Box::new(VectorWrapper::new(*num, env, length)?)),
@@ -108,6 +111,18 @@ mod tests {
 
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();
         assert_eq!(parsed, EnvConfig::RustMaze(Box::default()));
+    }
+
+    /// And for hide and seek, on the same generated maps as scouts.
+    #[test]
+    fn a_hide_seek_config_dump_parses() {
+        let json = r#"{"env_type":"rust_hide_seek","num_hiders":2,"num_seekers":2,
+            "width":40,"height":40,"view_width":15,"view_height":15,
+            "mapgen_threshold":0.07,"water_threshold":-0.45,"preparation_steps":64,
+            "hider_walls":8,"seeker_digs":8,"spot_reward":1.0,"spotted_reward":-1.0}"#;
+
+        let parsed: EnvConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed, EnvConfig::RustHideSeek(Box::default()));
     }
 
     /// And for survival, whose map is generated from its terrain fractions.

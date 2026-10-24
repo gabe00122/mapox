@@ -10,6 +10,7 @@ from mapox.envs.prey import PreyConfig, PreyEnv
 from mapox.envs.rust_env_jax import RustEnvJax
 from mapox.envs.rust_env_numpy import (
     RustFindReturnConfig,
+    RustHideSeekConfig,
     RustMazeConfig,
     RustMultiConfig,
     RustPacmanConfig,
@@ -81,6 +82,7 @@ type EnvConfig = (
     | RustPacmanConfig
     | RustSurvivalConfig
     | RustMazeConfig
+    | RustHideSeekConfig
     | RustVideoConfig
     | RustVecConfig
     | RustMultiConfig
@@ -104,6 +106,7 @@ class EnvironmentFactory:
         self.register_env("rust_pacman", RustEnvJax, RustPacmanConfig)
         self.register_env("rust_survival", RustEnvJax, RustSurvivalConfig)
         self.register_env("rust_maze", RustEnvJax, RustMazeConfig)
+        self.register_env("rust_hide_seek", RustEnvJax, RustHideSeekConfig)
         self.register_env("rust_video", RustEnvJax, RustVideoConfig)
 
         self.register_env("vec", self._make_vec, VecConfig)

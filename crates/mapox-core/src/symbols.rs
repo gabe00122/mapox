@@ -92,6 +92,18 @@ pub const AGENT_HARVESTER: &str = "agent/harvester";
 pub const AGENT_PREY: &str = "agent/prey";
 pub const AGENT_PREDATOR: &str = "agent/predator";
 pub const AGENT_KNIGHT: &str = "agent/knight";
+/// Hide-and-seek's two teams by facing, in `MOVES` order: a hider builds on
+/// the tile in front of it and a seeker digs it, so the tile carries which
+/// way that is. Both are drawn as king-of-the-hill knights, hiders blue and
+/// seekers red.
+pub const AGENT_HIDER_UP: &str = "agent/hider_up";
+pub const AGENT_HIDER_RIGHT: &str = "agent/hider_right";
+pub const AGENT_HIDER_DOWN: &str = "agent/hider_down";
+pub const AGENT_HIDER_LEFT: &str = "agent/hider_left";
+pub const AGENT_SEEKER_UP: &str = "agent/seeker_up";
+pub const AGENT_SEEKER_RIGHT: &str = "agent/seeker_right";
+pub const AGENT_SEEKER_DOWN: &str = "agent/seeker_down";
+pub const AGENT_SEEKER_LEFT: &str = "agent/seeker_left";
 pub const AGENT_ARCHER: &str = "agent/archer";
 /// Pac-Man by heading, in `MOVES` order: the heading is state (a move into a
 /// wall keeps it going that way), so the tile carries it.
@@ -120,6 +132,8 @@ pub const MOVES: [&str; 4] = [MOVE_UP, MOVE_RIGHT, MOVE_DOWN, MOVE_LEFT];
 pub const NOOP: &str = "noop";
 pub const PRIMARY_ACTION: &str = "primary";
 pub const DIG_ACTION: &str = "dig";
+/// Raises a [`TILE_DESTRUCTIBLE_WALL`] on the tile in front of the agent.
+pub const BUILD_WALL: &str = "build_wall";
 
 pub const PLACE_PIPE: &str = "place_pipe";
 

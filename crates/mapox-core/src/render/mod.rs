@@ -38,6 +38,16 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::AGENT_GENERIC, 7, 1),
     (symbols::AGENT_SCOUT, 8, 1),
     (symbols::AGENT_HARVESTER, 9, 1),
+    // Hide-and-seek reuses the king-of-the-hill soldiers: the unwounded
+    // knight of each facing, blue for hiders and red for seekers.
+    (symbols::AGENT_SEEKER_UP, 1, 2),
+    (symbols::AGENT_SEEKER_RIGHT, 3, 2),
+    (symbols::AGENT_SEEKER_DOWN, 5, 2),
+    (symbols::AGENT_SEEKER_LEFT, 7, 2),
+    (symbols::AGENT_HIDER_UP, 1, 3),
+    (symbols::AGENT_HIDER_RIGHT, 3, 3),
+    (symbols::AGENT_HIDER_DOWN, 5, 3),
+    (symbols::AGENT_HIDER_LEFT, 7, 3),
     (symbols::UI_DIGITS[0], 0, 4),
     (symbols::UI_DIGITS[1], 1, 4),
     (symbols::UI_DIGITS[2], 2, 4),
@@ -108,6 +118,7 @@ mod tests {
     use super::*;
     use crate::env::Environment;
     use crate::envs::find_return::{FindReturn, FindReturnConfig};
+    use crate::envs::hide_seek::{HideSeek, HideSeekConfig};
     use crate::envs::maze::{Maze, MazeConfig};
     use crate::envs::pacman::{Pacman, PacmanConfig};
     use crate::envs::scouts::{Scouts, ScoutsConfig};
@@ -126,6 +137,7 @@ mod tests {
             Box::new(Pacman::new(&PacmanConfig::default(), 512)),
             Box::new(Survival::new(&SurvivalConfig::default(), 512)),
             Box::new(Maze::new(&MazeConfig::default(), 512)),
+            Box::new(HideSeek::new(&HideSeekConfig::default(), 512)),
         ]
     }
 

@@ -25,7 +25,7 @@ SCOUTS_JSON = (
     '{"env_type": "rust_scouts", "num_scouts": 1, "num_harvesters": 1, '
     '"num_treasures": 12, "width": 12, "height": 12, "view_width": 11, "view_height": 11, '
     '"mapgen_threshold": 0.3, "water_threshold": -0.45, '
-    '"harvesters_move_every": 6, "scout_reward": 1.0, "harvester_reward": 1.0}'
+    '"harvesters_move_every": 6, "digging_timeout": 5, "scout_reward": 1.0, "harvester_reward": 1.0}'
 )
 FR_JSON = (
     '{"env_type": "rust_find_return", "num_agents": 2, "num_flags": 1, '

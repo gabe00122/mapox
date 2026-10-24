@@ -177,6 +177,38 @@ class RustMazeConfig(BaseModel):
     goal_reward: float = 1.0
 
 
+class RustHideSeekConfig(BaseModel):
+    """Hide and seek on a generated map. The seekers start frozen and blind
+    while the hiders build walls; a hider in a seeker's sight is spotted,
+    paying the seeker and penalising the hider, which then respawns as a new
+    agent out of every seeker's sight."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    env_type: Literal["rust_hide_seek"] = "rust_hide_seek"
+
+    # agent ids run hiders first, then seekers
+    num_hiders: int = 2
+    num_seekers: int = 2
+
+    width: int = 40
+    height: int = 40
+    view_width: int = 15
+    view_height: int = 15
+
+    mapgen_threshold: float = 0.07
+    water_threshold: float = -0.45
+
+    # steps the seekers stand frozen and blind at the start of an episode
+    preparation_steps: int = 64
+    # walls each hider may build in a life, and each seeker dig in an episode
+    hider_walls: int = 8
+    seeker_digs: int = 8
+
+    # paid to a seeker for each hider in its sight, and to a hider when spotted
+    spot_reward: float = 1.0
+    spotted_reward: float = -1.0
+
+
 class RustVecConfig(BaseModel):
     """Vectorized copies of one rust env; the rust side steps them in parallel."""
 
@@ -215,6 +247,7 @@ type RustEnvConfig = (
     | RustPacmanConfig
     | RustSurvivalConfig
     | RustMazeConfig
+    | RustHideSeekConfig
     | RustVideoConfig
     | RustVecConfig
     | RustMultiConfig

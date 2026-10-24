@@ -6,6 +6,7 @@ from mapox.envs.rust_env_jax import RustEnvJax
 from mapox.envs.rust_env_numpy import (
     RustEnvNumpy,
     RustFindReturnConfig,
+    RustHideSeekConfig,
     RustMazeConfig,
     RustPacmanConfig,
     RustScoutsConfig,
@@ -16,6 +17,7 @@ CONFIGS = {
     "scouts": RustScoutsConfig(num_scouts=1, num_harvesters=1, width=12, height=12),
     "pacman": RustPacmanConfig(),
     "maze": RustMazeConfig(num_agents=2, width=11, height=11),
+    "hide_seek": RustHideSeekConfig(num_hiders=1, num_seekers=1, width=12, height=12),
 }
 
 

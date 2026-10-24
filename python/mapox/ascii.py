@@ -47,6 +47,9 @@ LEGEND: dict[str, str] = {
     SB.AGENT_PREDATOR: "P",
     SB.AGENT_KNIGHT: "k",
     SB.AGENT_ARCHER: "r",
+    # hide and seek's teams; the facing is lost in text
+    **{f"agent/hider_{d}": "H" for d in ("up", "right", "down", "left")},
+    **{f"agent/seeker_{d}": "K" for d in ("up", "right", "down", "left")},
     SB.TILE_PELLET: "o",
     SB.TILE_POWER_PELLET: "@",
     SB.AGENT_PACMAN_UP: "^",
