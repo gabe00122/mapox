@@ -24,3 +24,5 @@ pkg/
 crates/mapox-web/web/*.wasm
 crates/mapox-web/web/mapox_web.js
 crates/mapox-web/web/*.safetensors
+
+.zed/

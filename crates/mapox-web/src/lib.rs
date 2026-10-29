@@ -18,7 +18,7 @@ use mapox_burn::{BurnPolicy, LoadedPolicy, load_policy_bytes};
 use mapox_core::env::Environment;
 use mapox_core::make::{EnvConfig, make};
 use mapox_core::policy::Policy;
-use mapox_core::render::RenderApp;
+use mapox_core::render::{RenderApp, theme};
 use wasm_bindgen::prelude::*;
 
 /// The running viewer, as the page holds it. Construct one, [`start`] it on a
@@ -67,7 +67,10 @@ impl WebHandle {
             .start(
                 canvas,
                 eframe::WebOptions::default(),
-                Box::new(move |_cc| Ok(Box::new(RenderApp::new(env, length, seed.into(), policy)))),
+                Box::new(move |cc| {
+                    theme::apply(&cc.egui_ctx);
+                    Ok(Box::new(RenderApp::new(env, length, seed.into(), policy)))
+                }),
             )
             .await
     }

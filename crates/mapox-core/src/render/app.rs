@@ -11,7 +11,7 @@ use crate::{
         gpu::TilemapRenderer,
         grid::GridLayout,
         keys::{self, Command, Input},
-        resolve_art,
+        resolve_art, theme,
     },
     symbols,
     timestep::TimeStepBuffers,
@@ -383,22 +383,12 @@ impl RenderApp {
         ui.ctx().request_repaint_after(wait);
     }
 
-    /// Episode, focused agent, modes and action keys, down the right edge. A landscape window spends no map on it: the
-    /// map runs out of height first and would leave this space black.
+    /// Episode, focused agent, modes and action keys, down the right edge. A
+    /// landscape window spends no map on it: the map runs out of height
+    /// first and would leave this space black.
     fn side_panel_ui(&mut self, ui: &mut egui::Ui) {
         ui.add_space(8.0);
-        ui.horizontal(|ui| {
-            section_heading(ui, "episode");
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui
-                    .small_button("▶")
-                    .on_hover_text(format!("hide ({})", command_hint(Command::ToggleSidePanel)))
-                    .clicked()
-                {
-                    self.run_command(Command::ToggleSidePanel, ui);
-                }
-            });
-        });
+        section_heading(ui, "episode");
         egui::Grid::new("episode").num_columns(2).show(ui, |ui| {
             ui.label("step");
             ui.label(format!("{} / {}", self.step_count, self.length));
@@ -510,6 +500,22 @@ impl RenderApp {
         self.keys_ui(ui);
     }
 
+    /// The button that opens or collapses the side panel, at the bottom of a
+    /// bottom-up `ui`.
+    fn side_panel_toggle(&mut self, ui: &mut egui::Ui, arrow: &str, action: &str) {
+        ui.add_space(4.0);
+        if ui
+            .small_button(arrow)
+            .on_hover_text(format!(
+                "{action} ({})",
+                command_hint(Command::ToggleSidePanel)
+            ))
+            .clicked()
+        {
+            self.run_command(Command::ToggleSidePanel, ui);
+        }
+    }
+
     /// The action keys, dimming those the focused agent's mask rules out
     /// right now. The rest of the controls are one `?` away.
     fn keys_ui(&self, ui: &mut egui::Ui) {
@@ -590,7 +596,7 @@ impl RenderApp {
             }
         }
 
-        // clip so the focused view rect can't overhang into the letterbox
+        // clip so the focus outline can't overhang into the letterbox
         let painter = ui.painter_at(layout.grid_rect());
         let renderer = self
             .tilemap_renderer
@@ -617,15 +623,15 @@ impl RenderApp {
         }
         renderer.paint(&painter, layout.grid_rect());
 
-        // outline the focused agent and its field of view, so the partial
-        // observability the env exposes is visible.
+        // outline the focused agent, so it's clear whose stats the side
+        // panel shows and whose action the keys pick
         if let Some(position) = self.render_state.agent_positions.get(self.focused_agent) {
             let (x, y) = (position.x as f32, position.y as f32);
 
             painter.rect_stroke(
                 layout.cell_rect(x, y, 1.0, 1.0),
                 0.0,
-                Stroke::new(2.0, Color32::YELLOW),
+                Stroke::new(2.0, theme::ACCENT),
                 StrokeKind::Inside,
             );
         }
@@ -689,7 +695,7 @@ fn signed(ui: &egui::Ui, value: Option<f32>) -> RichText {
     };
     let text = RichText::new(format!("{value:+.2}")).monospace();
     if value > 0.0 {
-        text.color(Color32::from_rgb(120, 200, 120))
+        text.color(theme::POSITIVE)
     } else if value < 0.0 {
         text.color(ui.visuals().error_fg_color)
     } else {
@@ -763,20 +769,18 @@ impl eframe::App for RenderApp {
                 .exact_size(SIDE_PANEL_WIDTH),
             |ui, expanded| {
                 if expanded {
-                    egui::ScrollArea::vertical().show(ui, |ui| self.side_panel_ui(ui));
+                    // the hide button pins to the bottom left; the rest
+                    // scrolls in whatever height is left above it
+                    ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+                        self.side_panel_toggle(ui, "▶", "hide");
+                        ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
+                            egui::ScrollArea::vertical().show(ui, |ui| self.side_panel_ui(ui));
+                        });
+                    });
                 } else {
-                    ui.add_space(8.0);
-                    ui.vertical_centered(|ui| {
-                        if ui
-                            .small_button("◀")
-                            .on_hover_text(format!(
-                                "show panel ({})",
-                                command_hint(Command::ToggleSidePanel)
-                            ))
-                            .clicked()
-                        {
-                            self.run_command(Command::ToggleSidePanel, ui);
-                        }
+                    // the show button pins to the bottom too, like the hide button
+                    ui.with_layout(egui::Layout::bottom_up(egui::Align::Center), |ui| {
+                        self.side_panel_toggle(ui, "◀", "show panel");
                     });
                 }
             },
@@ -816,7 +820,14 @@ pub fn open_window(app: RenderApp) -> eframe::Result {
             .with_inner_size([1140.0, 800.0]),
         ..Default::default()
     };
-    eframe::run_native("mapox", options, Box::new(move |_cc| Ok(Box::new(app))))
+    eframe::run_native(
+        "mapox",
+        options,
+        Box::new(move |cc| {
+            theme::apply(&cc.egui_ctx);
+            Ok(Box::new(app))
+        }),
+    )
 }
 
 #[cfg(test)]
@@ -1045,61 +1056,43 @@ mod tests {
         }
     }
 
+    /// A 21×21 map with an 11×11 view: the render settings add the two UI
+    /// rows to the view, and every agent starts on the map.
     #[test]
-    fn scouts_render_settings_and_fov_are_correct() {
-        let env = Box::new(Scouts::new(
-            &ScoutsConfig {
-                width: 21,
-                height: 21,
-                view_width: 11,
-                view_height: 11,
-                ..Default::default()
-            },
-            512,
-        ));
-        let settings = env.get_render_settings();
-        assert_eq!(settings.tile_width, 21);
-        assert_eq!(settings.tile_height, 21);
-        assert_eq!(settings.view_width, 11);
-        assert_eq!(settings.view_height, 13);
-        assert_eq!(settings.ui_height, 2);
-        assert_eq!(settings.fov_height(), 11);
+    fn render_settings_and_fov_are_correct() {
+        let scouts = ScoutsConfig {
+            width: 21,
+            height: 21,
+            view_width: 11,
+            view_height: 11,
+            ..Default::default()
+        };
+        let find_return = FindReturnConfig {
+            width: 21,
+            height: 21,
+            view_width: 11,
+            view_height: 11,
+            ..Default::default()
+        };
+        for env in [
+            Box::new(Scouts::new(&scouts, 512)) as Box<dyn Environment>,
+            Box::new(FindReturn::new(&find_return, 512)) as Box<dyn Environment>,
+        ] {
+            let settings = env.get_render_settings();
+            assert_eq!(settings.tile_width, 21);
+            assert_eq!(settings.tile_height, 21);
+            assert_eq!(settings.view_width, 11);
+            assert_eq!(settings.view_height, 13);
+            assert_eq!(settings.ui_height, 2);
+            assert_eq!(settings.fov_height(), 11);
 
-        let mut render_state = GridRenderState::default();
-        env.render_state_into(&mut render_state);
-        assert_eq!(render_state.tilemap.dim(), (21, 21));
-        for pos in &render_state.agent_positions {
-            assert!(pos.x >= 0 && (pos.x as usize) < 21);
-            assert!(pos.y >= 0 && (pos.y as usize) < 21);
-        }
-    }
-
-    #[test]
-    fn find_return_render_settings_and_fov_are_correct() {
-        let env = Box::new(FindReturn::new(
-            &FindReturnConfig {
-                width: 21,
-                height: 21,
-                view_width: 11,
-                view_height: 11,
-                ..Default::default()
-            },
-            512,
-        ));
-        let settings = env.get_render_settings();
-        assert_eq!(settings.tile_width, 21);
-        assert_eq!(settings.tile_height, 21);
-        assert_eq!(settings.view_width, 11);
-        assert_eq!(settings.view_height, 13);
-        assert_eq!(settings.ui_height, 2);
-        assert_eq!(settings.fov_height(), 11);
-
-        let mut render_state = GridRenderState::default();
-        env.render_state_into(&mut render_state);
-        assert_eq!(render_state.tilemap.dim(), (21, 21));
-        for pos in &render_state.agent_positions {
-            assert!(pos.x >= 0 && (pos.x as usize) < 21);
-            assert!(pos.y >= 0 && (pos.y as usize) < 21);
+            let mut render_state = GridRenderState::default();
+            env.render_state_into(&mut render_state);
+            assert_eq!(render_state.tilemap.dim(), (21, 21));
+            for pos in &render_state.agent_positions {
+                assert!(pos.x >= 0 && (pos.x as usize) < 21);
+                assert!(pos.y >= 0 && (pos.y as usize) < 21);
+            }
         }
     }
 }
