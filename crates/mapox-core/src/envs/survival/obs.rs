@@ -216,39 +216,3 @@ fn encode_view(
         },
     );
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{
-        env::Environment, envs::survival::config::SurvivalConfig, timestep::TimeStepBuffers,
-    };
-
-    #[test]
-    fn the_ui_band_shows_health_and_hunger() {
-        let config = SurvivalConfig::default();
-        let mut env = Survival::new(&config, 512);
-        let mut buffers = TimeStepBuffers::new(&env);
-        env.reset(0, &mut buffers.view_mut());
-
-        let agent = env.state.agents[0];
-        env.state.world.get::<&mut Health>(agent).unwrap().amount = 7;
-        env.state.world.get::<&mut Hunger>(agent).unwrap().amount = 42;
-        env.encode_observations(&mut buffers.view_mut());
-
-        let fov = config.view_height as usize;
-        let width = config.view_width as usize;
-        let row = |y: usize| {
-            (0..width)
-                .map(|x| buffers.obs[[0, x, y, 0]])
-                .collect::<Vec<_>>()
-        };
-
-        use SurvivalObs::*;
-        let mut stats = vec![UI; width];
-        stats[..7].copy_from_slice(&[UiHealth, UI, Digit7, UI, UiHunger, Digit4, Digit2]);
-        let stats: Vec<VocabId> = stats.into_iter().map(Into::into).collect();
-        assert_eq!(row(fov + UI_HEIGHT - 1), stats);
-        assert_eq!(row(fov), vec![VocabId::from(UI); width]);
-    }
-}

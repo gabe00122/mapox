@@ -35,7 +35,8 @@ pub struct ScoutsConfig {
     pub mapgen_threshold: f32,
     pub water_threshold: f32,
 
-    pub harvesters_move_every: u32,
+    /// Steps a harvester stands frozen after acting.
+    pub harvesters_move_timeout: u32,
     /// Steps a harvester stands frozen after digging out a wall.
     pub digging_timeout: u32,
 
@@ -55,7 +56,7 @@ impl Default for ScoutsConfig {
             view_height: 15,
             mapgen_threshold: 0.07,
             water_threshold: -0.45,
-            harvesters_move_every: 6,
+            harvesters_move_timeout: 6,
             digging_timeout: 5,
             scout_reward: 1.0,
             harvester_reward: 1.0,
@@ -431,7 +432,7 @@ impl Environment for Scouts {
             }
 
             if agent.role == Role::Harvester {
-                agent.timeout = self.config.harvesters_move_every.saturating_sub(1);
+                agent.timeout = self.config.harvesters_move_timeout;
             }
 
             let action = ScoutsAction::from_id(actions[agent_id]);
@@ -652,7 +653,7 @@ mod tests {
             num_treasures: 0,
             width: 21,
             height: 21,
-            harvesters_move_every: 1,
+            harvesters_move_timeout: 0,
             harvester_reward: 3.0,
             scout_reward: 1.5,
             ..Default::default()
@@ -793,32 +794,33 @@ mod tests {
         assert_eq!(env.state.base_map[unlocked.idx()], TileFlagUnlocked);
     }
 
-    /// A harvester acts on one step in `harvesters_move_every` and stands
-    /// still through the rest, while the scout beside it moves every step.
+    /// A harvester waits `harvesters_move_timeout` steps after each move,
+    /// while the scout beside it moves every step.
     #[test]
-    fn harvesters_act_on_one_step_in_n() {
+    fn harvesters_wait_the_full_move_timeout() {
         let mut env = empty_env_with(ScoutsConfig {
             num_scouts: 1,
             num_harvesters: 1,
             num_treasures: 0,
             width: 21,
             height: 21,
-            harvesters_move_every: 3,
+            harvesters_move_timeout: 3,
             ..Default::default()
         });
         let start = center(&env);
         spawn_agents(&mut env, &[start, start + Position::new(0, 5)]);
 
         let mut buffers = TimeStepBuffers::new(&env);
-        for _ in 0..6 {
+        for turn in 0..8 {
             step(
                 &mut env,
                 &mut buffers,
                 &[ScoutsAction::MoveRight, ScoutsAction::MoveRight],
             );
+            assert_eq!(env.state.agents[1].position.x, start.x + 1 + turn / 4);
         }
 
-        assert_eq!(env.state.agents[0].position.x, start.x + 6);
+        assert_eq!(env.state.agents[0].position.x, start.x + 8);
         assert_eq!(env.state.agents[1].position.x, start.x + 2);
     }
 
@@ -883,7 +885,7 @@ mod tests {
             num_treasures: 0,
             width: 21,
             height: 21,
-            harvesters_move_every: 3,
+            harvesters_move_timeout: 3,
             ..Default::default()
         });
         let start = center(&env);
@@ -897,7 +899,7 @@ mod tests {
             &[ScoutsAction::MoveRight, ScoutsAction::MoveRight],
         );
 
-        for _ in 0..env.config.harvesters_move_every - 1 {
+        for _ in 0..env.config.harvesters_move_timeout {
             let mask = buffers.action_mask.row(1);
             assert_eq!(
                 mask.iter().filter(|&&legal| legal).count(),
@@ -938,7 +940,7 @@ mod tests {
             num_treasures: 0,
             width: 21,
             height: 21,
-            harvesters_move_every: 1,
+            harvesters_move_timeout: 0,
             digging_timeout: 3,
             ..Default::default()
         });
@@ -1000,7 +1002,7 @@ mod tests {
             num_treasures: 0,
             width: 21,
             height: 21,
-            harvesters_move_every: 1,
+            harvesters_move_timeout: 0,
             ..Default::default()
         });
         let edge = Position::new(env.pad_width, env.height / 2);

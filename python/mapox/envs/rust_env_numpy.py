@@ -55,10 +55,8 @@ class RustScoutsConfig(BaseModel):
 
     mapgen_threshold: float = 0.07
     water_threshold: float = -0.45
-    # a harvester acts on one step in this many; the rest are spent standing
-    harvesters_move_every: int = 6
-    # steps a harvester stands frozen after digging out a wall
-    digging_timeout: int = 5
+    harvesters_move_timeout: int = 5
+    digging_timeout: int = 10
 
     scout_reward: float = 1.0
     harvester_reward: float = 1.0

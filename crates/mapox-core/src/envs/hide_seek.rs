@@ -459,7 +459,6 @@ impl HideSeek {
                     .position(|hider| hider.position == position)
                     .expect("a hider tile has a hider standing on it");
 
-                state.agents[seeker_id].budget = self.config.seeker_digs;
                 timestep.reward[seeker_id] += self.config.spot_reward;
                 self.metrics.seeker_reward += f64::from(self.config.spot_reward);
                 if !state.spotted.contains(&hider_id) {
@@ -1083,39 +1082,6 @@ mod tests {
                 .iter()
                 .any(|&tile| HideSeekObs::from_id(tile).is_hider())
         );
-    }
-
-    /// A catch refills the digs of the seeker that made it, and only that
-    /// seeker's.
-    #[test]
-    fn a_catch_refills_the_seekers_digs() {
-        let mut env = empty_env_with(HideSeekConfig {
-            num_hiders: 1,
-            num_seekers: 2,
-            width: 30,
-            height: 30,
-            seeker_digs: 3,
-            preparation_steps: 0,
-            ..Default::default()
-        });
-        let start = center(&env);
-        // the first seeker has the hider in sight, the second is out of range
-        spawn_agents(
-            &mut env,
-            &[
-                start,
-                start + Position::new(4, 0),
-                start + Position::new(0, 9),
-            ],
-        );
-        env.state.agents[1].budget = 1;
-        env.state.agents[2].budget = 1;
-        let mut buffers = observe(&env);
-
-        step(&mut env, &mut buffers, &[Noop, Noop, Noop]);
-        assert!(buffers.terminated[0]);
-        assert_eq!(env.state.agents[1].budget, env.config.seeker_digs);
-        assert_eq!(env.state.agents[2].budget, 1);
     }
 
     /// A wall between them hides a hider from a seeker that would otherwise

@@ -72,7 +72,7 @@ mod tests {
         let json = r#"{"env_type":"rust_scouts","num_scouts":1,"num_harvesters":1,
             "num_treasures":12,"width":80,"height":70,"view_width":15,"view_height":15,
             "mapgen_threshold":0.07,"water_threshold":-0.45,
-            "harvesters_move_every":6,"digging_timeout":5,"scout_reward":1.0,"harvester_reward":1.0}"#;
+            "harvesters_move_timeout":6,"digging_timeout":5,"scout_reward":1.0,"harvester_reward":1.0}"#;
 
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();
         assert_eq!(parsed, EnvConfig::RustScouts(Box::default()));
@@ -143,7 +143,7 @@ mod tests {
         let json = r#"{"env_type":"rust_vec","num":32,"env":{"env_type":"rust_scouts",
             "num_scouts":1,"num_harvesters":1,"num_treasures":12,"width":80,"height":70,
             "view_width":15,"view_height":15,"mapgen_threshold":0.07,
-            "water_threshold":-0.45,"harvesters_move_every":6,"digging_timeout":5,
+            "water_threshold":-0.45,"harvesters_move_timeout":6,"digging_timeout":5,
             "scout_reward":1.0,"harvester_reward":1.0}}"#;
 
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();
@@ -164,7 +164,7 @@ mod tests {
             {"name":"scouts","num":2,"env":{"env_type":"rust_scouts","num_scouts":1,
                 "num_harvesters":1,"num_treasures":12,"width":80,"height":70,
                 "view_width":15,"view_height":15,"mapgen_threshold":0.07,
-                "water_threshold":-0.45,"harvesters_move_every":6,"digging_timeout":5,
+                "water_threshold":-0.45,"harvesters_move_timeout":6,"digging_timeout":5,
                 "scout_reward":1.0,"harvester_reward":1.0}},
             {"name":"fr","num":3,"env":{"env_type":"rust_find_return","num_agents":8,
                 "num_flags":1,"width":80,"height":70,"view_width":15,"view_height":15,
