@@ -7,6 +7,7 @@ use std::{
     process::{Child, ChildStdin, Command, Stdio},
 };
 
+use ndarray::{ArrayView3, s};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -14,10 +15,11 @@ use crate::{
     error::{MapoxError, MapoxResult},
     make::{EnvConfig, make},
     render::{
-        env::{GridRenderSettings, GridRenderState},
+        env::{GridRenderSettings, GridRenderState, visible_tiles},
         rgb::RgbRenderer,
     },
     spec::{ActionSpec, ObservationSpec},
+    symbols,
     timestep::TimeStepMut,
     vocab::{VocabId, Vocabulary},
 };
@@ -120,7 +122,7 @@ impl VideoWrapper {
         }
     }
 
-    fn record_step(&mut self, step: u64) -> MapoxResult<()> {
+    fn record_step(&mut self, step: u64, obs: ArrayView3<'_, VocabId>) -> MapoxResult<()> {
         if self.next_start == Some(step) {
             self.next_start = self
                 .config
@@ -129,7 +131,7 @@ impl VideoWrapper {
             self.recording = Some(Recording::new(&*self.inner, &self.config, step)?);
         }
         if let Some(recording) = &mut self.recording {
-            recording.capture(&*self.inner, &self.config)?;
+            recording.capture(&*self.inner, &self.config, obs)?;
             if recording.frames == self.config.record_steps {
                 self.finish_clip()?;
             }
@@ -150,7 +152,7 @@ impl Environment for VideoWrapper {
         if self.recording.is_none() && self.next_start != Some(step) {
             return;
         }
-        if let Err(error) = self.record_step(step) {
+        if let Err(error) = self.record_step(step, timestep.obs.slice(s![.., .., .., 0])) {
             log::error!("video recording disabled at step {step}: {error}");
             self.recording = None;
             self.next_start = None;
@@ -211,14 +213,16 @@ impl Drop for VideoWrapper {
 
 struct Recording {
     encoder: Encoder,
-    renderer: Option<RgbRenderer>,
+    // The settings the renderer was built from, for reading line of sight.
+    renderer: Option<(GridRenderSettings, RgbRenderer)>,
     state: GridRenderState,
     frames: u64,
 }
 
 impl Recording {
     fn new(env: &dyn Environment, config: &VideoConfig, step: u64) -> MapoxResult<Self> {
-        let renderer = RgbRenderer::new(&env.get_render_settings(), config.width, config.height)?;
+        let settings = env.get_render_settings();
+        let renderer = RgbRenderer::new(&settings, config.width, config.height)?;
         fs::create_dir_all(&config.output_dir)?;
         let path = config.output_dir.join(format!("video-{step:012}.mp4"));
         // Pass an exclusively created file as stdout: neither ffmpeg nor another
@@ -278,22 +282,34 @@ impl Recording {
                 stdin,
                 reaped: false,
             },
-            renderer: Some(renderer),
+            renderer: Some((settings, renderer)),
             state: GridRenderState::default(),
             frames: 0,
         })
     }
 
-    fn capture(&mut self, env: &dyn Environment, config: &VideoConfig) -> MapoxResult<()> {
+    /// `obs` is the tile channel of the step's observations.
+    fn capture(
+        &mut self,
+        env: &dyn Environment,
+        config: &VideoConfig,
+        obs: ArrayView3<'_, VocabId>,
+    ) -> MapoxResult<()> {
         if self.renderer.is_none() {
-            self.renderer = Some(RgbRenderer::new(
-                &env.get_render_settings(),
-                config.width,
-                config.height,
-            )?);
+            let settings = env.get_render_settings();
+            let renderer = RgbRenderer::new(&settings, config.width, config.height)?;
+            self.renderer = Some((settings, renderer));
         }
         env.render_state_into(&mut self.state);
-        let pixels = self.renderer.as_mut().unwrap().render(&self.state)?;
+        let (settings, renderer) = self.renderer.as_mut().unwrap();
+        // Fog what no agent can see, like the bird's-eye view in the app.
+        let seen = visible_tiles(
+            settings,
+            &self.state.agent_positions,
+            obs,
+            settings.obs_vocab.get(symbols::TILE_MASK),
+        );
+        let pixels = renderer.render(&self.state, Some(&seen))?;
         self.encoder.stdin.as_mut().unwrap().write_all(pixels)?;
         self.frames += 1;
         Ok(())

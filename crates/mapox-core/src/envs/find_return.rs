@@ -128,15 +128,19 @@ impl FindReturnObs {
         )
     }
 
+    fn destructible(self) -> bool {
+        use FindReturnObs::*;
+        matches!(self, TileDestructibleWall | PipeHorizontal | PipeVirtical)
+    }
+}
+
+impl fov::ViewTile for FindReturnObs {
+    const MASK: Self = FindReturnObs::Mask;
+
     /// Water is the one blocking tile an agent can see straight over.
     fn opaque(self) -> bool {
         use FindReturnObs::*;
         matches!(self, TileWall | TileDestructibleWall)
-    }
-
-    fn destructible(self) -> bool {
-        use FindReturnObs::*;
-        matches!(self, TileDestructibleWall | PipeHorizontal | PipeVirtical)
     }
 }
 
@@ -278,17 +282,10 @@ impl FindReturn {
 
     fn encode_observations(&self, timestep: &mut TimeStepMut) {
         let fov_height = self.config.view_height as usize;
-
         for (agent_id, agent) in self.state.agents.iter().enumerate() {
             // wall padding keeps the view window inside the map
             let mut view = timestep.obs.slice_mut(s![agent_id, .., ..fov_height, 0]);
-            fov::encode_visible(
-                &self.state.map,
-                agent.position,
-                &mut view,
-                FindReturnObs::Mask,
-                |tile| tile.opaque(),
-            );
+            fov::observe(&self.state.map, agent.position, &mut view);
 
             let mut ui = timestep.obs.slice_mut(s![agent_id, .., fov_height.., 0]);
             ui.fill(FindReturnObs::UI as VocabId);

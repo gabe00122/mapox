@@ -45,21 +45,6 @@ AGENT_PREY = "agent/prey"  # prey env: sneakers
 AGENT_PREDATOR = "agent/predator"  # prey env: chasers
 AGENT_KNIGHT = "agent/knight"
 AGENT_ARCHER = "agent/archer"
-AGENT_SNAKE_HEAD = "agent/snake_head"
-AGENT_SNAKE_BODY = "agent/snake_body"
-
-# the rust snake paints bodies in ten colours, agent index modulo ten
-AGENT_SNAKE_RED = "agent/snake_red"
-AGENT_SNAKE_ORANGE = "agent/snake_orange"
-AGENT_SNAKE_YELLOW = "agent/snake_yellow"
-AGENT_SNAKE_GOLD = "agent/snake_gold"
-AGENT_SNAKE_GREEN = "agent/snake_green"
-AGENT_SNAKE_BLUE = "agent/snake_blue"
-AGENT_SNAKE_PURPLE = "agent/snake_purple"
-AGENT_SNAKE_PINK = "agent/snake_pink"
-AGENT_SNAKE_GRAY = "agent/snake_gray"
-AGENT_SNAKE_WHITE = "agent/snake_white"
-
 # the rust pacman: Pac-Man by heading (MOVES order), then the ghosts
 AGENT_PACMAN_UP = "agent/pacman_up"
 AGENT_PACMAN_RIGHT = "agent/pacman_right"

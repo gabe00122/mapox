@@ -12,9 +12,11 @@ from mapox.envs.rust_env_numpy import (
     RustEnvConfig,
     RustEnvNumpy,
     RustFindReturnConfig,
+    RustHideSeekConfig,
+    RustMazeConfig,
     RustPacmanConfig,
     RustScoutsConfig,
-    RustSnakeConfig,
+    RustSurvivalConfig,
     RustVideoConfig,
 )
 from mapox.timestep import TimeStep
@@ -114,8 +116,10 @@ def run_ascii(
 CONFIGS = {
     "find_return": RustFindReturnConfig(),
     "scouts": RustScoutsConfig(),
-    "snake": RustSnakeConfig(),
     "pacman": RustPacmanConfig(),
+    "survival": RustSurvivalConfig(),
+    "maze": RustMazeConfig(),
+    "hide_seek": RustHideSeekConfig(),
 }
 
 
@@ -139,7 +143,7 @@ def main() -> None:
         help="run headless and print the ASCII view instead of the native window",
     )
     parser.add_argument("--episodes", type=int, default=2)
-    parser.add_argument("--steps", type=int, default=512)
+    parser.add_argument("--steps", type=int, default=1024)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
         "--agent", type=int, default=0, help="focused agent for the ASCII view"

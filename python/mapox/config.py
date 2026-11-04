@@ -10,15 +10,16 @@ from mapox.envs.prey import PreyConfig, PreyEnv
 from mapox.envs.rust_env_jax import RustEnvJax
 from mapox.envs.rust_env_numpy import (
     RustFindReturnConfig,
+    RustHideSeekConfig,
+    RustMazeConfig,
     RustMultiConfig,
     RustPacmanConfig,
     RustScoutsConfig,
-    RustSnakeConfig,
+    RustSurvivalConfig,
     RustVecConfig,
     RustVideoConfig,
 )
 from mapox.envs.scouts import ScoutsConfig, ScoutsEnv
-from mapox.envs.snake import SnakeConfig, SnakeEnv
 from mapox.envs.traveling_salesman import (
     TravelingSalesmanConfig,
     TravelingSalesmanEnv,
@@ -76,11 +77,12 @@ type EnvConfig = (
     | TravelingSalesmanConfig
     | KingHillConfig
     | PreyConfig
-    | SnakeConfig
     | RustFindReturnConfig
     | RustScoutsConfig
-    | RustSnakeConfig
     | RustPacmanConfig
+    | RustSurvivalConfig
+    | RustMazeConfig
+    | RustHideSeekConfig
     | RustVideoConfig
     | RustVecConfig
     | RustMultiConfig
@@ -99,11 +101,12 @@ class EnvironmentFactory:
         )
         self.register_env("king_hill", KingHillEnv, KingHillConfig)
         self.register_env("prey", PreyEnv, PreyConfig)
-        self.register_env("snake", SnakeEnv, SnakeConfig)
         self.register_env("rust_find_return", RustEnvJax, RustFindReturnConfig)
         self.register_env("rust_scouts", RustEnvJax, RustScoutsConfig)
-        self.register_env("rust_snake", RustEnvJax, RustSnakeConfig)
         self.register_env("rust_pacman", RustEnvJax, RustPacmanConfig)
+        self.register_env("rust_survival", RustEnvJax, RustSurvivalConfig)
+        self.register_env("rust_maze", RustEnvJax, RustMazeConfig)
+        self.register_env("rust_hide_seek", RustEnvJax, RustHideSeekConfig)
         self.register_env("rust_video", RustEnvJax, RustVideoConfig)
 
         self.register_env("vec", self._make_vec, VecConfig)

@@ -17,7 +17,7 @@ macro_rules! vocab_enum {
         }
 
         impl $name {
-            const TABLE: &[$name] = &[$($name::$variant),+];
+            $vis const TABLE: &[$name] = &[$($name::$variant),+];
         }
 
         impl $crate::envs::common::vocab_enum::VocabEnum for $name {
@@ -28,14 +28,14 @@ macro_rules! vocab_enum {
             }
 
             fn vocab() -> $crate::vocab::Vocabulary {
-                let mut out = Vocabulary::new();
+                let mut out = $crate::vocab::Vocabulary::new();
                 for s in Self::TABLE.iter() {
-                    out.add(s.symbol());
+                    out.add(<Self as $crate::envs::common::vocab_enum::VocabEnum>::symbol(*s));
                 }
                 out
             }
 
-            fn from_id(id: VocabId) -> Self {
+            fn from_id(id: $crate::vocab::VocabId) -> Self {
                 Self::TABLE[id as usize]
             }
         }

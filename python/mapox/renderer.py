@@ -60,8 +60,8 @@ def _team_soldiers(row: int):
     return knights, archers
 
 
-_RED_KNIGHTS, _RED_ARCHERS = _team_soldiers(3)
-_BLUE_KNIGHTS, _BLUE_ARCHERS = _team_soldiers(4)
+_RED_KNIGHTS, _RED_ARCHERS = _team_soldiers(2)
+_BLUE_KNIGHTS, _BLUE_ARCHERS = _team_soldiers(3)
 
 # (col, row) on the sheet scripts/make_tileset.py draws; the rust renderer's
 # TILE_ART points into the same slots.
@@ -84,10 +84,8 @@ tilemap = {
     SB.TILE_DECOR_3: (10, 0),
     SB.TILE_DECOR_4: (11, 0),
     SB.TILE_ARROW: (3, 1),
-    SB.TILE_GRASS: (11, 1),
+    SB.TILE_GRASS: (10, 1),
     SB.TILE_FOOD: (2, 1),
-    SB.AGENT_SNAKE_HEAD: (10, 1),
-    SB.AGENT_SNAKE_BODY: (4, 2),  # the plain green snake segment
 }
 
 

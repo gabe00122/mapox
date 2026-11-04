@@ -5,8 +5,8 @@ from mapox.ascii import LEGEND, UNKNOWN_CHAR, AsciiRenderer, build_char_table
 from mapox.envs.rust_env_numpy import (
     RustEnvNumpy,
     RustFindReturnConfig,
+    RustMazeConfig,
     RustScoutsConfig,
-    RustSnakeConfig,
 )
 from mapox.symbols import AGENT_GENERIC, TILE_EMPTY, TILE_WALL
 from mapox.vocab import Vocabulary
@@ -14,7 +14,7 @@ from mapox.vocab import Vocabulary
 RUST_CONFIGS = {
     "find_return": RustFindReturnConfig(num_agents=2, width=12, height=12),
     "scouts": RustScoutsConfig(num_scouts=1, num_harvesters=1, width=12, height=12),
-    "snake": RustSnakeConfig(num_agents=2, width=12, height=12),
+    "maze": RustMazeConfig(num_agents=2, width=12, height=12),
 }
 
 

@@ -4,7 +4,7 @@ Steps mapox._core.Env in a plain Python loop with numpy buffers.
 With --vec-count > 1 the config is wrapped in a `vec` env_type and the
 mapox-core VectorWrapper steps the copies in parallel (crates/mapox-core/src/wrappers/vector.rs).
 
-Run: uv run python scripts/bench_rust_env.py [--env {find_return,scouts,snake}]
+Run: uv run python scripts/bench_rust_env.py [--env {find_return,scouts}]
                                       [--agents N] [--vec-count K]
 """
 
@@ -17,7 +17,6 @@ from mapox._core import Env
 from mapox.envs.rust_env_numpy import (
     RustFindReturnConfig,
     RustScoutsConfig,
-    RustSnakeConfig,
     RustVecConfig,
 )
 
@@ -42,8 +41,6 @@ def make_config(name: str, agents_per_env: int, side: int):
             width=side,
             height=side,
         )
-    if name == "snake":
-        return RustSnakeConfig(num_agents=agents_per_env, width=side, height=side)
     return RustFindReturnConfig(num_agents=agents_per_env, width=side, height=side)
 
 
@@ -64,7 +61,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--env",
-        choices=["find_return", "scouts", "snake"],
+        choices=["find_return", "scouts"],
         default="find_return",
         help="which rust env to bench",
     )

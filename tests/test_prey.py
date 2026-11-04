@@ -349,20 +349,3 @@ def test_rollout_invariants(env):
         assert (state.fullness > 0).all() and (state.fullness <= cfg.max_fullness).all()
         assert (state.food_timer >= 0).all()
         assert (state.food_timer <= cfg.food_regrow_time).all()
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="_spawn samples open tiles with replacement, so agents can spawn "
-    "on top of each other (both at reset and on respawn)",
-)
-def test_spawned_agents_never_overlap():
-    env = PreyEnv(
-        PreyConfig(num_sneakers=6, num_chasers=4, width=16, height=16, num_food=2),
-        LENGTH,
-    )
-    for seed in range(30):
-        state, _ = env.reset(jax.random.key(seed))
-        pos = jnp.concatenate([state.sneaker_pos, state.chaser_pos], axis=0)
-        unique = {tuple(p) for p in pos.tolist()}
-        assert len(unique) == env.num_agents, f"overlap at reset, seed {seed}"

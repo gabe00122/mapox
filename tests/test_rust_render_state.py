@@ -8,10 +8,10 @@ from mapox.envs.rust_env_jax import RustEnvJax
 from mapox.envs.rust_env_numpy import (
     RustEnvNumpy,
     RustFindReturnConfig,
+    RustMazeConfig,
     RustMultiConfig,
     RustMultiEnvSpec,
     RustScoutsConfig,
-    RustSnakeConfig,
 )
 
 # (config, (view_width, view_height, ui_height)): every env adds its two-row
@@ -34,8 +34,8 @@ CONFIGS = {
         ),
         (9, 9, 2),
     ),
-    "snake": (
-        RustSnakeConfig(num_agents=1, width=12, height=10, view_width=9, view_height=7),
+    "maze": (
+        RustMazeConfig(num_agents=1, width=12, height=10, view_width=9, view_height=7),
         (9, 9, 2),
     ),
 }
@@ -73,7 +73,7 @@ def test_render_state_is_the_full_map_with_agents_placed(config, view):
 
 
 def test_render_state_tracks_agent_movement():
-    env = RustEnvNumpy(RustSnakeConfig(num_agents=1, width=12, height=10), 64)
+    env = RustEnvNumpy(RustMazeConfig(num_agents=1, width=12, height=10), 64)
     env.reset(0)
     before = env.get_render_state().agent_positions.copy()
 

@@ -14,7 +14,6 @@ from mapox.config import (
     MultiTaskConfig,
     PreyConfig,
     ScoutsConfig,
-    SnakeConfig,
     TravelingSalesmanConfig,
     VecConfig,
 )
@@ -40,7 +39,6 @@ __all__ = [
     "ObservationSpec",
     "PreyConfig",
     "ScoutsConfig",
-    "SnakeConfig",
     "TimeStep",
     "TravelingSalesmanConfig",
     "VecConfig",

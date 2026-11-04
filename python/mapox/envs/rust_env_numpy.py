@@ -55,8 +55,8 @@ class RustScoutsConfig(BaseModel):
 
     mapgen_threshold: float = 0.07
     water_threshold: float = -0.45
-    # a harvester acts on one step in this many; the rest are spent standing
-    harvesters_move_every: int = 6
+    harvesters_move_timeout: int = 5
+    digging_timeout: int = 10
 
     scout_reward: float = 1.0
     harvester_reward: float = 1.0
@@ -92,23 +92,6 @@ class RustVideoConfig(BaseModel):
     crf: int = 23
 
 
-class RustSnakeConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True)
-    env_type: Literal["rust_snake"] = "rust_snake"
-
-    num_agents: int = 16
-    width: int = 80
-    height: int = 70
-    view_width: int = 15
-    view_height: int = 15
-
-    # every open tile independently grows a pellet with this probability
-    # each step; snakes always start as a single cell on a bare board
-    food_spawn_prob: float = 0.0001
-    food_reward: float = 0.01
-    death_reward: float = 0.0
-
-
 class RustPacmanConfig(BaseModel):
     """Pac-Man on the classic maze. The maze is fixed, so there are no size
     keys; the view wraps through the side tunnel the way Pac-Man does."""
@@ -136,6 +119,92 @@ class RustPacmanConfig(BaseModel):
     death_reward: float = 0.0
     # paid on top of the last pellet's reward when the maze is cleared
     clear_reward: float = 0.0
+
+
+class RustSurvivalConfig(BaseModel):
+    """A generated survival map, rewarding survival and new items."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    env_type: Literal["rust_survival"] = "rust_survival"
+
+    num_agents: int = 8
+
+    width: int = 40
+    height: int = 40
+    view_width: int = 15
+    view_height: int = 15
+    # how far an agent sees around itself in the dark; past it, only lit
+    # ground shows
+    night_vision_radius: int = 1
+    # share of the map that is water (lowest ground) and rock (highest)
+    water_fraction: float = 0.10
+    rock_fraction: float = 0.15
+    # share of the rock that is iron ore, in seams through it
+    iron_ore_fraction: float = 0.1
+    # share of the land between that is forest (wettest) and scrub (driest);
+    # the rest is meadow
+    forest_fraction: float = 0.25
+    scrub_fraction: float = 0.25
+
+    # scales the reward for staying fed and healthy and the penalty for
+    # dying; 0 turns it off
+    survival_reward: float = 1.0
+    # paid the first time each item enters a survivor's inventory in a life;
+    # 0 turns it off, and the metrics count achievements either way
+    achievement_reward: float = 1.0
+
+
+class RustMazeConfig(BaseModel):
+    """A generated perfect maze with the spawn where carving started and the
+    goal at the end of its deepest branch, the furthest walk from the spawn.
+    Agents pass through each other, and reaching the goal sends an agent back
+    to the spawn."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    env_type: Literal["rust_maze"] = "rust_maze"
+
+    num_agents: int = 8
+
+    # maze cells sit on even interior coordinates, so odd sizes use every
+    # row and column
+    width: int = 15
+    height: int = 15
+    view_width: int = 15
+    view_height: int = 15
+
+    goal_reward: float = 1.0
+
+
+class RustHideSeekConfig(BaseModel):
+    """Hide and seek on a generated map. The seekers start frozen and blind
+    while the hiders build walls; a hider in a seeker's sight is spotted,
+    paying the seeker and penalising the hider, which then respawns as a new
+    agent out of every seeker's sight."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    env_type: Literal["rust_hide_seek"] = "rust_hide_seek"
+
+    # agent ids run hiders first, then seekers
+    num_hiders: int = 2
+    num_seekers: int = 2
+
+    width: int = 40
+    height: int = 40
+    view_width: int = 15
+    view_height: int = 15
+
+    mapgen_threshold: float = 0.07
+    water_threshold: float = -0.45
+
+    # steps the seekers stand frozen and blind at the start of an episode
+    preparation_steps: int = 64
+    # walls each hider may build in a life, and each seeker dig in an episode
+    hider_walls: int = 8
+    seeker_digs: int = 8
+
+    # paid to a seeker for each hider in its sight, and to a hider when spotted
+    spot_reward: float = 1.0
+    spotted_reward: float = -1.0
 
 
 class RustVecConfig(BaseModel):
@@ -173,8 +242,10 @@ class RustMultiConfig(BaseModel):
 type RustEnvConfig = (
     RustFindReturnConfig
     | RustScoutsConfig
-    | RustSnakeConfig
     | RustPacmanConfig
+    | RustSurvivalConfig
+    | RustMazeConfig
+    | RustHideSeekConfig
     | RustVideoConfig
     | RustVecConfig
     | RustMultiConfig
@@ -277,8 +348,6 @@ class RustEnvNumpy:
         return self._timestep
 
     def step(self, action: np.ndarray) -> TimeStep:
-        if np.any(action < 0) or np.any(action > np.iinfo(np.uint16).max):
-            raise ValueError("action id outside the Rust VocabId range")
         self._inner.step(
             np.ascontiguousarray(action, dtype=np.uint16),
             self._obs,

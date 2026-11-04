@@ -247,7 +247,7 @@ impl Environment for MultitaskWrapper {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::envs::{find_return::FindReturnConfig, scouts::ScoutsConfig, snake::SnakeConfig};
+    use crate::envs::{find_return::FindReturnConfig, maze::MazeConfig, scouts::ScoutsConfig};
     use crate::make::EnvConfig;
     use crate::policy::{Policy, RandomPolicy};
     use crate::timestep::TimeStepBuffers;
@@ -289,16 +289,15 @@ pub(crate) mod tests {
                 })),
             ),
             spec(
-                "snake",
+                "maze",
                 2,
-                EnvConfig::RustSnake(Box::new(SnakeConfig {
+                EnvConfig::RustMaze(Box::new(MazeConfig {
                     num_agents: 4,
-                    width: 16,
-                    height: 16,
+                    width: 15,
+                    height: 15,
                     view_width: 11,
                     view_height: 11,
-                    food_spawn_prob: 0.05,
-                    ..SnakeConfig::default()
+                    ..MazeConfig::default()
                 })),
             ),
         ]

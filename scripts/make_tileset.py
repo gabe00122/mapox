@@ -73,6 +73,10 @@ DIRT = hex_color("6e4a2c")
 DIRT_DARK = hex_color("54371f")
 DIRT_LIGHT = hex_color("87603a")
 PEBBLE = hex_color("a8875e")
+IRON = hex_color("6d7480")
+IRON_DARK = hex_color("3e434d")
+IRON_GLINT = hex_color("d3dae6")
+RUST = hex_color("c4622d")
 
 WATER = hex_color("1f3f86")
 WATER_MID = hex_color("2f5cb8")
@@ -104,20 +108,6 @@ GRASS_DIM_LIGHT = hex_color("3b6343")
 GRASS = hex_color("3f9a4a")
 GRASS_LIGHT = hex_color("6fd26a")
 
-# Snake colours, in the order of the AGENT_SNAKE_* symbols they draw.
-SNAKE_COLORS = {
-    "red": "e5383f",
-    "orange": "f77f22",
-    "yellow": "fae255",
-    "gold": "c99a1e",
-    "green": "3ec54b",
-    "blue": "3a78ff",
-    "purple": "9d4edd",
-    "pink": "ff6fb5",
-    "gray": "8b93a1",
-    "white": "f2f2ee",
-}
-
 UI_DIGIT = hex_color("e8ecf4")
 UI_DIGIT_SHADOW = hex_color("161a26")
 
@@ -138,6 +128,53 @@ GHOST_FRIGHTENED = hex_color("2f4bd8")
 GHOST_FRIGHTENED_FACE = hex_color("ffd9c7")
 GHOST_EYE = hex_color("f2f2ee")
 GHOST_PUPIL = hex_color("2121c4")
+
+LEAF = hex_color("3f9a4a")
+LEAF_LIGHT = hex_color("6fd26a")
+LEAF_DARK = hex_color("25602e")
+LEAF_EDGE = hex_color("14301a")
+
+THORN_CANE = hex_color("6b3a2e")
+THORN = hex_color("e8d9b0")
+
+BERRY = hex_color("d6336c")
+BERRY_DARK = hex_color("8a1c44")
+BERRY_LIGHT = hex_color("ff9ec0")
+BERRY_EDGE = hex_color("4a0d24")
+
+COOKED = hex_color("9a5a2e")
+COOKED_DARK = hex_color("5e3018")
+COOKED_LIGHT = hex_color("d89a5e")
+COOKED_EDGE = hex_color("2e160a")
+STEAM = hex_color("c8cfdb")
+
+HEART = hex_color("e5383f")
+HEART_DARK = hex_color("8f1d22")
+HEART_LIGHT = hex_color("ff8a8f")
+
+FLAME_DEEP = hex_color("e85d04")
+FLAME = hex_color("ff9f1c")
+FLAME_CORE = hex_color("ffd166")
+EMBER = hex_color("c2410c")
+ASH = hex_color("4b4f58")
+ASH_LIGHT = hex_color("6b707b")
+CHAR = hex_color("2b2420")
+
+MEAT = hex_color("c8763c")
+MEAT_DARK = hex_color("8c4a20")
+MEAT_LIGHT = hex_color("f0a769")
+BONE = hex_color("f2efe6")
+
+STRAW = hex_color("c9b458")
+STRAW_LIGHT = hex_color("ece08e")
+LEATHER = hex_color("8a5a32")
+
+PORTAL_EDGE = hex_color("2a0f4a")
+PORTAL_DARK = hex_color("5b2a9e")
+PORTAL = hex_color("9d4edd")
+PORTAL_LIGHT = hex_color("c58cff")
+PORTAL_CORE = hex_color("3a1670")
+PORTAL_SPARK = hex_color("eedcff")
 
 TEAM_RED = hex_color("e5383f")
 TEAM_BLUE = hex_color("3a78ff")
@@ -249,6 +286,34 @@ def dirt() -> Sprite:
     return stamp(
         blank(DIRT), DIRT_CLODS, {"k": DIRT_DARK, "l": DIRT_LIGHT, "p": PEBBLE}
     )
+
+
+# Grey-blue lumps of ore, rust-stained with a bright glint, set into the
+# earth: cool and metallic against the warm dirt, so a seam reads at a glance.
+IRON_SEAM = check(
+    [
+        "............",
+        ".OO.....OOO.",
+        "OLsO...OLsSO",
+        "OsrSO..OsrSO",
+        ".OSO....OOO.",
+        "............",
+        "...OOO......",
+        "..OLssO..OO.",
+        "..OsrsSO.OLO",
+        "...OrSSO.OrO",
+        "....OOO...O.",
+        "............",
+    ],
+    "iron seam",
+)
+
+IRON_PALETTE = {"O": IRON_DARK, "L": IRON_GLINT, "s": IRON, "S": IRON_DARK, "r": RUST}
+
+
+def iron_ore() -> Sprite:
+    """Diggable earth with iron in it."""
+    return stamp(dirt(), IRON_SEAM, {**IRON_PALETTE, "O": DIRT_DARK})
 
 
 def water() -> Sprite:
@@ -599,39 +664,6 @@ TURTLE_PALETTE = {
 }
 
 
-def snake_segment(base: Color, eyes: bool = False) -> Sprite:
-    """A rounded body scale. Heads and tails share this tile, so the colour
-    alone carries the owner; the 1px floor gap shows each segment."""
-    sprite = floor()
-    light = mix(base, (255, 255, 255), 0.35)
-    shade = scale(base, 0.62)
-    edge = scale(base, 0.35)
-    lo, hi = 1, TILE - 2
-    for y in range(lo, hi + 1):
-        for x in range(lo, hi + 1):
-            corner = (x in (lo, hi)) and (y in (lo, hi))
-            if corner:
-                continue
-            if x in (lo, hi) or y in (lo, hi):
-                color = edge
-            elif y == lo + 1 or x == lo + 1:
-                color = light
-            elif y == hi - 1 or x == hi - 1:
-                color = shade
-            else:
-                color = base
-            sprite[y][x] = color
-    # a diamond of scale texture in the middle
-    for x, y in [(5, 4), (4, 5), (6, 5), (5, 6)]:
-        sprite[y][x] = shade
-    if eyes:
-        for x in (3, 7):
-            sprite[3][x] = sprite[3][x + 1] = (255, 255, 255)
-            sprite[4][x] = (255, 255, 255)
-            sprite[4][x + 1] = OUTLINE
-    return sprite
-
-
 def facing_pip(sprite: Sprite, direction: int, color: Color) -> Sprite:
     """Marks the side an agent faces: 0 up, 1 right, 2 down, 3 left, in screen
     space (the renderers draw env +y upward)."""
@@ -840,6 +872,432 @@ def ghost(body: Color) -> Sprite:
     )
 
 
+# --- survival --------------------------------------------------------------
+
+HEART_ICON = check(
+    [
+        "............",
+        "............",
+        "..OOO..OOO..",
+        ".OhRROORRrO.",
+        ".OhRRRRRRrO.",
+        ".ORRRRRRRrO.",
+        "..ORRRRRrO..",
+        "...ORRRrO...",
+        "....ORrO....",
+        ".....OO.....",
+        "............",
+        "............",
+    ],
+    "heart",
+)
+
+DRUMSTICK = check(
+    [
+        "............",
+        "............",
+        "....OOOO....",
+        "...OMMmmO...",
+        "..OMhMMmmO..",
+        "..OMMMMmmO..",
+        "..OmMMmmmO..",
+        "...OmmmmO...",
+        "....OOBO....",
+        ".....OBO....",
+        "....OBBBO...",
+        "....OOOOO...",
+    ],
+    "drumstick",
+)
+
+FIRE = check(
+    [
+        "............",
+        "......y.....",
+        ".....yY.....",
+        "....yYY..y..",
+        "...yYWY.yY..",
+        "...YWWWYYY..",
+        "..yYWWWWWYy.",
+        "..YYWWWWWYY.",
+        "...rYYYYYr..",
+        ".TTtrrrrrtTT",
+        "..tTTttTTt..",
+        "............",
+    ],
+    "fire",
+)
+
+# The same fire once its fuel is gone: a heap of ash on charred logs, a last
+# ember or two still glowing.
+FIRE_OUT = check(
+    [
+        "............",
+        "............",
+        "............",
+        "............",
+        "............",
+        "............",
+        "......a.....",
+        "....aAAa....",
+        "...aAeAAa...",
+        ".CCcAAAeAcCC",
+        "..cCCccCCc..",
+        "............",
+    ],
+    "fire out",
+)
+
+STICK = check(
+    [
+        "............",
+        "..........w.",
+        ".........lw.",
+        "........lw..",
+        ".......lw...",
+        "......lw.w..",
+        ".....lwlw...",
+        "....lw......",
+        "...lw.......",
+        "..lw........",
+        ".lw.........",
+        "............",
+    ],
+    "stick",
+)
+
+ROCK = check(
+    [
+        "............",
+        "............",
+        "............",
+        "....OOOO....",
+        "...OLLssO...",
+        "..OLLsssSO..",
+        ".OLssssssSO.",
+        ".OsssssssSO.",
+        ".OSssssSSSO.",
+        "..OOSSSSOO..",
+        "....OOOO....",
+        "............",
+    ],
+    "rock",
+)
+
+# The rock again, but iron grey and streaked with rust.
+IRON_ORE_ITEM = check(
+    [
+        "............",
+        "............",
+        "............",
+        "....OOOO....",
+        "...OLLssO...",
+        "..OLrssrSO..",
+        ".OLssrrssSO.",
+        ".OsrsssrsSO.",
+        ".OSssrSSSSO.",
+        "..OOSSSSOO..",
+        "....OOOO....",
+        "............",
+    ],
+    "iron ore",
+)
+
+LOG = check(
+    [
+        "............",
+        "............",
+        "............",
+        ".OOOOOOOOOO.",
+        "OlllllllOeeO",
+        "OwwwwwwwOekO",
+        "OwwwwwwwOkeO",
+        "OdddddddOeeO",
+        ".OOOOOOOOOO.",
+        "............",
+        "............",
+        "............",
+    ],
+    "log",
+)
+
+# Taller and denser than the lush grass tile, with seed heads, so it reads as
+# a plant to harvest rather than ground.
+TALL_GRASS = check(
+    [
+        ".s.......s..",
+        ".S...s...S..",
+        ".L.s.S.L.L.s",
+        "LG.S.L.G.G.S",
+        "GG.L.G.GLG.L",
+        "Gg.GLG.gGg.G",
+        "gGLgGg.GgGLg",
+        "gGGgGgLgGgGg",
+        "ggGggGGgggGg",
+        "gggggggggggg",
+        ".g.g.gg.g.g.",
+        "............",
+    ],
+    "tall grass",
+)
+
+# Tall grass cut down to stubble, the cut ends pale.
+CUT_GRASS = check(
+    [
+        "............",
+        "............",
+        "............",
+        "............",
+        "............",
+        "............",
+        ".s.s..s.s.s.",
+        ".G.L.sG.L.G.",
+        "gGLgGg.GgGLg",
+        "ggGggGGgggGg",
+        ".g.g.gg.g.g.",
+        "............",
+    ],
+    "cut grass",
+)
+
+GRASS_BUNDLE = check(
+    [
+        "............",
+        "..s..s..s...",
+        "..S.sS.sS...",
+        "...SSSsSS...",
+        "....SSSS....",
+        "....OkkO....",
+        "....SSSS....",
+        "...SSsSSS...",
+        "..SSs.SSsS..",
+        "..S...S..S..",
+        "............",
+        "............",
+    ],
+    "grass bundle",
+)
+
+STONE_AXE = check(
+    [
+        "............",
+        ".....OOOO...",
+        "....OLLssO..",
+        "...OLsssSSO.",
+        "...OsswSSSO.",
+        "....OOwlOO..",
+        ".....wl.....",
+        "....wl......",
+        "...wl.......",
+        "..wl........",
+        ".wl.........",
+        "............",
+    ],
+    "stone axe",
+)
+
+# Upright where the axe leans, so the two tools read apart: an arched stone
+# head whose tips curl down, on a straight haft.
+STONE_PICKAXE = check(
+    [
+        "............",
+        "...OOOOOO...",
+        "..OLLsssSO..",
+        ".OLsOwlOSSO.",
+        ".OsO.wl.OSO.",
+        "..O..wl..O..",
+        ".....wl.....",
+        ".....wl.....",
+        ".....wl.....",
+        ".....wl.....",
+        ".....wl.....",
+        "............",
+    ],
+    "stone pickaxe",
+)
+
+TREE = check(
+    [
+        "....OOOO....",
+        "..OOLLLGOO..",
+        ".OLLLGGGGGO.",
+        ".OLGGGGGgGO.",
+        "OLGGGgGGGGgO",
+        "OGGGGGGGgGgO",
+        ".OGgGGGGGgO.",
+        "..OOgGGgOO..",
+        "....OTTO....",
+        "....OTtO....",
+        "...OTTTtO...",
+        "....OOOO....",
+    ],
+    "tree",
+)
+
+# The tree with three apples in its crown; picked bare it draws as TREE.
+APPLE_TREE = check(
+    [
+        "....OOOO....",
+        "..OOLLLGOO..",
+        ".OLLLGGwRGO.",
+        ".OLGGGGRrGO.",
+        "OLwRGgGGGGgO",
+        "OGRrGGGwRGgO",
+        ".OGgGGGRrgO.",
+        "..OOgGGgOO..",
+        "....OTTO....",
+        "....OTtO....",
+        "...OTTTtO...",
+        "....OOOO....",
+    ],
+    "apple tree",
+)
+
+# A spiky tangle of bare canes and pale thorns, ragged where the berry bush
+# is round, so the one that hurts reads apart from the one that feeds.
+THORN_BUSH = check(
+    [
+        "............",
+        "..t.....t...",
+        "...b..t.b...",
+        ".t.bb.b.bb.t",
+        "..bGb.bGb.b.",
+        ".bGgbbGgbGb.",
+        "t.bGgGbgGbbt",
+        ".bbgGbGgbGb.",
+        "..bGbgbbGbb.",
+        ".tbbGbbGbbt.",
+        "..bbbbbbbb..",
+        "............",
+    ],
+    "thorn bush",
+)
+
+# A ripe bush carries berries on R and h; picked bare, those are leaf.
+BUSH = check(
+    [
+        "............",
+        "............",
+        "....OOOO....",
+        "..OOGGLGOO..",
+        ".OGLGRhGGGO.",
+        ".OGGGRRGLGO.",
+        "OGRhGGGGRhGO",
+        "OGRRGgGGRRGO",
+        "OGGGGGRhGGgO",
+        ".OgGGGRRGgO.",
+        "..OOgggggO..",
+        "............",
+    ],
+    "bush",
+)
+
+BERRIES = check(
+    [
+        "............",
+        "............",
+        "......gG....",
+        "...OOOgOOO..",
+        "..OhRRORhRO.",
+        "..ORRrORRrO.",
+        "..OOrOOOrOO.",
+        "....OhRRO...",
+        "....ORRrO...",
+        "....OrrrO...",
+        ".....OOO....",
+        "............",
+    ],
+    "berries",
+)
+
+CAMPFIRE_KIT = check(
+    [
+        "............",
+        "............",
+        "............",
+        "..lT....Tl..",
+        "...lT..Tl...",
+        "....lTTl....",
+        "....TttT....",
+        "...Tt..tT...",
+        ".LsSLsSLsSs.",
+        ".SOSSOSSOSS.",
+        "............",
+        "............",
+    ],
+    "campfire kit",
+)
+
+# A swirl of light around a dark core.
+PORTAL_ART = check(
+    [
+        "............",
+        "...OOOOOO...",
+        "..OpPPPPpO..",
+        ".OpPLLLLPpO.",
+        ".OPLcccWLPO.",
+        ".OPLcWccLPO.",
+        ".OPLccWcLPO.",
+        ".OPLcccWLPO.",
+        ".OpPLLLLPpO.",
+        "..OpPPPPpO..",
+        "...OOOOOO...",
+        "............",
+    ],
+    "portal",
+)
+
+TREE_PALETTE = {
+    "O": LEAF_EDGE,
+    "L": LEAF_LIGHT,
+    "G": LEAF,
+    "g": LEAF_DARK,
+    "T": WOOD,
+    "t": WOOD_DARK,
+}
+
+
+def bush(ripe: bool) -> Sprite:
+    berry, shine = (BERRY, BERRY_LIGHT) if ripe else (LEAF, LEAF)
+    palette = {
+        "O": LEAF_EDGE,
+        "L": LEAF_LIGHT,
+        "G": LEAF,
+        "g": LEAF_DARK,
+        "R": berry,
+        "h": shine,
+    }
+    return stamp(floor(), BUSH, palette)
+
+
+def berries(cooked: bool) -> Sprite:
+    """Raw berries are bright; cooked ones roasted brown and steaming."""
+    if cooked:
+        palette = {
+            "O": COOKED_EDGE,
+            "R": COOKED,
+            "r": COOKED_DARK,
+            "h": COOKED_LIGHT,
+            "g": STEAM,
+            "G": STEAM,
+        }
+    else:
+        palette = {
+            "O": BERRY_EDGE,
+            "R": BERRY,
+            "r": BERRY_DARK,
+            "h": BERRY_LIGHT,
+            "g": GRASS,
+            "G": GRASS_LIGHT,
+        }
+    return stamp(floor(), BERRIES, palette)
+
+
+GRASS_PALETTE = {"g": LEAF_DARK, "G": LEAF, "L": GRASS_LIGHT}
+
+STONE_PALETTE = {"O": OUTLINE, "L": STONE_LIGHT, "s": STONE, "S": STONE_DARK}
+
+
 # --- sheet -----------------------------------------------------------------
 
 
@@ -873,11 +1331,11 @@ def build_sheet() -> list[list[Sprite]]:
         stamp(floor(), AGENT, AGENT_PALETTE),
         stamp(floor(), RABBIT, RABBIT_PALETTE),
         stamp(floor(), TURTLE, TURTLE_PALETTE),
-        snake_segment(hex_color(SNAKE_COLORS["green"]), eyes=True),
         # Lush grass is terrain, but row 0 is full.
         decor(GRASS_TILE, {"g": GRASS, "l": GRASS_LIGHT}),
+        # A survival item, but the survival rows are full.
+        stamp(floor(), IRON_ORE_ITEM, {**IRON_PALETTE, "O": OUTLINE}),
     ]
-    snakes = [snake_segment(hex_color(c)) for c in SNAKE_COLORS.values()]
 
     def team_row(team: Color) -> list[Sprite]:
         knights = [
@@ -888,7 +1346,20 @@ def build_sheet() -> list[list[Sprite]]:
         archers = [soldier(ARCHER, team, direction, False) for direction in range(4)]
         return knights + archers
 
-    digits = [digit(value) for value in range(10)]
+    # The digits leave two slots free, which the survival stat labels fill.
+    digits = [
+        *(digit(value) for value in range(10)),
+        stamp(
+            blank(UI),
+            HEART_ICON,
+            {"O": OUTLINE, "R": HEART, "r": HEART_DARK, "h": HEART_LIGHT},
+        ),
+        stamp(
+            blank(UI),
+            DRUMSTICK,
+            {"O": OUTLINE, "M": MEAT, "m": MEAT_DARK, "h": MEAT_LIGHT, "B": BONE},
+        ),
+    ]
     pacman_row = [
         pellet(),
         power_pellet(),
@@ -902,14 +1373,108 @@ def build_sheet() -> list[list[Sprite]]:
         stamp(floor(), GHOST_EYES, {"W": GHOST_EYE, "P": GHOST_PUPIL}),
     ]
 
+    survival_row = [
+        stamp(
+            floor(),
+            FIRE,
+            {
+                "y": FLAME_DEEP,
+                "Y": FLAME,
+                "W": FLAME_CORE,
+                "r": EMBER,
+                "T": WOOD,
+                "t": WOOD_DARK,
+            },
+        ),
+        *(
+            facing_pip(stamp(floor(), AGENT, AGENT_PALETTE), direction, GOLD_LIGHT)
+            for direction in range(4)
+        ),
+        stamp(floor(), ROCK, STONE_PALETTE),
+        stamp(floor(), STICK, {"l": WOOD_LIGHT, "w": WOOD}),
+        stamp(
+            floor(),
+            LOG,
+            {
+                "O": OUTLINE,
+                "l": WOOD_LIGHT,
+                "w": WOOD,
+                "d": WOOD_DARK,
+                "e": hex_color("d8b07a"),
+                "k": WOOD,
+            },
+        ),
+        stamp(
+            floor(),
+            GRASS_BUNDLE,
+            {"s": STRAW_LIGHT, "S": STRAW, "O": OUTLINE, "k": LEATHER},
+        ),
+        stamp(floor(), STONE_AXE, {**STONE_PALETTE, "w": WOOD, "l": WOOD_LIGHT}),
+        stamp(
+            floor(),
+            FIRE_OUT,
+            {"a": ASH_LIGHT, "A": ASH, "e": EMBER, "C": CHAR, "c": WOOD_DARK},
+        ),
+        stamp(floor(), TREE, TREE_PALETTE),
+    ]
+    plants_row = [
+        bush(ripe=True),
+        bush(ripe=False),
+        berries(cooked=False),
+        berries(cooked=True),
+        stamp(
+            floor(),
+            CAMPFIRE_KIT,
+            {
+                "T": WOOD,
+                "t": WOOD_DARK,
+                "l": WOOD_LIGHT,
+                **{k: v for k, v in STONE_PALETTE.items() if k != "s"},
+                "s": STONE,
+            },
+        ),
+        stamp(floor(), TALL_GRASS, {**GRASS_PALETTE, "s": STRAW_LIGHT, "S": STRAW}),
+        stamp(floor(), CUT_GRASS, {**GRASS_PALETTE, "s": STRAW_LIGHT}),
+        stamp(
+            floor(),
+            PORTAL_ART,
+            {
+                "O": PORTAL_EDGE,
+                "p": PORTAL_DARK,
+                "P": PORTAL,
+                "L": PORTAL_LIGHT,
+                "c": PORTAL_CORE,
+                "W": PORTAL_SPARK,
+            },
+        ),
+        stamp(
+            floor(),
+            APPLE_TREE,
+            {
+                **TREE_PALETTE,
+                "R": APPLE_PALETTE["R"],
+                "r": APPLE_PALETTE["r"],
+                "w": APPLE_PALETTE["w"],
+            },
+        ),
+        stamp(
+            floor(),
+            THORN_BUSH,
+            {"b": THORN_CANE, "t": THORN, "G": LEAF_DARK, "g": LEAF_EDGE},
+        ),
+        stamp(floor(), STONE_PICKAXE, {**STONE_PALETTE, "w": WOOD, "l": WOOD_LIGHT}),
+        iron_ore(),
+    ]
+
     return [
         terrain,
         items,
-        snakes,
         team_row(TEAM_RED),
         team_row(TEAM_BLUE),
         digits,
         pacman_row,
+        survival_row,
+        plants_row,
     ]
 
 
