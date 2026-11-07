@@ -241,7 +241,7 @@ impl SurvivalState {
             .map(|&(_, _, product)| product)
     }
 
-    /// Swapping two empty slots is the only swap that does nothing.
+    /// Only occupied slots can be swapped, keeping the inventory packed.
     pub(super) fn can_swap(&mut self, id: Entity, slot_id: usize) -> bool {
         self.world
             .query_one_mut::<&Inventory>(id)
@@ -293,7 +293,7 @@ impl Survival {
         };
 
         if let Ok(inventory) = self.state.world.query_one_mut::<&mut Inventory>(id) {
-            inventory.push(output);
+            inventory.slots[0] = Some(output);
         }
         self.unlock_achievement(id, output);
     }
@@ -350,10 +350,10 @@ impl Survival {
     }
 
     pub(super) fn item_swap(&mut self, id: Entity, slot_index: usize) {
-        if let Ok(inventory) = self.state.world.query_one_mut::<&mut Inventory>(id) {
-            let temp = inventory.slots[0];
-            inventory.slots[0] = inventory.slots[slot_index];
-            inventory.slots[slot_index] = temp;
+        if let Ok(inventory) = self.state.world.query_one_mut::<&mut Inventory>(id)
+            && inventory.slots[slot_index].is_some()
+        {
+            inventory.slots.swap(0, slot_index);
         }
     }
 
@@ -405,5 +405,96 @@ impl Survival {
             inventory.push(item);
         }
         self.unlock_achievement(id, item);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::envs::survival::config::SurvivalConfig;
+
+    #[test]
+    fn swapping_preserves_a_packed_inventory() {
+        let mut env = Survival::new(&SurvivalConfig::default(), 512);
+        let id = env.state.spawn((Inventory::default(),));
+
+        for occupied in 0..=INVENTORY_SLOTS {
+            let mut slots = [None; INVENTORY_SLOTS];
+            slots[..occupied].fill(Some(ItemType::Rock));
+            if occupied > 0 {
+                slots[0] = Some(ItemType::Stick);
+            }
+
+            for target in 1..INVENTORY_SLOTS {
+                env.state
+                    .world
+                    .query_one_mut::<&mut Inventory>(id)
+                    .unwrap()
+                    .slots = slots;
+                assert_eq!(env.state.can_swap(id, target), target < occupied);
+                env.item_swap(id, target);
+
+                let mut expected = slots;
+                if target < occupied {
+                    expected.swap(0, target);
+                }
+                assert_eq!(
+                    env.state
+                        .world
+                        .query_one_mut::<&Inventory>(id)
+                        .unwrap()
+                        .slots,
+                    expected,
+                    "swapping slot {target} with {occupied} occupied slots"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn refining_replaces_the_ingredient_even_when_inventory_is_full() {
+        let mut env = Survival::new(&SurvivalConfig::default(), 512);
+        let position = Position::new(5, 5);
+        let id = env
+            .state
+            .spawn_prototype(Prototype::Survivor { agent_index: 0 }, position);
+        let direction = *env.state.world.query_one_mut::<&Direction>(id).unwrap();
+        env.state
+            .spawn_prototype(Prototype::Fire, position + direction.to_pos());
+
+        for occupied in 1..=INVENTORY_SLOTS {
+            let mut slots = [None; INVENTORY_SLOTS];
+            slots[..occupied].fill(Some(ItemType::Rock));
+            slots[0] = Some(ItemType::Berry);
+            env.state
+                .world
+                .query_one_mut::<&mut Inventory>(id)
+                .unwrap()
+                .slots = slots;
+
+            env.item_refine(id);
+
+            slots[0] = Some(ItemType::CookedBerry);
+            assert_eq!(
+                env.state
+                    .world
+                    .query_one_mut::<&Inventory>(id)
+                    .unwrap()
+                    .slots,
+                slots,
+                "refining with {occupied} occupied slots"
+            );
+
+            // The ingredient is gone, so repeating the action cannot duplicate it.
+            env.item_refine(id);
+            assert_eq!(
+                env.state
+                    .world
+                    .query_one_mut::<&Inventory>(id)
+                    .unwrap()
+                    .slots,
+                slots
+            );
+        }
     }
 }
