@@ -10,9 +10,12 @@
 //! Sight is the shadowcast every observation is drawn with, so a hider is
 //! spotted exactly when it shows in a seeker's observation. Every seeker
 //! with a hider in sight at the end of a step is paid for it, and the hider
-//! is penalised, flagged terminated, and respawns as a new agent somewhere
-//! no seeker can see, with a fresh stock of walls. A seeker that catches a
-//! hider has its own stock of digs refilled.
+//! is penalised, flagged terminated, and stays where it was caught through
+//! that step's observation before respawning on the next step as a new agent
+//! somewhere no seeker can see, with a fresh stock of walls. A seeker that
+//! catches a hider has its own stock of digs refilled.
+//! A respawning hider waits that step, observing its new surroundings before
+//! it can act again.
 
 use ndarray::{Array2, s};
 use rand::{RngExt, SeedableRng, rngs::SmallRng, seq::SliceRandom};
@@ -141,7 +144,7 @@ struct HideSeekState {
     base_map: Array2<HideSeekObs>, // the bottom layer of the map without agents
     map: Array2<HideSeekObs>,      // the base map plus the agents
     seen: Array2<bool>,            // what any seeker saw at the end of the last step
-    spotted: Vec<usize>,           // hiders spotted on the last step, by agent id
+    spotted: Vec<usize>,           // hiders spotted on the last step, still awaiting respawn
     free_positions: Vec<Position>, // scratch space for picking spawn cells
 }
 
@@ -420,8 +423,8 @@ impl HideSeek {
     }
 
     /// Sweeps every seeker's view for hiders, pays out for each one in
-    /// sight, refills the digs of every seeker that made a catch, and sends
-    /// the spotted hiders off to respawn out of sight.
+    /// sight, refills the digs of every seeker that made a catch, and marks
+    /// the spotted hiders to respawn on the next step.
     fn spot(&mut self, timestep: &mut TimeStepMut) {
         let center = Position::new(self.config.view_width / 2, self.config.view_height / 2);
         let fov_dim = (
@@ -467,21 +470,29 @@ impl HideSeek {
             }
         }
 
-        // lift every spotted hider off the map before placing any of them,
-        // so the cells they leave are free to respawn into
+        // the spotted hiders keep their places on the map for this step, so
+        // the catch stays visible; the next step lifts them off to respawn
         for &hider_id in &state.spotted {
-            let position = state.agents[hider_id].position;
-            state.map[position.idx()] = state.base_map[position.idx()];
-
             timestep.reward[hider_id] += self.config.spotted_reward;
             self.metrics.hider_reward += f64::from(self.config.spotted_reward);
             self.metrics.hiders_spotted += 1.0;
         }
+    }
 
-        for i in 0..self.state.spotted.len() {
-            let hider_id = self.state.spotted[i];
+    /// Lifts the hiders spotted on the previous step off the map and sends
+    /// them back on as new agents. All of them are removed before any is
+    /// placed so the cells they leave are free to respawn into. Returns their
+    /// ids so actions chosen from their previous lives can be skipped.
+    fn respawn_spotted(&mut self) -> Vec<usize> {
+        let spotted = std::mem::take(&mut self.state.spotted);
+        for &hider_id in &spotted {
+            let position = self.state.agents[hider_id].position;
+            self.state.map[position.idx()] = self.state.base_map[position.idx()];
+        }
+        for &hider_id in &spotted {
             self.respawn(hider_id);
         }
+        spotted
     }
 
     /// Puts `agent_id` back on the map as a new agent, on a random open
@@ -538,17 +549,17 @@ impl HideSeek {
         timestep.task_ids.fill(0);
     }
 
-    /// A frozen seeker may only wait. Otherwise moves and the noop are always
-    /// legal (a move into a wall still turns the agent), a hider may build
-    /// onto open floor in front of it and a seeker dig out a destructible
-    /// wall there, each while its stock lasts.
+    /// A frozen seeker or caught hider may only wait. Otherwise moves and
+    /// the noop are always legal (a move into a wall still turns the agent).
+    /// A hider may build onto open floor in front of it and a seeker dig out
+    /// a destructible wall there, each while its stock lasts.
     fn encode_action_mask(&self, timestep: &mut TimeStepMut) {
         let frozen = self.preparing();
         timestep.action_mask.fill(true);
 
         for (agent_id, agent) in self.state.agents.iter().enumerate() {
             let mut mask = timestep.action_mask.row_mut(agent_id);
-            if frozen && agent.team == Team::Seeker {
+            if (frozen && agent.team == Team::Seeker) || self.state.spotted.contains(&agent_id) {
                 mask.fill(false);
                 mask[HideSeekAction::Noop as usize] = true;
                 continue;
@@ -637,11 +648,20 @@ impl Environment for HideSeek {
 
     fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
         timestep.reward.fill(0.0);
+        // hiders caught on the previous step stayed put through that
+        // observation; now they leave the map and come back out of sight
+        let respawned = self.respawn_spotted();
         let frozen = self.preparing();
         self.state.agent_order.shuffle(&mut self.state.rngs);
 
         for turn in 0..self.state.agent_order.len() {
             let agent_id = self.state.agent_order[turn];
+            // The supplied action was chosen before this hider respawned.
+            // Let it observe its new life before it can change that state.
+            if respawned.contains(&agent_id) {
+                timestep.last_action[agent_id] = HideSeekAction::Noop.into();
+                continue;
+            }
             timestep.last_action[agent_id] = actions[agent_id];
 
             if frozen && self.team(agent_id) == Team::Seeker {
@@ -1037,8 +1057,9 @@ mod tests {
     }
 
     /// A hider in a seeker's sight is spotted: the seeker is paid, the hider
-    /// penalised and terminated, and it comes back as a new agent with a
-    /// full stock somewhere the seeker cannot see.
+    /// penalised and terminated, and it stays visible where it was caught
+    /// through the catch step before coming back on the next step as a new
+    /// agent with a full stock somewhere the seeker cannot see.
     #[test]
     fn a_spotted_hider_respawns_out_of_sight() {
         let mut env = empty_env_with(HideSeekConfig {
@@ -1061,6 +1082,23 @@ mod tests {
         assert!(buffers.terminated[0]);
         assert!(!buffers.terminated[1]);
 
+        // caught, it stays where it was for this step, still in the seeker's view
+        let caught = &env.state.agents[0];
+        assert_eq!(caught.position, start);
+        assert_eq!(caught.budget, 1);
+        assert_eq!(env.state.map[start.idx()], Team::Hider.tile(caught.facing));
+        let view = buffers
+            .obs
+            .slice(s![1, .., ..env.config.view_height as usize, 0]);
+        assert!(
+            view.iter()
+                .any(|&tile| HideSeekObs::from_id(tile).is_hider()),
+            "the catch is visible for a step"
+        );
+
+        // the step after despawns it: a new agent, full stock, out of sight
+        step(&mut env, &mut buffers, &[Noop, Noop]);
+        assert!(!buffers.terminated[0]);
         let hider = &env.state.agents[0];
         assert_eq!(hider.budget, env.config.hider_walls);
         assert_eq!(
@@ -1082,6 +1120,56 @@ mod tests {
                 .iter()
                 .any(|&tile| HideSeekObs::from_id(tile).is_hider())
         );
+    }
+
+    /// Actions chosen from a caught hider's last observation cannot affect
+    /// its new life. It first receives the respawn observation, then acts.
+    #[test]
+    fn respawning_hiders_ignore_actions_from_their_previous_life() {
+        let mut caught = empty_env_with(HideSeekConfig {
+            num_hiders: 2,
+            num_seekers: 1,
+            width: 30,
+            height: 30,
+            preparation_steps: 0,
+            ..Default::default()
+        });
+        let start = center(&caught);
+        spawn_agents(
+            &mut caught,
+            &[start, start + Position::new(0, 1), start + Position::new(4, 0)],
+        );
+        let mut buffers = observe(&caught);
+        step(&mut caught, &mut buffers, &[Noop, Noop, Noop]);
+        assert!(buffers.terminated[0] && buffers.terminated[1]);
+        for hider in 0..2 {
+            assert_eq!(legal(&buffers, hider), vec![Noop]);
+        }
+
+        let mut waiting = caught.clone();
+        let mut expected = observe(&waiting);
+        step(&mut waiting, &mut expected, &[Noop, Noop, MoveRight]);
+
+        for action in [MoveRight, Build] {
+            let mut env = caught.clone();
+            let mut actual = observe(&env);
+            step(&mut env, &mut actual, &[action, action, MoveRight]);
+            assert_eq!(env.state.map, waiting.state.map, "after {action:?}");
+            assert_eq!(actual.obs, expected.obs, "after {action:?}");
+            assert_eq!(actual.action_mask, expected.action_mask);
+            for hider in 0..2 {
+                assert_eq!(actual.last_action[hider], VocabId::from(Noop));
+                assert_eq!(env.state.agents[hider].budget, env.config.hider_walls);
+                assert!(!actual.terminated[hider]);
+            }
+            assert_eq!(env.state.agents[2].position, start + Position::new(5, 0));
+
+            // Once the new position has been observed, actions work again.
+            step(&mut env, &mut actual, &[MoveRight, MoveRight, Noop]);
+            for hider in 0..2 {
+                assert!(matches!(env.state.agents[hider].facing, Direction::Right));
+            }
+        }
     }
 
     /// A wall between them hides a hider from a seeker that would otherwise
