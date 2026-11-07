@@ -26,7 +26,7 @@ use rand::{RngExt, SeedableRng, rngs::SmallRng};
 const MAX_CATCH_UP_STEPS: usize = 4;
 
 /// Width of the episode / agent / mode panel, in points.
-const SIDE_PANEL_WIDTH: f32 = 220.0;
+const SIDE_PANEL_WIDTH: f32 = 280.0;
 
 /// Width of the strip the side panel collapses to, just room for the button
 /// that opens it again inside a [`COLLAPSED_PANEL_MARGIN`] either side.

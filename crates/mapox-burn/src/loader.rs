@@ -351,8 +351,8 @@ fn build_model<B: Backend>(
         action_embedder: Embedder {
             table: store.exact("action_embedder.embedding_table", [meta.action_dim, hidden])?,
         },
-        // jax only builds it for multitask runs
-        task_embedder: if meta.num_tasks > 1 {
+        // Match jax: multitask runs can disable the task embedding.
+        task_embedder: if meta.num_tasks > 1 && config.task_embedding {
             Some(Embedder {
                 table: store.exact("task_embedder.embedding_table", [meta.num_tasks, hidden])?,
             })

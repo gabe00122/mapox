@@ -10,6 +10,8 @@ pub struct ModelConfig {
     pub hidden_features: usize,
     pub layer: LayerConfig,
     pub num_layers: usize,
+    #[serde(default = "default_task_embedding")]
+    pub task_embedding: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -50,7 +52,7 @@ pub struct PolicyMetadata {
     /// Per-channel vocabulary size; their sum is the obs embedding's rows.
     pub obs_max_value: Vec<usize>,
     pub action_dim: usize,
-    /// Rows of the task embedding; a single-task model has none.
+    /// Number of tasks; the model may disable their embedding.
     pub num_tasks: usize,
     pub max_seq_length: usize,
     /// The training run's env config JSON, deserializable into
@@ -62,4 +64,8 @@ pub struct PolicyMetadata {
 
 fn default_rope_max_wavelength() -> f64 {
     10_000.0
+}
+
+fn default_task_embedding() -> bool {
+    true
 }
