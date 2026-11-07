@@ -12,10 +12,9 @@ use crate::{
     render::env::{GridRenderSettings, GridRenderState},
     spec::{ActionSpec, ObservationSpec},
     symbols::{
-        AGENT_GENERIC, DIG_ACTION, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, NOOP, PLACE_PIPE,
-        TILE_DECOR_1, TILE_DECOR_2, TILE_DECOR_3, TILE_DECOR_4, TILE_DESTRUCTIBLE_WALL, TILE_EMPTY,
-        TILE_FLAG, TILE_FLAG_UNLOCKED, TILE_MASK, TILE_PIPE_HORIZONTAL, TILE_PIPE_VIRTICAL,
-        TILE_UI, TILE_WALL, TILE_WATER,
+        AGENT_GENERIC, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, NOOP, TILE_DECOR_1, TILE_DECOR_2,
+        TILE_DECOR_3, TILE_DECOR_4, TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_FLAG,
+        TILE_FLAG_UNLOCKED, TILE_MASK, TILE_UI, TILE_WALL, TILE_WATER, USE,
     },
     timestep::TimeStepMut,
     vocab::{VocabId, Vocabulary},
@@ -37,9 +36,6 @@ pub struct FindReturnConfig {
     pub digging_timeout: u32,
     pub preparation_steps: usize,
     pub treasure_reward: f32,
-    /// With pipes off, agents cannot lay pipes and the flags start open,
-    /// so there is no preparation phase to spend building slideways.
-    pub pipes_enabled: bool,
 }
 
 impl Default for FindReturnConfig {
@@ -56,7 +52,6 @@ impl Default for FindReturnConfig {
             digging_timeout: 5,
             preparation_steps: 256,
             treasure_reward: 1.0,
-            pipes_enabled: true,
         }
     }
 }
@@ -66,18 +61,6 @@ struct FindReturnAgent {
     position: Position,
     dir: Position,
     timeout: u32,
-}
-
-impl FindReturnAgent {
-    fn slide_target(&self, map: &Array2<FindReturnObs>, dir: Position) -> Position {
-        let mut target = self.position + dir;
-        while (dir.y == 0 && map[target.idx()] == FindReturnObs::PipeHorizontal)
-            | (dir.x == 0 && map[target.idx()] == FindReturnObs::PipeVirtical)
-        {
-            target += dir;
-        }
-        target
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -106,8 +89,6 @@ vocab_enum!(FindReturnObs {
     TileDecor2 => TILE_DECOR_2,
     TileDecor3 => TILE_DECOR_3,
     TileDecor4 => TILE_DECOR_4,
-    PipeHorizontal => TILE_PIPE_HORIZONTAL,
-    PipeVirtical => TILE_PIPE_VIRTICAL,
     AgentGeneric => AGENT_GENERIC,
 });
 
@@ -129,8 +110,7 @@ impl FindReturnObs {
     }
 
     fn destructible(self) -> bool {
-        use FindReturnObs::*;
-        matches!(self, TileDestructibleWall | PipeHorizontal | PipeVirtical)
+        matches!(self, FindReturnObs::TileDestructibleWall)
     }
 }
 
@@ -149,8 +129,7 @@ vocab_enum!(FindReturnAction {
     MoveRight => MOVE_RIGHT,
     MoveDown => MOVE_DOWN,
     MoveLeft => MOVE_LEFT,
-    PlacePipe => PLACE_PIPE,
-    Dig => DIG_ACTION,
+    Use => USE,
     Noop => NOOP,
 });
 
@@ -314,16 +293,12 @@ impl FindReturn {
                     | FindReturnAction::MoveRight
                     | FindReturnAction::MoveDown
                     | FindReturnAction::MoveLeft => {
-                        let target = agent.slide_target(&self.state.map, action.direction());
+                        let target = agent.position + action.direction();
                         !self.state.map[target.idx()].move_blocked()
                     }
-                    FindReturnAction::Dig => {
+                    FindReturnAction::Use => {
                         let target = agent.position + agent.dir;
                         self.state.map[target.idx()].destructible()
-                    }
-                    FindReturnAction::PlacePipe => {
-                        let target = agent.position + agent.dir;
-                        self.config.pipes_enabled && self.state.map[target.idx()].spawnable()
                     }
                     FindReturnAction::Noop => true,
                 };
@@ -393,7 +368,7 @@ impl Environment for FindReturn {
             self.state.flag_positions.push(flag_position);
         }
 
-        if self.config.preparation_steps == 0 || !self.config.pipes_enabled {
+        if self.config.preparation_steps == 0 {
             self.unlock_flags();
         }
 
@@ -441,7 +416,7 @@ impl Environment for FindReturn {
                 agent.dir = action.direction();
             }
 
-            let target = agent.slide_target(map, agent.dir);
+            let target = agent.position + agent.dir;
             match action {
                 FindReturnAction::MoveUp
                 | FindReturnAction::MoveRight
@@ -465,7 +440,7 @@ impl Environment for FindReturn {
                         }
                     }
                 }
-                FindReturnAction::Dig => {
+                FindReturnAction::Use => {
                     if map[target.idx()].destructible() {
                         map[target.idx()] = FindReturnObs::TileEmpty;
                         base_map[target.idx()] = FindReturnObs::TileEmpty;
@@ -473,18 +448,6 @@ impl Environment for FindReturn {
                     }
                 }
                 FindReturnAction::Noop => {}
-                FindReturnAction::PlacePipe => {
-                    let target_tile = &mut map[target.idx()];
-
-                    if self.config.pipes_enabled && target_tile.spawnable() {
-                        *target_tile = if agent.dir.x == 0 {
-                            FindReturnObs::PipeHorizontal
-                        } else {
-                            FindReturnObs::PipeVirtical
-                        };
-                        base_map[target.idx()] = *target_tile;
-                    }
-                }
             }
         }
 
@@ -577,8 +540,8 @@ mod tests {
     use rand::RngExt;
     use std::collections::HashSet;
 
-    /// One agent on bare floor, no flags, for poking walls, pipes, and
-    /// flags into by hand.
+    /// One agent on bare floor, no flags, for poking walls and flags into
+    /// by hand.
     fn empty_env() -> FindReturn {
         empty_env_with(FindReturnConfig {
             num_agents: 1,
@@ -887,12 +850,12 @@ mod tests {
         }
     }
 
-    /// Digging clears the wall in front of the agent for good, and costs
+    /// Using clears the wall in front of the agent for good, and costs
     /// `digging_timeout` frozen steps: through them the noop is the only
     /// legal action and moves are ignored, and the first free step moves
     /// into the hole it dug.
     #[test]
-    fn digging_clears_a_wall_and_freezes_the_agent() {
+    fn using_digs_a_wall_and_freezes_the_agent() {
         let mut env = empty_env_with(FindReturnConfig {
             num_agents: 1,
             num_flags: 0,
@@ -910,7 +873,7 @@ mod tests {
         step(&mut env, &mut buffers, &[MoveRight]); // face the wall, do not pass
         assert_eq!(env.state.agents[0].position.idx(), start.idx());
 
-        step(&mut env, &mut buffers, &[Dig]);
+        step(&mut env, &mut buffers, &[Use]);
         assert_eq!(env.state.base_map[wall.idx()], TileEmpty);
         assert_eq!(env.state.map[wall.idx()], TileEmpty);
         assert_eq!(env.state.agents[0].timeout, env.config.digging_timeout);
@@ -926,17 +889,17 @@ mod tests {
         assert_eq!(env.state.agents[0].position.idx(), wall.idx());
     }
 
-    /// A dig with nothing destructible in front is a free step: no freeze,
-    /// no movement, and the mask keeps saying digging is illegal.
+    /// Using with nothing destructible in front is a free step: no freeze,
+    /// no movement, and the mask keeps saying use is illegal.
     #[test]
-    fn digging_needs_something_to_dig() {
+    fn using_needs_something_to_dig() {
         let mut env = empty_env();
         let start = center(&env);
         spawn_agents(&mut env, &[start]);
 
         let mut buffers = TimeStepBuffers::new(&env);
         step(&mut env, &mut buffers, &[MoveRight]);
-        step(&mut env, &mut buffers, &[Dig]);
+        step(&mut env, &mut buffers, &[Use]);
 
         assert_eq!(
             env.state.agents[0].position.idx(),
@@ -948,130 +911,8 @@ mod tests {
             TileEmpty
         );
         let mask = buffers.action_mask.row(0);
-        assert!(!mask[Dig as usize]);
+        assert!(!mask[Use as usize]);
         assert!(mask[MoveRight as usize]);
-    }
-
-    /// A horizontal run of pipes is a slideway: one move carries the agent
-    /// the whole length of it, to the first tile that is not pipe.
-    #[test]
-    fn a_move_slides_over_pipes() {
-        let mut env = empty_env();
-        let start = center(&env);
-        for dx in 1..=3 {
-            place_tile(&mut env, start + Position::new(dx, 0), PipeHorizontal);
-        }
-        spawn_agents(&mut env, &[start]);
-
-        let mut buffers = TimeStepBuffers::new(&env);
-        step(&mut env, &mut buffers, &[MoveRight]);
-
-        assert_eq!(
-            env.state.agents[0].position.idx(),
-            (start + Position::new(4, 0)).idx()
-        );
-    }
-
-    /// A slide runs until the pipe run ends, and a run that ends on a wall
-    /// is a trap: the whole move is cancelled rather than stopping short.
-    #[test]
-    fn a_slide_stops_at_a_wall() {
-        let mut env = empty_env();
-        let start = center(&env);
-        for dx in 1..=2 {
-            place_tile(&mut env, start + Position::new(dx, 0), PipeHorizontal);
-        }
-        place_tile(&mut env, start + Position::new(3, 0), TileWall);
-        spawn_agents(&mut env, &[start]);
-
-        let mut buffers = TimeStepBuffers::new(&env);
-        step(&mut env, &mut buffers, &[MoveRight]);
-
-        assert_eq!(env.state.agents[0].position.idx(), start.idx());
-        assert_eq!(env.state.map[start.idx()], AgentGeneric);
-    }
-
-    /// Sliding only follows a pipe's run: a vertical pipe in the path of a
-    /// horizontal move is plain floor, one tile deep.
-    #[test]
-    fn a_crosswise_pipe_is_just_a_floor_tile() {
-        let mut env = empty_env();
-        let start = center(&env);
-        let pipe = start + Position::new(1, 0);
-        place_tile(&mut env, pipe, PipeVirtical);
-        spawn_agents(&mut env, &[start]);
-
-        let mut buffers = TimeStepBuffers::new(&env);
-        step(&mut env, &mut buffers, &[MoveRight]);
-
-        assert_eq!(env.state.agents[0].position.idx(), pipe.idx());
-        assert_eq!(env.state.map[pipe.idx()], AgentGeneric);
-    }
-
-    /// A pipe is laid one tile in front of the facing, perpendicular to it:
-    /// facing up or down lays a horizontal pipe, facing left or right a
-    /// vertical one, and a blocked tile takes nothing at all.
-    #[test]
-    fn a_pipe_is_laid_perpendicular_to_the_facing() {
-        let mut env = empty_env();
-        let start = center(&env);
-        spawn_agents(&mut env, &[start]);
-
-        let mut buffers = TimeStepBuffers::new(&env);
-        step(&mut env, &mut buffers, &[MoveUp]);
-        step(&mut env, &mut buffers, &[PlacePipe]);
-        let above = start + Position::new(0, 2);
-        assert_eq!(env.state.map[above.idx()], PipeHorizontal);
-        assert_eq!(env.state.base_map[above.idx()], PipeHorizontal);
-
-        step(&mut env, &mut buffers, &[MoveRight]);
-        step(&mut env, &mut buffers, &[PlacePipe]);
-        let ahead = start + Position::new(2, 1);
-        assert_eq!(env.state.map[ahead.idx()], PipeVirtical);
-        assert_eq!(env.state.base_map[ahead.idx()], PipeVirtical);
-
-        // a wall in front takes nothing
-        let wall = start + Position::new(3, 1);
-        place_tile(&mut env, wall, TileWall);
-        step(&mut env, &mut buffers, &[MoveRight]); // onto the pipe it just laid
-        assert_eq!(env.state.agents[0].position.idx(), ahead.idx());
-        step(&mut env, &mut buffers, &[PlacePipe]);
-        assert_eq!(env.state.map[wall.idx()], TileWall);
-        assert_eq!(env.state.base_map[wall.idx()], TileWall);
-    }
-
-    /// With pipes off there is nothing to prepare: the flags start open
-    /// whatever `preparation_steps` says, and laying a pipe is masked out
-    /// and does nothing even when the policy picks it anyway.
-    #[test]
-    fn disabling_pipes_opens_the_flags_and_forbids_pipes() {
-        let config = FindReturnConfig {
-            num_agents: 1,
-            num_flags: 2,
-            width: 24,
-            height: 24,
-            preparation_steps: 8,
-            pipes_enabled: false,
-            ..Default::default()
-        };
-        let mut env = FindReturn::new(&config, 512);
-        let mut buffers = TimeStepBuffers::new(&env);
-        env.reset(7, &mut buffers.view_mut());
-        assert_eq!(flag_tally(&env), (0, 2));
-
-        let mut env = empty_env_with(FindReturnConfig {
-            pipes_enabled: false,
-            ..empty_env().config
-        });
-        let start = center(&env);
-        spawn_agents(&mut env, &[start]);
-
-        step(&mut env, &mut buffers, &[MoveUp]);
-        assert!(!buffers.action_mask[[0, PlacePipe as usize]]);
-        step(&mut env, &mut buffers, &[PlacePipe]);
-        let above = start + Position::new(0, 2);
-        assert_eq!(env.state.map[above.idx()], TileEmpty);
-        assert_eq!(env.state.base_map[above.idx()], TileEmpty);
     }
 
     /// Agents are solid: two of them never share a cell, whichever order the
@@ -1116,7 +957,7 @@ mod tests {
     }
 
     /// The noop is exactly that: the agent keeps its square and its facing,
-    /// and a fresh agent's zero facing keeps its dig aimed at itself, where
+    /// and a fresh agent's zero facing keeps its use aimed at itself, where
     /// there is nothing to dig.
     #[test]
     fn a_noop_changes_nothing() {
@@ -1135,7 +976,7 @@ mod tests {
 
         let mut buffers = TimeStepBuffers::new(&env);
         step(&mut env, &mut buffers, &[Noop]);
-        step(&mut env, &mut buffers, &[Dig]);
+        step(&mut env, &mut buffers, &[Use]);
 
         assert_eq!(env.state.agents[0].position.idx(), start.idx());
         assert_eq!(buffers.reward[0], 0.0);
@@ -1185,8 +1026,8 @@ mod tests {
 
     /// A full episode on generated maps, driven by random actions: the env
     /// has to survive whatever the noise hands it, nobody may share a tile,
-    /// and the flag stock can only shrink, never grow: laying a pipe on a
-    /// flag erases it, and nothing adds flags back.
+    /// and the flag stock stays put: nothing adds flags back and nothing
+    /// erases them.
     #[test]
     fn a_random_rollout_keeps_the_world_consistent() {
         let config = FindReturnConfig {

@@ -31,10 +31,10 @@ use crate::{
     spec::{ActionSpec, ObservationSpec},
     symbols::{
         AGENT_HIDER_DOWN, AGENT_HIDER_LEFT, AGENT_HIDER_RIGHT, AGENT_HIDER_UP, AGENT_SEEKER_DOWN,
-        AGENT_SEEKER_LEFT, AGENT_SEEKER_RIGHT, AGENT_SEEKER_UP, BUILD_WALL, DIG_ACTION, MOVE_DOWN,
-        MOVE_LEFT, MOVE_RIGHT, MOVE_UP, NOOP, TILE_DECOR_1, TILE_DECOR_2, TILE_DECOR_3,
-        TILE_DECOR_4, TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_MASK, TILE_UI, TILE_WALL,
-        TILE_WATER, UI_DIGITS,
+        AGENT_SEEKER_LEFT, AGENT_SEEKER_RIGHT, AGENT_SEEKER_UP, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT,
+        MOVE_UP, NOOP, TILE_DECOR_1, TILE_DECOR_2, TILE_DECOR_3, TILE_DECOR_4,
+        TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_MASK, TILE_UI, TILE_WALL, TILE_WATER, UI_DIGITS,
+        USE,
     },
     timestep::TimeStepMut,
     vocab::{VocabId, Vocabulary},
@@ -232,8 +232,7 @@ vocab_enum!(HideSeekAction {
     MoveRight => MOVE_RIGHT,
     MoveDown => MOVE_DOWN,
     MoveLeft => MOVE_LEFT,
-    Build => BUILD_WALL,
-    Dig => DIG_ACTION,
+    Use => USE,
     Noop => NOOP,
 });
 
@@ -245,7 +244,7 @@ impl HideSeekAction {
             MoveRight => Some(Direction::Right),
             MoveDown => Some(Direction::Down),
             MoveLeft => Some(Direction::Left),
-            Build | Dig | Noop => None,
+            Use | Noop => None,
         }
     }
 }
@@ -394,11 +393,11 @@ impl HideSeek {
         }
 
         let front = agent.front();
-        let built = match action {
-            HideSeekAction::Build if agent.team == Team::Hider && map[front.idx()].open() => {
+        let used = match action {
+            HideSeekAction::Use if agent.team == Team::Hider && map[front.idx()].open() => {
                 Some(HideSeekObs::TileDestructibleWall)
             }
-            HideSeekAction::Dig
+            HideSeekAction::Use
                 if agent.team == Team::Seeker && map[front.idx()].destructible() =>
             {
                 Some(HideSeekObs::TileEmpty)
@@ -406,7 +405,7 @@ impl HideSeek {
             _ => None,
         };
 
-        if let Some(tile) = built
+        if let Some(tile) = used
             && agent.budget > 0
         {
             base_map[front.idx()] = tile;
@@ -539,9 +538,10 @@ impl HideSeek {
     }
 
     /// A frozen seeker may only wait. Otherwise moves and the noop are always
-    /// legal (a move into a wall still turns the agent), a hider may build
-    /// onto open floor in front of it and a seeker dig out a destructible
-    /// wall there, each while its stock lasts.
+    /// legal (a move into a wall still turns the agent), and use is legal when
+    /// the agent's stock lasts and there is something for its team to do in
+    /// front of it: a hider builds on open floor, a seeker digs out a
+    /// destructible wall.
     fn encode_action_mask(&self, timestep: &mut TimeStepMut) {
         let frozen = self.preparing();
         timestep.action_mask.fill(true);
@@ -556,10 +556,9 @@ impl HideSeek {
 
             let front = self.state.map[agent.front().idx()];
             let stocked = agent.budget > 0;
-            mask[HideSeekAction::Build as usize] =
-                stocked && agent.team == Team::Hider && front.open();
-            mask[HideSeekAction::Dig as usize] =
-                stocked && agent.team == Team::Seeker && front.destructible();
+            let can_build = agent.team == Team::Hider && front.open();
+            let can_dig = agent.team == Team::Seeker && front.destructible();
+            mask[HideSeekAction::Use as usize] = stocked && (can_build || can_dig);
         }
     }
 }
@@ -881,11 +880,11 @@ mod tests {
         assert!(legal(&buffers, 1).contains(&MoveRight));
     }
 
-    /// A hider raises a wall on the tile it faces, one off its stock, and
-    /// the band counts the stock down; spent, the build is masked out and
-    /// does nothing.
+    /// A hider's use raises a wall on the tile it faces, one off its stock,
+    /// and the band counts the stock down; spent, use is masked out and does
+    /// nothing.
     #[test]
-    fn a_hider_builds_walls_until_its_stock_runs_out() {
+    fn a_hider_uses_walls_until_its_stock_runs_out() {
         let mut env = empty_env_with(HideSeekConfig {
             num_hiders: 1,
             num_seekers: 1,
@@ -901,32 +900,32 @@ mod tests {
         let mut buffers = observe(&env);
         assert_eq!(ui_row(&env, &buffers, 0, 1), number_row(&env, "2"));
 
-        step(&mut env, &mut buffers, &[Build, Noop]);
+        step(&mut env, &mut buffers, &[Use, Noop]);
         assert_eq!(
             env.state.map[(start + Position::new(0, 1)).idx()],
             TileDestructibleWall
         );
         assert_eq!(ui_row(&env, &buffers, 0, 1), number_row(&env, "1"));
         // the wall in front leaves nothing to build on
-        assert!(!legal(&buffers, 0).contains(&Build));
+        assert!(!legal(&buffers, 0).contains(&Use));
 
         step(&mut env, &mut buffers, &[MoveRight, Noop]);
-        step(&mut env, &mut buffers, &[Build, Noop]);
+        step(&mut env, &mut buffers, &[Use, Noop]);
         let second = start + Position::new(2, 0);
         assert_eq!(env.state.base_map[second.idx()], TileDestructibleWall);
         assert_eq!(ui_row(&env, &buffers, 0, 1), number_row(&env, "0"));
 
         step(&mut env, &mut buffers, &[MoveUp, Noop]);
-        assert!(!legal(&buffers, 0).contains(&Build));
-        step(&mut env, &mut buffers, &[Build, Noop]);
+        assert!(!legal(&buffers, 0).contains(&Use));
+        step(&mut env, &mut buffers, &[Use, Noop]);
         let ahead = env.state.agents[0].front();
         assert_eq!(env.state.base_map[ahead.idx()], TileEmpty);
     }
 
-    /// A hider builds only onto open floor: not over water, another agent,
-    /// or a wall already standing.
+    /// A hider's use builds only onto open floor: not over water, another
+    /// agent, or a wall already standing.
     #[test]
-    fn hiders_build_only_on_open_floor() {
+    fn hider_uses_build_only_on_open_floor() {
         let mut env = empty_env_with(HideSeekConfig {
             num_hiders: 1,
             num_seekers: 1,
@@ -941,14 +940,14 @@ mod tests {
         let mut buffers = observe(&env);
 
         // facing the seeker
-        assert!(!legal(&buffers, 0).contains(&Build));
-        step(&mut env, &mut buffers, &[Build, Noop]);
+        assert!(!legal(&buffers, 0).contains(&Use));
+        step(&mut env, &mut buffers, &[Use, Noop]);
         assert_eq!(env.state.agents[0].budget, env.config.hider_walls);
 
         // facing water
         step(&mut env, &mut buffers, &[MoveRight, Noop]);
-        assert!(!legal(&buffers, 0).contains(&Build));
-        step(&mut env, &mut buffers, &[Build, Noop]);
+        assert!(!legal(&buffers, 0).contains(&Use));
+        step(&mut env, &mut buffers, &[Use, Noop]);
         assert_eq!(
             env.state.base_map[(start + Position::new(1, 0)).idx()],
             TileWater
@@ -956,10 +955,10 @@ mod tests {
         assert_eq!(env.state.agents[0].budget, env.config.hider_walls);
     }
 
-    /// A seeker digs out the wall it faces, generated or built, one off its
-    /// stock; spent, it can dig no more. The border is not diggable.
+    /// A seeker's use digs out the wall it faces, generated or built, one
+    /// off its stock; spent, it can dig no more. The border is not diggable.
     #[test]
-    fn a_seeker_digs_walls_until_its_stock_runs_out() {
+    fn a_seeker_uses_digs_until_its_stock_runs_out() {
         let mut env = empty_env_with(HideSeekConfig {
             num_hiders: 1,
             num_seekers: 1,
@@ -979,16 +978,16 @@ mod tests {
 
         let mut buffers = observe(&env);
         assert_eq!(ui_row(&env, &buffers, 1, 1), number_row(&env, "1"));
-        assert!(legal(&buffers, 1).contains(&Dig));
+        assert!(legal(&buffers, 1).contains(&Use));
 
-        step(&mut env, &mut buffers, &[Noop, Dig]);
+        step(&mut env, &mut buffers, &[Noop, Use]);
         assert_eq!(env.state.map[wall.idx()], TileEmpty);
         assert_eq!(ui_row(&env, &buffers, 1, 1), number_row(&env, "0"));
 
         step(&mut env, &mut buffers, &[Noop, MoveUp]);
         assert_eq!(env.state.agents[1].position, wall);
-        assert!(!legal(&buffers, 1).contains(&Dig));
-        step(&mut env, &mut buffers, &[Noop, Dig]);
+        assert!(!legal(&buffers, 1).contains(&Use));
+        step(&mut env, &mut buffers, &[Noop, Use]);
         assert_eq!(
             env.state.map[(wall + Position::new(0, 1)).idx()],
             TileDestructibleWall
@@ -1003,8 +1002,8 @@ mod tests {
         let mut buffers = observe(&env);
 
         step(&mut env, &mut buffers, &[Noop, MoveLeft]);
-        assert!(!legal(&buffers, 1).contains(&Dig));
-        step(&mut env, &mut buffers, &[Noop, Dig]);
+        assert!(!legal(&buffers, 1).contains(&Use));
+        step(&mut env, &mut buffers, &[Noop, Use]);
         assert_eq!(
             env.state.base_map[(edge + Position::new(-1, 0)).idx()],
             TileWall
@@ -1012,10 +1011,10 @@ mod tests {
         assert_eq!(env.state.agents[1].budget, env.config.seeker_digs);
     }
 
-    /// Each team has only its own half of the walls: a hider cannot dig and a
-    /// seeker cannot build.
+    /// The one use action only does each team's own job: a hider facing a
+    /// wall cannot dig it, and a seeker facing open floor cannot build.
     #[test]
-    fn neither_team_has_the_others_action() {
+    fn use_only_does_each_teams_own_job() {
         let mut env = empty_env();
         let start = center(&env);
         place_tile(&mut env, start + Position::new(0, 1), TileDestructibleWall);
@@ -1023,9 +1022,9 @@ mod tests {
         spawn_agents(&mut env, &[start, start + Position::new(9, 0)]);
         let mut buffers = observe(&env);
 
-        assert!(!legal(&buffers, 0).contains(&Dig));
-        assert!(!legal(&buffers, 1).contains(&Build));
-        step(&mut env, &mut buffers, &[Dig, Build]);
+        assert!(!legal(&buffers, 0).contains(&Use));
+        assert!(!legal(&buffers, 1).contains(&Use));
+        step(&mut env, &mut buffers, &[Use, Use]);
         assert_eq!(
             env.state.base_map[(start + Position::new(0, 1)).idx()],
             TileDestructibleWall

@@ -55,9 +55,6 @@ pub const TILE_FIRE_OUT: &str = "tile/fire_out";
 /// Where survivors come into the world, and come back to after dying.
 pub const TILE_PORTAL: &str = "tile/portal";
 
-pub const TILE_PIPE_HORIZONTAL: &str = "tile/pipe_horizontal";
-pub const TILE_PIPE_VIRTICAL: &str = "tile/pipe_virtical";
-
 pub const TILE_DECOR_1: &str = "tile/decor_1";
 pub const TILE_DECOR_2: &str = "tile/decor_2";
 pub const TILE_DECOR_3: &str = "tile/decor_3";
@@ -131,11 +128,6 @@ pub const MOVES: [&str; 4] = [MOVE_UP, MOVE_RIGHT, MOVE_DOWN, MOVE_LEFT];
 
 pub const NOOP: &str = "noop";
 pub const PRIMARY_ACTION: &str = "primary";
-pub const DIG_ACTION: &str = "dig";
-/// Raises a [`TILE_DESTRUCTIBLE_WALL`] on the tile in front of the agent.
-pub const BUILD_WALL: &str = "build_wall";
-
-pub const PLACE_PIPE: &str = "place_pipe";
 
 pub const TAKE: &str = "item/take";
 pub const PUT: &str = "item/put";

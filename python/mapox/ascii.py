@@ -34,8 +34,6 @@ LEGEND: dict[str, str] = {
     SB.TILE_FOOD: "%",
     # rust-only symbols, absent from mapox.symbols
     "tile/water": "~",
-    "tile/pipe_horizontal": "=",
-    "tile/pipe_virtical": "|",
     SB.TILE_DECOR_1: "'",
     SB.TILE_DECOR_2: '"',
     SB.TILE_DECOR_3: "`",
