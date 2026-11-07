@@ -12,9 +12,9 @@ use crate::{
     render::env::{GridRenderSettings, GridRenderState},
     spec::{ActionSpec, ObservationSpec},
     symbols::{
-        AGENT_HARVESTER, AGENT_SCOUT, DIG_ACTION, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, NOOP,
+        AGENT_HARVESTER, AGENT_SCOUT, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, NOOP,
         TILE_DECOR_1, TILE_DECOR_2, TILE_DECOR_3, TILE_DECOR_4, TILE_DESTRUCTIBLE_WALL, TILE_EMPTY,
-        TILE_FLAG, TILE_FLAG_UNLOCKED, TILE_MASK, TILE_UI, TILE_WALL, TILE_WATER,
+        TILE_FLAG, TILE_FLAG_UNLOCKED, TILE_MASK, TILE_UI, TILE_WALL, TILE_WATER, USE,
     },
     timestep::TimeStepMut,
     vocab::{VocabId, Vocabulary},
@@ -145,7 +145,7 @@ vocab_enum!(ScoutsAction {
     MoveRight => MOVE_RIGHT,
     MoveDown => MOVE_DOWN,
     MoveLeft => MOVE_LEFT,
-    Dig => DIG_ACTION,
+    Use => USE,
     Noop => NOOP,
 });
 
@@ -157,7 +157,7 @@ impl ScoutsAction {
             MoveRight => Position::new(1, 0),
             MoveDown => Position::new(0, -1),
             MoveLeft => Position::new(-1, 0),
-            Dig | Noop => Position::new(0, 0),
+            Use | Noop => Position::new(0, 0),
         }
     }
 
@@ -317,7 +317,7 @@ impl Scouts {
     }
 
     /// Only a harvester digs, and only with a destructible wall in front of
-    /// it; a scout's dig is always masked out.
+    /// it; a scout's use is always masked out.
     fn encode_action_mask(&self, timestep: &mut TimeStepMut) {
         timestep.action_mask.fill(true);
 
@@ -330,7 +330,7 @@ impl Scouts {
             }
 
             let target = agent.position + agent.dir;
-            mask[ScoutsAction::Dig as usize] =
+            mask[ScoutsAction::Use as usize] =
                 agent.role == Role::Harvester && self.state.base_map[target.idx()].destructible();
         }
     }
@@ -440,7 +440,7 @@ impl Environment for Scouts {
                 agent.dir = action.direction();
             }
 
-            if action == ScoutsAction::Dig {
+            if action == ScoutsAction::Use {
                 let target = agent.position + agent.dir;
                 if agent.role == Role::Harvester && self.state.base_map[target.idx()].destructible()
                 {
@@ -925,7 +925,7 @@ mod tests {
     fn free_mask(can_dig: bool) -> ndarray::Array1<bool> {
         ScoutsAction::TABLE
             .iter()
-            .map(|&action| action != ScoutsAction::Dig || can_dig)
+            .map(|&action| action != ScoutsAction::Use || can_dig)
             .collect()
     }
 
@@ -955,7 +955,7 @@ mod tests {
         assert_eq!(env.state.agents[1].position.idx(), start.idx());
         assert_eq!(buffers.action_mask.row(1), free_mask(true));
 
-        step(&mut env, &mut buffers, &[Noop, Dig]);
+        step(&mut env, &mut buffers, &[Noop, Use]);
         assert_eq!(env.state.base_map[wall.idx()], TileEmpty);
         assert_eq!(env.state.map[wall.idx()], TileEmpty);
 
@@ -987,7 +987,7 @@ mod tests {
         assert_eq!(env.state.agents[0].position.idx(), start.idx());
         assert_eq!(buffers.action_mask.row(0), free_mask(false));
 
-        step(&mut env, &mut buffers, &[Dig, Noop]);
+        step(&mut env, &mut buffers, &[Use, Noop]);
         assert_eq!(env.state.base_map[wall.idx()], TileDestructibleWall);
         assert_eq!(env.state.agents[0].timeout, 0);
     }
@@ -1013,7 +1013,7 @@ mod tests {
         step(&mut env, &mut buffers, &[Noop, MoveLeft]);
         assert_eq!(buffers.action_mask.row(1), free_mask(false));
 
-        step(&mut env, &mut buffers, &[Noop, Dig]);
+        step(&mut env, &mut buffers, &[Noop, Use]);
         assert_eq!(
             env.state.base_map[(edge + Position::new(-1, 0)).idx()],
             TileWall

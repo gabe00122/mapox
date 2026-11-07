@@ -82,12 +82,6 @@ WATER = hex_color("1f3f86")
 WATER_MID = hex_color("2f5cb8")
 WATER_CREST = hex_color("86b4ff")
 
-COPPER_EDGE = hex_color("4f2610")
-COPPER_SHADE = hex_color("8c4a20")
-COPPER = hex_color("c26f35")
-COPPER_LIGHT = hex_color("f0a769")
-COPPER_FLANGE = hex_color("d98a4c")
-
 WOOD = hex_color("7a4b26")
 WOOD_DARK = hex_color("4a2c14")
 WOOD_LIGHT = hex_color("a06a38")
@@ -332,27 +326,6 @@ def water() -> Sprite:
         ]:
             sprite[(oy + y) % TILE][(ox + x) % TILE] = color
     return sprite
-
-
-def pipe_horizontal() -> Sprite:
-    """A copper slideway. Flanges on both ends double up at every joint, so a
-    run shows how many tiles it spans."""
-    sprite = floor()
-    bands = [COPPER_EDGE, COPPER_LIGHT, COPPER, COPPER, COPPER_SHADE, COPPER_EDGE]
-    for i, color in enumerate(bands):
-        for x in range(TILE):
-            sprite[3 + i][x] = color
-    for x in (0, TILE - 1):
-        for y in range(2, 10):
-            sprite[y][x] = COPPER_EDGE if y in (2, 9) else COPPER_FLANGE
-    # rivet highlights on the flanges
-    sprite[4][0] = sprite[4][TILE - 1] = COPPER_LIGHT
-    return sprite
-
-
-def pipe_vertical() -> Sprite:
-    horizontal = pipe_horizontal()
-    return [[horizontal[x][y] for x in range(TILE)] for y in range(TILE)]
 
 
 def decor(art: list[str], palette: dict[str, Color]) -> Sprite:
@@ -1309,8 +1282,8 @@ def build_sheet() -> list[list[Sprite]]:
         wall(),
         dirt(),
         water(),
-        pipe_horizontal(),
-        pipe_vertical(),
+        floor(),
+        floor(),
         decor(DECOR_GRASS, {"g": GRASS_DIM, "l": GRASS_DIM_LIGHT}),
         decor(DECOR_PEBBLES, {"l": hex_color("4a5060"), "s": hex_color("323641")}),
         decor(DECOR_CRACKS, {"c": hex_color("0f1116")}),

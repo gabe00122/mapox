@@ -63,9 +63,6 @@ const ACTION_KEYS: &[(&str, &str, &[Key])] = &[
     (symbols::MOVE_LEFT, "move left", &[Key::ArrowLeft, Key::A]),
     (symbols::NOOP, "wait", &[Key::Period]),
     (symbols::PRIMARY_ACTION, "primary action", &[Key::F]),
-    (symbols::DIG_ACTION, "dig", &[Key::E]),
-    (symbols::PLACE_PIPE, "place pipe", &[Key::Q]),
-    (symbols::BUILD_WALL, "build wall", &[Key::Q]),
     (symbols::TAKE, "take", &[Key::E]),
     (symbols::PUT, "put", &[Key::Q]),
     (symbols::SWAP1, "swap2", &[Key::Num2]),
@@ -186,7 +183,7 @@ mod tests {
     /// has no row for still shows up, under its symbol.
     #[test]
     fn actions_are_labelled_for_people() {
-        assert_eq!(action_label(symbols::PLACE_PIPE), "place pipe");
+        assert_eq!(action_label(symbols::USE), "use");
         assert_eq!(action_label("teleport"), "teleport");
     }
 
@@ -235,15 +232,14 @@ mod tests {
     /// does nothing, rather than sending whatever id sits at that position.
     #[test]
     fn keys_the_env_has_no_action_for_are_inert() {
-        let vocab: Vocabulary = [symbols::MOVE_UP, symbols::DIG_ACTION]
-            .into_iter()
-            .collect();
+        let vocab: Vocabulary = [symbols::MOVE_UP, symbols::USE].into_iter().collect();
 
         assert_eq!(
-            read(&frame(&[Key::E]), &vocab),
-            Some(Input::Action(vocab.get(symbols::DIG_ACTION).unwrap()))
+            read(&frame(&[Key::F]), &vocab),
+            Some(Input::Action(vocab.get(symbols::USE).unwrap()))
         );
-        // Q is bound to place_pipe, which this vocab doesn't have
+        // E and Q are bound to other actions this vocab doesn't have
+        assert_eq!(read(&frame(&[Key::E]), &vocab), None);
         assert_eq!(read(&frame(&[Key::Q]), &vocab), None);
         assert_eq!(read(&frame(&[]), &vocab), None);
     }

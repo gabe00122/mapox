@@ -37,7 +37,6 @@ class RustFindReturnConfig(BaseModel):
     digging_timeout: int = 5
     preparation_steps: int = 256
     treasure_reward: float = 1.0
-    pipes_enabled: bool = True
 
 
 class RustScoutsConfig(BaseModel):

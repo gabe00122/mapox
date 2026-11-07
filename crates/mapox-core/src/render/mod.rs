@@ -25,8 +25,6 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::TILE_WALL, 3, 0),
     (symbols::TILE_DESTRUCTIBLE_WALL, 4, 0),
     (symbols::TILE_WATER, 5, 0),
-    (symbols::TILE_PIPE_HORIZONTAL, 6, 0),
-    (symbols::TILE_PIPE_VIRTICAL, 7, 0),
     (symbols::TILE_DECOR_1, 8, 0),
     (symbols::TILE_DECOR_2, 9, 0),
     (symbols::TILE_DECOR_3, 10, 0),
