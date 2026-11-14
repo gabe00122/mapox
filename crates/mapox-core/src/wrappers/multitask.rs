@@ -118,10 +118,17 @@ impl MultitaskWrapper {
     }
 }
 
-/// The seed env `i` is reset with when the whole batch is reset with `seed`.
-/// Enjoy mode hands its one env the seed unchanged instead.
-fn env_seed(seed: u64, i: usize) -> u64 {
-    SmallRng::seed_from_u64(seed.wrapping_add(i as u64)).next_u64()
+/// The seed each of `num_envs` envs is reset with when the whole batch is
+/// reset with `seed`. Enjoy mode hands its one env the seed unchanged
+/// instead.
+///
+/// They are successive draws from one stream, as in `VectorWrapper`, so that
+/// neighbouring batch seeds share no episodes: seeding env `i` from
+/// `seed + i` would replay under `seed + 1` all but one of the episodes of
+/// `seed`, each shifted along by an env.
+fn env_seeds(seed: u64, num_envs: usize) -> Vec<u64> {
+    let mut rng = SmallRng::seed_from_u64(seed);
+    (0..num_envs).map(|_| rng.next_u64()).collect()
 }
 
 impl Environment for MultitaskWrapper {
@@ -131,11 +138,12 @@ impl Environment for MultitaskWrapper {
             return;
         }
 
+        let seeds = env_seeds(seed, self.envs.len());
         self.envs
             .par_iter_mut()
+            .zip(seeds)
             .zip(timestep.partition_mut(&self.lens))
-            .enumerate()
-            .for_each(|(i, (env, mut timestep))| env.reset(env_seed(seed, i), &mut timestep));
+            .for_each(|((env, seed), mut timestep)| env.reset(seed, &mut timestep));
     }
 
     fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
@@ -351,9 +359,10 @@ pub(crate) mod tests {
 
         for (episode, seed) in [(0, 11u64), (1, 12)] {
             batch.reset(seed, &mut batch_buffers.view_mut());
+            let seeds = env_seeds(seed, batch.envs.len());
             for (task, (env, buffers, ..)) in played.iter_mut().enumerate() {
                 let env_idx = batch.task_offsets[task];
-                env.reset(env_seed(seed, env_idx), &mut buffers.view_mut());
+                env.reset(seeds[env_idx], &mut buffers.view_mut());
             }
             compare(
                 &batch_buffers,
@@ -377,6 +386,22 @@ pub(crate) mod tests {
                 );
             }
             assert!(batch_buffers.terminated.iter().all(|&done| done));
+        }
+    }
+
+    /// Callers seed episode after episode by counting up, so a run of batch
+    /// seeds must not hand any env a seed another env already had.
+    #[test]
+    fn neighbouring_batch_seeds_share_no_env_seeds() {
+        const ENVS: usize = 8;
+        let mut seen = std::collections::HashSet::new();
+        for seed in 0..64 {
+            for env_seed in env_seeds(seed, ENVS) {
+                assert!(
+                    seen.insert(env_seed),
+                    "batch seed {seed} repeats an env seed"
+                );
+            }
         }
     }
 }

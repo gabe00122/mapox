@@ -311,6 +311,9 @@ impl FindReturn {
 impl Environment for FindReturn {
     fn reset(&mut self, seed: u64, timestep: &mut TimeStepMut) {
         self.state.rngs = SmallRng::seed_from_u64(seed);
+        for (i, agent_id) in self.state.agent_order.iter_mut().enumerate() {
+            *agent_id = i;
+        }
 
         self.state.time = 0;
 

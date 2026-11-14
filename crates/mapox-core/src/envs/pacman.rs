@@ -750,11 +750,6 @@ impl Environment for Pacman {
 
         if self.state.frightened_time_left > 0 {
             self.state.frightened_time_left -= 1;
-        } else {
-            for ghost in &mut self.state.ghosts {
-                ghost.frightened = false;
-                ghost.half_move = false;
-            }
         }
 
         self.check_mode_change();
@@ -785,6 +780,15 @@ impl Environment for Pacman {
         }
         if caught || cleared {
             self.reset_round();
+        }
+        // The power lasts through the step that runs its countdown out, and
+        // ends before that step is drawn: a ghost that looks frightened in
+        // an observation is still safe to touch on the step that follows.
+        if self.state.frightened_time_left == 0 {
+            for ghost in &mut self.state.ghosts {
+                ghost.frightened = false;
+                ghost.half_move = false;
+            }
         }
         self.repaint();
 
@@ -1371,6 +1375,46 @@ mod tests {
             moves += usize::from(env.state.ghosts[BLINKY].pos != before);
         }
         assert_eq!(moves, 4);
+    }
+
+    /// A ghost looks frightened exactly as long as it is safe to touch: the
+    /// observation after the power's last step shows it back to normal, and
+    /// that is how the next step treats it.
+    #[test]
+    fn ghosts_look_frightened_only_while_they_are_edible() {
+        let config = PacmanConfig {
+            frightened_time: 3,
+            ghost_reward: 5.0,
+            death_reward: -3.0,
+            ..PacmanConfig::default()
+        };
+        let mut env = Pacman::new(&config, 512);
+        // one step right of the power pellet in the lower-left corner
+        let mut buffers = setup(&mut env, pos(2, 7), LEFT);
+        let looks_frightened = |env: &Pacman| {
+            env.state
+                .painted
+                .iter()
+                .any(|&tile| tile == GhostFrightened)
+        };
+
+        step(&mut env, &mut buffers, LEFT);
+        assert_eq!(env.state.frightened_time_left, 3);
+        assert!(looks_frightened(&env));
+
+        // Pac-Man stands against the wall while the power counts down
+        for left in (0..3).rev() {
+            step(&mut env, &mut buffers, LEFT);
+            assert_eq!(env.state.frightened_time_left, left);
+            assert_eq!(looks_frightened(&env), left > 0, "with {left} steps left");
+            assert!(!buffers.terminated[0]);
+        }
+
+        // the ghost that now looks dangerous is
+        env.state.ghosts[BLINKY].pos = pos(1, 8);
+        step(&mut env, &mut buffers, LEFT);
+        assert_eq!(buffers.reward[0], -3.0);
+        assert!(buffers.terminated[0]);
     }
 
     /// Fuzz the bookkeeping with live ghosts: whatever happens, nobody stands

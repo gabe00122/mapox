@@ -577,6 +577,9 @@ impl HideSeek {
 impl Environment for HideSeek {
     fn reset(&mut self, seed: u64, timestep: &mut TimeStepMut) {
         self.state.rngs = SmallRng::seed_from_u64(seed);
+        for (i, agent_id) in self.state.agent_order.iter_mut().enumerate() {
+            *agent_id = i;
+        }
 
         self.state.time = 0;
         self.state.spotted.clear();
@@ -1136,7 +1139,11 @@ mod tests {
         let start = center(&caught);
         spawn_agents(
             &mut caught,
-            &[start, start + Position::new(0, 1), start + Position::new(4, 0)],
+            &[
+                start,
+                start + Position::new(0, 1),
+                start + Position::new(4, 0),
+            ],
         );
         let mut buffers = observe(&caught);
         step(&mut caught, &mut buffers, &[Noop, Noop, Noop]);

@@ -339,6 +339,11 @@ impl Scouts {
 impl Environment for Scouts {
     fn reset(&mut self, seed: u64, timestep: &mut TimeStepMut) {
         self.state.rngs = SmallRng::seed_from_u64(seed);
+        // each step shuffles this in place; start it over so that the seed
+        // alone decides the turn order
+        for (i, agent_id) in self.state.agent_order.iter_mut().enumerate() {
+            *agent_id = i;
+        }
 
         self.state.time = 0;
 
