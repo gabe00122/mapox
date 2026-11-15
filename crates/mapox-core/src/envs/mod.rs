@@ -58,7 +58,6 @@ mod tests {
                             num_agents: 30,
                             width: 12,
                             height: 12,
-                            preparation_steps: 8,
                             ..Default::default()
                         },
                         LENGTH,

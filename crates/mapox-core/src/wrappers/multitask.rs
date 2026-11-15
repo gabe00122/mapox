@@ -291,8 +291,6 @@ pub(crate) mod tests {
                     height: 16,
                     view_width: 11,
                     view_height: 11,
-                    // short enough that the flags unlock inside an episode
-                    preparation_steps: 4,
                     ..FindReturnConfig::default()
                 })),
             ),

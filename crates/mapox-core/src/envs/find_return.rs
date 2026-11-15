@@ -13,8 +13,8 @@ use crate::{
     spec::{ActionSpec, ObservationSpec},
     symbols::{
         AGENT_GENERIC, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, NOOP, TILE_DECOR_1, TILE_DECOR_2,
-        TILE_DECOR_3, TILE_DECOR_4, TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_FLAG,
-        TILE_FLAG_UNLOCKED, TILE_MASK, TILE_UI, TILE_WALL, TILE_WATER, USE,
+        TILE_DECOR_3, TILE_DECOR_4, TILE_DESTRUCTIBLE_WALL, TILE_EMPTY, TILE_FLAG_UNLOCKED,
+        TILE_MASK, TILE_UI, TILE_WALL, TILE_WATER, USE,
     },
     timestep::TimeStepMut,
     vocab::{VocabId, Vocabulary},
@@ -34,7 +34,6 @@ pub struct FindReturnConfig {
     pub mapgen_threshold: f32,
     pub water_threshold: f32,
     pub digging_timeout: u32,
-    pub preparation_steps: usize,
     pub treasure_reward: f32,
 }
 
@@ -50,7 +49,6 @@ impl Default for FindReturnConfig {
             mapgen_threshold: 0.07,
             water_threshold: -0.45,
             digging_timeout: 5,
-            preparation_steps: 256,
             treasure_reward: 1.0,
         }
     }
@@ -73,7 +71,6 @@ struct FindReturnState {
     base_map: Array2<FindReturnObs>, // the bottom layer of the map without agents
     map: Array2<FindReturnObs>,      // the base map plus the agents
     free_positions: Vec<Position>,   // these are used to calculate spawn positions
-    flag_positions: Vec<Position>,   // where the flags sit, for unlocking them in place
 }
 
 vocab_enum!(FindReturnObs {
@@ -83,8 +80,7 @@ vocab_enum!(FindReturnObs {
     TileDestructibleWall => TILE_DESTRUCTIBLE_WALL,
     TileWall => TILE_WALL,
     TileWater => TILE_WATER,
-    TileFlag => TILE_FLAG,
-    TileFlagUnlocked => TILE_FLAG_UNLOCKED,
+    TileFlag => TILE_FLAG_UNLOCKED,
     TileDecor1 => TILE_DECOR_1,
     TileDecor2 => TILE_DECOR_2,
     TileDecor3 => TILE_DECOR_3,
@@ -206,7 +202,6 @@ impl FindReturn {
                     FindReturnObs::TileEmpty,
                 ),
                 free_positions: Vec::new(),
-                flag_positions: Vec::with_capacity(config.num_flags),
                 map: Array2::from_elem((width as usize, height as usize), FindReturnObs::TileEmpty),
                 rngs: SmallRng::seed_from_u64(0),
                 time: 0,
@@ -241,22 +236,6 @@ impl FindReturn {
         }
 
         self.state.free_positions.shuffle(&mut self.state.rngs);
-    }
-
-    fn unlock_flags(&mut self) {
-        let FindReturnState {
-            flag_positions,
-            base_map,
-            map,
-            ..
-        } = &mut self.state;
-
-        for position in flag_positions.iter() {
-            base_map[position.idx()] = FindReturnObs::TileFlagUnlocked;
-            if map[position.idx()] == FindReturnObs::TileFlag {
-                map[position.idx()] = FindReturnObs::TileFlagUnlocked;
-            }
-        }
     }
 
     fn encode_observations(&self, timestep: &mut TimeStepMut) {
@@ -362,17 +341,11 @@ impl Environment for FindReturn {
         self.state.agents.clear();
         self.calculate_free_positions();
 
-        // Place the flags, locked until the preparation phase is over
-        self.state.flag_positions.clear();
+        // Place the flags
         for _ in 0..self.config.num_flags {
             let flag_position = self.state.free_positions.pop().unwrap();
             self.state.base_map[flag_position.idx()] = FindReturnObs::TileFlag;
             self.state.map[flag_position.idx()] = FindReturnObs::TileFlag;
-            self.state.flag_positions.push(flag_position);
-        }
-
-        if self.config.preparation_steps == 0 {
-            self.unlock_flags();
         }
 
         // Place the agents
@@ -392,10 +365,6 @@ impl Environment for FindReturn {
     }
 
     fn step(&mut self, actions: &[VocabId], timestep: &mut TimeStepMut) {
-        if self.state.time == self.config.preparation_steps {
-            self.unlock_flags();
-        }
-
         let mut agent_respawn_ids: Vec<usize> = Vec::new();
         self.state.agent_order.shuffle(&mut self.state.rngs);
 
@@ -430,9 +399,7 @@ impl Environment for FindReturn {
                         map[agent.position.idx()] = base_map[agent.position.idx()];
                         agent.position = target;
 
-                        // a locked flag is scenery: only the unlocked tile pays
-                        let found_flag =
-                            base_map[agent.position.idx()] == FindReturnObs::TileFlagUnlocked;
+                        let found_flag = base_map[agent.position.idx()] == FindReturnObs::TileFlag;
                         if found_flag {
                             agent_respawn_ids.push(agent_id);
                             timestep.reward[agent_id] = self.config.treasure_reward;
@@ -591,13 +558,6 @@ mod tests {
         env.state.map[position.idx()] = tile;
     }
 
-    /// Places a flag the way `reset` does: on both layers, and registered
-    /// in `flag_positions`, which is the list the unlock step walks.
-    fn place_flag(env: &mut FindReturn, position: Position, tile: FindReturnObs) {
-        place_tile(env, position, tile);
-        env.state.flag_positions.push(position);
-    }
-
     /// Steps every agent with the action named for it, and hands back the
     /// buffers so the caller can read rewards out.
     fn step(env: &mut FindReturn, buffers: &mut TimeStepBuffers, actions: &[FindReturnAction]) {
@@ -625,18 +585,13 @@ mod tests {
         assert!(mask[Noop as usize]);
     }
 
-    /// The flag stock on the bottom layer, split by lock state.
-    fn flag_tally(env: &FindReturn) -> (usize, usize) {
-        let mut locked = 0;
-        let mut unlocked = 0;
-        for &tile in env.state.base_map.iter() {
-            match tile {
-                TileFlag => locked += 1,
-                TileFlagUnlocked => unlocked += 1,
-                _ => {}
-            }
-        }
-        (locked, unlocked)
+    /// The flag stock on the bottom layer.
+    fn flag_count(env: &FindReturn) -> usize {
+        env.state
+            .base_map
+            .iter()
+            .filter(|&&tile| tile == TileFlag)
+            .count()
     }
 
     /// Reset has to leave the map consistent: every agent painted on the top
@@ -649,7 +604,6 @@ mod tests {
             num_flags: 2,
             width: 24,
             height: 24,
-            preparation_steps: 8,
             ..Default::default()
         };
         let mut env = FindReturn::new(&config, 512);
@@ -666,92 +620,29 @@ mod tests {
             assert!(p.y >= env.pad_height && p.y < env.height - env.pad_height);
         }
 
-        assert_eq!(flag_tally(&env), (2, 0));
+        assert_eq!(flag_count(&env), 2);
         assert_eq!(env.state.base_map[[0, 0]], TileWall);
         assert_eq!(
             env.state.base_map[[env.width as usize - 1, env.height as usize - 1]],
             TileWall
         );
-
-        // ... and with no preparation phase the flags start open instead.
-        let open = FindReturnConfig {
-            preparation_steps: 0,
-            ..config
-        };
-        let mut env = FindReturn::new(&open, 512);
-        env.reset(7, &mut buffers.view_mut());
-        assert_eq!(flag_tally(&env), (0, 2));
     }
 
-    /// Flags sit locked while the preparation phase runs, and open on the
-    /// step after it has: `preparation_steps` full steps, then the next step
-    /// starts with the stock open.
+    /// The flag is the only tile that pays: walking on it rewards the agent
+    /// and sends it back to free ground, and the flag stands there for the
+    /// next visit.
     #[test]
-    fn flags_unlock_after_the_preparation_steps() {
+    fn a_flag_pays_and_respawns_the_agent() {
         let mut env = empty_env_with(FindReturnConfig {
             num_agents: 1,
             num_flags: 0,
             width: 21,
             height: 21,
-            preparation_steps: 2,
             ..Default::default()
         });
         let start = center(&env);
         let flag = start + Position::new(1, 0);
-        place_flag(&mut env, flag, TileFlag);
-        spawn_agents(&mut env, &[start]);
-
-        let mut buffers = TimeStepBuffers::new(&env);
-        step(&mut env, &mut buffers, &[Noop]);
-        assert_eq!(env.state.base_map[flag.idx()], TileFlag);
-        step(&mut env, &mut buffers, &[Noop]);
-        assert_eq!(env.state.base_map[flag.idx()], TileFlag);
-        step(&mut env, &mut buffers, &[Noop]);
-        assert_eq!(env.state.base_map[flag.idx()], TileFlagUnlocked);
-    }
-
-    /// A locked flag is scenery: the agent may stand on it, but it pays
-    /// nothing and stays locked until the preparation phase is over.
-    #[test]
-    fn walking_over_a_locked_flag_pays_nothing() {
-        let mut env = empty_env_with(FindReturnConfig {
-            num_agents: 1,
-            num_flags: 0,
-            width: 21,
-            height: 21,
-            preparation_steps: 1,
-            ..Default::default()
-        });
-        let start = center(&env);
-        let flag = start + Position::new(1, 0);
-        place_flag(&mut env, flag, TileFlag);
-        spawn_agents(&mut env, &[start]);
-
-        let mut buffers = TimeStepBuffers::new(&env);
-        step(&mut env, &mut buffers, &[MoveRight]);
-
-        assert_eq!(buffers.reward[0], 0.0);
-        assert_eq!(env.state.base_map[flag.idx()], TileFlag);
-        assert_eq!(env.state.agents[0].position.idx(), flag.idx());
-        assert_eq!(env.state.map[flag.idx()], AgentGeneric);
-    }
-
-    /// The unlocked flag is the only tile that pays: walking on it rewards
-    /// the agent and sends it back to free ground, and the flag stands
-    /// there open for the next visit.
-    #[test]
-    fn an_unlocked_flag_pays_and_respawns_the_agent() {
-        let mut env = empty_env_with(FindReturnConfig {
-            num_agents: 1,
-            num_flags: 0,
-            width: 21,
-            height: 21,
-            preparation_steps: 0,
-            ..Default::default()
-        });
-        let start = center(&env);
-        let flag = start + Position::new(1, 0);
-        place_flag(&mut env, flag, TileFlagUnlocked);
+        place_tile(&mut env, flag, TileFlag);
         spawn_agents(&mut env, &[start]);
 
         let mut buffers = TimeStepBuffers::new(&env);
@@ -765,7 +656,7 @@ mod tests {
             env.state.map[env.state.agents[0].position.idx()],
             AgentGeneric
         );
-        assert_eq!(env.state.base_map[flag.idx()], TileFlagUnlocked);
+        assert_eq!(env.state.base_map[flag.idx()], TileFlag);
     }
 
     #[test]
@@ -780,8 +671,8 @@ mod tests {
         });
         let first = center(&env);
         let second = first + Position::new(0, 3);
-        place_flag(&mut env, first + Position::new(1, 0), TileFlagUnlocked);
-        place_flag(&mut env, second + Position::new(1, 0), TileFlagUnlocked);
+        place_tile(&mut env, first + Position::new(1, 0), TileFlag);
+        place_tile(&mut env, second + Position::new(1, 0), TileFlag);
         spawn_agents(&mut env, &[first, second, first + Position::new(0, -3)]);
         let mut buffers = TimeStepBuffers::new(&env);
 
@@ -969,12 +860,11 @@ mod tests {
             num_flags: 0,
             width: 21,
             height: 21,
-            preparation_steps: 0,
             ..Default::default()
         });
         let start = center(&env);
         let flag = start + Position::new(1, 0);
-        place_flag(&mut env, flag, TileFlagUnlocked);
+        place_tile(&mut env, flag, TileFlag);
         spawn_agents(&mut env, &[start]);
 
         let mut buffers = TimeStepBuffers::new(&env);
@@ -984,7 +874,7 @@ mod tests {
         assert_eq!(env.state.agents[0].position.idx(), start.idx());
         assert_eq!(buffers.reward[0], 0.0);
         assert_eq!(env.state.agents[0].timeout, 0);
-        assert_eq!(env.state.base_map[flag.idx()], TileFlagUnlocked);
+        assert_eq!(env.state.base_map[flag.idx()], TileFlag);
         assert_eq!(env.state.map[start.idx()], AgentGeneric);
     }
 
@@ -1033,10 +923,7 @@ mod tests {
     /// erases them.
     #[test]
     fn a_random_rollout_keeps_the_world_consistent() {
-        let config = FindReturnConfig {
-            preparation_steps: 0,
-            ..Default::default()
-        };
+        let config = FindReturnConfig::default();
         let mut env = FindReturn::new(&config, 256);
         let mut buffers = TimeStepBuffers::new(&env);
         let mut rng = SmallRng::seed_from_u64(11);
@@ -1060,9 +947,8 @@ mod tests {
                 assert!(p.y >= env.pad_height && p.y < env.height - env.pad_height);
             }
 
-            let (locked, unlocked) = flag_tally(&env);
             assert!(
-                locked + unlocked <= config.num_flags,
+                flag_count(&env) <= config.num_flags,
                 "flag stock grew on seed {seed}"
             );
         }

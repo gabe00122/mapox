@@ -35,7 +35,6 @@ class RustFindReturnConfig(BaseModel):
     mapgen_threshold: float = 0.07
     water_threshold: float = -0.45
     digging_timeout: int = 5
-    preparation_steps: int = 256
     treasure_reward: float = 1.0
 
 
