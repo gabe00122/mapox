@@ -134,6 +134,7 @@ mod tests {
     use crate::env::Environment;
     use crate::envs::find_return::{FindReturn, FindReturnConfig};
     use crate::envs::hide_seek::{HideSeek, HideSeekConfig};
+    use crate::envs::mutiny::{Mutiny, MutinyConfig};
     use crate::envs::pacman::{Pacman, PacmanConfig};
     use crate::envs::scouts::{Scouts, ScoutsConfig};
     use crate::envs::survival::{Survival, config::SurvivalConfig};
@@ -146,6 +147,7 @@ mod tests {
             Box::new(Pacman::new(&PacmanConfig::default(), 512)),
             Box::new(Survival::new(&SurvivalConfig::default(), 512)),
             Box::new(HideSeek::new(&HideSeekConfig::default(), 512)),
+            Box::new(Mutiny::new(&MutinyConfig::default(), 512)),
         ]
     }
 

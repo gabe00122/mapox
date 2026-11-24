@@ -57,11 +57,47 @@ AGENT_GHOST_CLYDE = "agent/ghost_clyde"
 AGENT_GHOST_FRIGHTENED = "agent/ghost_frightened"
 AGENT_GHOST_EYES = "agent/ghost_eyes"
 
+# the rust mutiny: the crew by color, which is all that tells them apart
+CREW_COLORS = (
+    "red",
+    "orange",
+    "yellow",
+    "green",
+    "cyan",
+    "blue",
+    "purple",
+    "pink",
+    "white",
+    "brown",
+)
+AGENT_CREW = tuple(f"agent/crew_{color}" for color in CREW_COLORS)
+AGENT_CREW_GHOST = "agent/crew_ghost"  # a dead crew member, seen only by the dead
+TILE_CORPSES = tuple(f"tile/corpse_{color}" for color in CREW_COLORS)
+TILE_VOTE_BUTTONS = tuple(f"tile/vote_button_{color}" for color in CREW_COLORS)
+TILE_CHORE_BUTTON = "tile/chore_button"
+TILE_CHORE_BUTTON_LIT = "tile/chore_button_lit"  # the viewer's own next button
+TILE_CHORE_BUTTON_PRESSED = "tile/chore_button_pressed"
+TILE_MEETING_BUTTON = "tile/meeting_button"  # calls a vote
+TILE_MEETING_BUTTON_OFF = "tile/meeting_button_off"  # the viewer cannot call one
+TILE_HIDING_SPOT = "tile/hiding_spot"
+TILE_HIDING_SPOT_OCCUPIED = "tile/hiding_spot_occupied"
+TILE_SKIP_BUTTON = "tile/skip_button"  # votes to kick no one
+
 # --- observation symbols: UI band ---
 
 # Shared digit glyphs for numbers in the rust envs' UI band, indexed by the
 # digit they draw; a number is a run of them, most significant digit first.
 UI_DIGITS = tuple(f"ui/digit_{d}" for d in range(10))
+
+# mutiny's band labels: the viewer's role, then what each number counts
+UI_ROLE_CREW = "ui/role_crew"
+UI_ROLE_TRAITOR = "ui/role_traitor"
+UI_DEAD_CREW = "ui/dead_crew"
+UI_DEAD_TRAITORS = "ui/dead_traitors"
+UI_CHORES = "ui/chores"
+UI_ATTACK = "ui/attack"
+UI_CLOCK = "ui/clock"
+UI_VOTE = "ui/vote"
 
 # --- action symbols ---
 

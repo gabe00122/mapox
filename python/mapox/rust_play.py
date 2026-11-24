@@ -13,6 +13,7 @@ from mapox.envs.rust_env_numpy import (
     RustEnvNumpy,
     RustFindReturnConfig,
     RustHideSeekConfig,
+    RustMutinyConfig,
     RustMazeConfig,
     RustPacmanConfig,
     RustScoutsConfig,
@@ -120,6 +121,7 @@ CONFIGS = {
     "survival": RustSurvivalConfig(),
     "maze": RustMazeConfig(),
     "hide_seek": RustHideSeekConfig(),
+    "mutiny": RustMutinyConfig(),
 }
 
 

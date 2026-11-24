@@ -21,6 +21,22 @@ pub const UI_DIGITS: [&str; 10] = [
 pub const UI_HEALTH: &str = "ui/health";
 pub const UI_HUNGER: &str = "ui/hunger";
 
+/// Mutiny's band labels. The role an agent was dealt, drawn in the band's
+/// first cell.
+pub const UI_ROLE_CREW: &str = "ui/role_crew";
+pub const UI_ROLE_TRAITOR: &str = "ui/role_traitor";
+/// Each in front of a count of the dead on that side.
+pub const UI_DEAD_CREW: &str = "ui/dead_crew";
+pub const UI_DEAD_TRAITORS: &str = "ui/dead_traitors";
+/// In front of the button presses the crew still owe.
+pub const UI_CHORES: &str = "ui/chores";
+/// In front of the steps until a traitor can attack again.
+pub const UI_ATTACK: &str = "ui/attack";
+/// In front of the steps a game has left, and [`UI_VOTE`] in front of the
+/// steps a vote has left while one is on.
+pub const UI_CLOCK: &str = "ui/clock";
+pub const UI_VOTE: &str = "ui/vote";
+
 pub const TILE_MASK: &str = "mask";
 pub const TILE_EMPTY: &str = "tile/empty";
 pub const TILE_WALL: &str = "tile/wall";
@@ -54,6 +70,57 @@ pub const TILE_FIRE: &str = "tile/fire";
 pub const TILE_FIRE_OUT: &str = "tile/fire_out";
 /// Where survivors come into the world, and come back to after dying.
 pub const TILE_PORTAL: &str = "tile/portal";
+
+// Mutiny's fittings. Agents work the buttons by walking into them.
+/// A chore button no one the viewer knows of needs pressed.
+pub const TILE_CHORE_BUTTON: &str = "tile/chore_button";
+/// The button the viewer's own chore wants pressed next.
+pub const TILE_CHORE_BUTTON_LIT: &str = "tile/chore_button_lit";
+/// A chore button on the step after someone pressed it.
+pub const TILE_CHORE_BUTTON_PRESSED: &str = "tile/chore_button_pressed";
+/// Calls a vote. [`TILE_MEETING_BUTTON_OFF`] is the same button while the
+/// viewer cannot call one with it.
+pub const TILE_MEETING_BUTTON: &str = "tile/meeting_button";
+pub const TILE_MEETING_BUTTON_OFF: &str = "tile/meeting_button_off";
+/// A tile traitors can walk on that covers their sprite in other agents' views.
+pub const TILE_HIDING_SPOT: &str = "tile/hiding_spot";
+/// An occupied hiding tile as shown to its occupant and in the full map.
+pub const TILE_HIDING_SPOT_OCCUPIED: &str = "tile/hiding_spot_occupied";
+/// Casts a vote to kick no one.
+pub const TILE_SKIP_BUTTON: &str = "tile/skip_button";
+
+/// The colors a mutiny crew is dealt, which is all that tells its members
+/// apart. [`AGENT_CREW`], [`TILE_CORPSES`] and [`TILE_VOTE_BUTTONS`] are
+/// indexed by a color's place here.
+pub const CREW_COLORS: [&str; 10] = [
+    "red", "orange", "yellow", "green", "cyan", "blue", "purple", "pink", "white", "brown",
+];
+/// What a crew member leaves where it was killed, by color.
+pub const TILE_CORPSES: [&str; 10] = [
+    "tile/corpse_red",
+    "tile/corpse_orange",
+    "tile/corpse_yellow",
+    "tile/corpse_green",
+    "tile/corpse_cyan",
+    "tile/corpse_blue",
+    "tile/corpse_purple",
+    "tile/corpse_pink",
+    "tile/corpse_white",
+    "tile/corpse_brown",
+];
+/// The button that casts a vote to kick the crew member of its color.
+pub const TILE_VOTE_BUTTONS: [&str; 10] = [
+    "tile/vote_button_red",
+    "tile/vote_button_orange",
+    "tile/vote_button_yellow",
+    "tile/vote_button_green",
+    "tile/vote_button_cyan",
+    "tile/vote_button_blue",
+    "tile/vote_button_purple",
+    "tile/vote_button_pink",
+    "tile/vote_button_white",
+    "tile/vote_button_brown",
+];
 
 pub const TILE_DECOR_1: &str = "tile/decor_1";
 pub const TILE_DECOR_2: &str = "tile/decor_2";
@@ -116,6 +183,21 @@ pub const AGENT_GHOST_CLYDE: &str = "agent/ghost_clyde";
 pub const AGENT_GHOST_FRIGHTENED: &str = "agent/ghost_frightened";
 /// An eaten ghost heading home: harmless, and not edible again until it's back.
 pub const AGENT_GHOST_EYES: &str = "agent/ghost_eyes";
+/// A living mutiny crew member, by color. Crew and traitors look alike.
+pub const AGENT_CREW: [&str; 10] = [
+    "agent/crew_red",
+    "agent/crew_orange",
+    "agent/crew_yellow",
+    "agent/crew_green",
+    "agent/crew_cyan",
+    "agent/crew_blue",
+    "agent/crew_purple",
+    "agent/crew_pink",
+    "agent/crew_white",
+    "agent/crew_brown",
+];
+/// A dead crew member, which only the dead can see.
+pub const AGENT_CREW_GHOST: &str = "agent/crew_ghost";
 
 // --- action symbols ---
 

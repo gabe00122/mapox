@@ -14,7 +14,8 @@ use mapox_core::{
     env::Environment,
     envs::{
         find_return::FindReturnConfig, hide_seek::HideSeekConfig, maze::MazeConfig,
-        pacman::PacmanConfig, scouts::ScoutsConfig, survival::config::SurvivalConfig,
+        mutiny::MutinyConfig, pacman::PacmanConfig, scouts::ScoutsConfig,
+        survival::config::SurvivalConfig,
     },
     make::{EnvConfig, make},
     timestep::TimeStepBuffers,
@@ -82,6 +83,10 @@ fn all_envs() -> Vec<(&'static str, EnvConfig)> {
         (
             "hide_seek",
             EnvConfig::RustHideSeek(Box::<HideSeekConfig>::default()),
+        ),
+        (
+            "mutiny",
+            EnvConfig::RustMutiny(Box::<MutinyConfig>::default()),
         ),
     ]
 }

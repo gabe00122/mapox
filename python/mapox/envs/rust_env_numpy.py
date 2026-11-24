@@ -205,6 +205,53 @@ class RustHideSeekConfig(BaseModel):
     spotted_reward: float = -1.0
 
 
+class RustMutinyConfig(BaseModel):
+    """A social deduction game on a ship. Most of the crew are loyal and win
+    by finishing their chores, which are buttons to walk into; a few are
+    traitors, who look the same and win by killing the crew down to their own
+    number. Only traitors can walk on hiding tiles, which cover them in other
+    agents' views. Anyone can call a vote to kick a crew member, at the meeting
+    button or by finding a corpse. Colors and roles are dealt afresh each
+    game, and an agent's role shows only in its own UI band."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    env_type: Literal["rust_mutiny"] = "rust_mutiny"
+
+    # everyone aboard, traitors included; at most 10, one for each color
+    num_agents: int = 8
+    num_traitors: int = 2
+    # the ship each game is played on; "random" picks one per game
+    map: Literal["random", "frigate", "hauler", "station"] = "random"
+
+    view_width: int = 15
+    view_height: int = 15
+
+    # chores each crew member starts with, and the button presses each takes
+    chores_per_agent: int = 3
+    presses_per_chore: int = 4
+
+    # how far a traitor's attack reaches, diagonals included, and the steps
+    # from one attack to its next
+    attack_radius: int = 1
+    attack_cooldown: int = 30
+
+    # votes each crew member may call with the meeting button, and the steps
+    # the button stays off after a game starts or a vote ends
+    meetings_per_agent: int = 1
+    meeting_cooldown: int = 20
+    # steps a vote lasts unless everyone living votes sooner
+    vote_steps: int = 30
+    # steps a game lasts before the crew win it on time
+    game_steps: int = 400
+
+    # paid to a loyal crew member per chore press, and to a traitor per kill
+    chore_reward: float = 0.05
+    kill_reward: float = 0.25
+    # paid to everyone on the winning side of a game, and on the losing side
+    win_reward: float = 1.0
+    loss_reward: float = -1.0
+
+
 class RustVecConfig(BaseModel):
     """Vectorized copies of one rust env; the rust side steps them in parallel."""
 
@@ -244,6 +291,7 @@ type RustEnvConfig = (
     | RustSurvivalConfig
     | RustMazeConfig
     | RustHideSeekConfig
+    | RustMutinyConfig
     | RustVideoConfig
     | RustVecConfig
     | RustMultiConfig

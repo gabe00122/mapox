@@ -8,6 +8,7 @@ use crate::{
         find_return::{FindReturn, FindReturnConfig},
         hide_seek::{HideSeek, HideSeekConfig},
         maze::{Maze, MazeConfig},
+        mutiny::{Mutiny, MutinyConfig},
         pacman::{Pacman, PacmanConfig},
         scouts::{Scouts, ScoutsConfig},
         survival::{Survival, config::SurvivalConfig},
@@ -25,6 +26,7 @@ pub enum EnvConfig {
     RustSurvival(Box<SurvivalConfig>),
     RustMaze(Box<MazeConfig>),
     RustHideSeek(Box<HideSeekConfig>),
+    RustMutiny(Box<MutinyConfig>),
     #[cfg(not(target_arch = "wasm32"))]
     RustVideo(Box<VideoConfig>),
     RustVec {
@@ -51,6 +53,7 @@ pub fn make(config: &EnvConfig, length: usize) -> MapoxResult<Box<dyn Environmen
         EnvConfig::RustSurvival(config) => Ok(Box::new(Survival::new(config, length))),
         EnvConfig::RustMaze(config) => Ok(Box::new(Maze::new(config, length))),
         EnvConfig::RustHideSeek(config) => Ok(Box::new(HideSeek::new(config, length))),
+        EnvConfig::RustMutiny(config) => Ok(Box::new(Mutiny::new(config, length))),
         #[cfg(not(target_arch = "wasm32"))]
         EnvConfig::RustVideo(config) => Ok(Box::new(VideoWrapper::new(config, length)?)),
         EnvConfig::RustVec { num, env } => Ok(Box::new(VectorWrapper::new(*num, env, length)?)),
@@ -61,6 +64,7 @@ pub fn make(config: &EnvConfig, length: usize) -> MapoxResult<Box<dyn Environmen
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::envs::mutiny::MutinyMap;
     use crate::error::MapoxError;
     use crate::timestep::TimeStepBuffers;
 
@@ -122,6 +126,28 @@ mod tests {
 
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();
         assert_eq!(parsed, EnvConfig::RustHideSeek(Box::default()));
+    }
+
+    /// And for mutiny, which names its ship rather than sizing a map.
+    #[test]
+    fn a_mutiny_config_dump_parses() {
+        let json = r#"{"env_type":"rust_mutiny","num_agents":8,"num_traitors":2,
+            "map":"random","view_width":15,"view_height":15,"chores_per_agent":3,
+            "presses_per_chore":4,"attack_radius":1,"attack_cooldown":30,
+            "meetings_per_agent":1,"meeting_cooldown":20,"vote_steps":30,
+            "game_steps":400,"chore_reward":0.05,"kill_reward":0.25,
+            "win_reward":1.0,"loss_reward":-1.0}"#;
+
+        let parsed: EnvConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed, EnvConfig::RustMutiny(Box::default()));
+
+        // a ship is named in snake case
+        let named: EnvConfig = serde_json::from_str(&json.replace("random", "hauler")).unwrap();
+        let hauler = MutinyConfig {
+            map: MutinyMap::Hauler,
+            ..Default::default()
+        };
+        assert_eq!(named, EnvConfig::RustMutiny(Box::new(hauler)));
     }
 
     /// And for survival, whose map is generated from its terrain fractions.

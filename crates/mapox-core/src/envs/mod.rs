@@ -2,6 +2,7 @@ pub mod common;
 pub mod find_return;
 pub mod hide_seek;
 pub mod maze;
+pub mod mutiny;
 pub mod pacman;
 pub mod scouts;
 pub mod survival;
@@ -14,6 +15,7 @@ mod tests {
             find_return::{FindReturn, FindReturnConfig},
             hide_seek::{HideSeek, HideSeekConfig},
             maze::{Maze, MazeConfig},
+            mutiny::{Mutiny, MutinyConfig},
             pacman::{Pacman, PacmanConfig},
             scouts::{Scouts, ScoutsConfig},
             survival::{Survival, config::SurvivalConfig},
@@ -108,6 +110,24 @@ mod tests {
             (
                 "survival",
                 Box::new(|| Box::new(Survival::new(&SurvivalConfig::default(), LENGTH))),
+            ),
+            // quick to kill and quick to vote, so a new game is dealt and a
+            // vote held inside the episode
+            (
+                "mutiny",
+                Box::new(|| {
+                    Box::new(Mutiny::new(
+                        &MutinyConfig {
+                            num_agents: 10,
+                            attack_cooldown: 2,
+                            meeting_cooldown: 2,
+                            vote_steps: 6,
+                            game_steps: 40,
+                            ..Default::default()
+                        },
+                        LENGTH,
+                    ))
+                }),
             ),
         ];
 

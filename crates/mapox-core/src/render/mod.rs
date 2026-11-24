@@ -17,7 +17,8 @@ use crate::{symbols, vocab::Vocabulary};
 
 /// Symbol -> (col, row) on the sheet `scripts/make_tileset.py` draws. Row 0
 /// is terrain, row 1 items and characters, rows 2 and 3 the soldiers, row 4
-/// the UI digits and stat labels, row 5 pac-man, and rows 6 and 7 survival.
+/// the UI digits and stat labels, row 5 pac-man, rows 6 and 7 survival, and
+/// rows 8 to 11 mutiny.
 const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::TILE_UI, 0, 0),
     (symbols::TILE_MASK, 1, 0),
@@ -96,6 +97,55 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::ITEM_STONE_PICKAXE, 10, 7),
     (symbols::TILE_IRON_ORE, 11, 7),
     (symbols::ITEM_IRON_ORE, 11, 1),
+    // Mutiny: a row of the crew by color, then their corpses, then their
+    // vote buttons, with the fittings in the columns left over.
+    (symbols::AGENT_CREW[0], 0, 8),
+    (symbols::AGENT_CREW[1], 1, 8),
+    (symbols::AGENT_CREW[2], 2, 8),
+    (symbols::AGENT_CREW[3], 3, 8),
+    (symbols::AGENT_CREW[4], 4, 8),
+    (symbols::AGENT_CREW[5], 5, 8),
+    (symbols::AGENT_CREW[6], 6, 8),
+    (symbols::AGENT_CREW[7], 7, 8),
+    (symbols::AGENT_CREW[8], 8, 8),
+    (symbols::AGENT_CREW[9], 9, 8),
+    (symbols::AGENT_CREW_GHOST, 10, 8),
+    (symbols::TILE_HIDING_SPOT, 11, 8),
+    (symbols::TILE_CORPSES[0], 0, 9),
+    (symbols::TILE_CORPSES[1], 1, 9),
+    (symbols::TILE_CORPSES[2], 2, 9),
+    (symbols::TILE_CORPSES[3], 3, 9),
+    (symbols::TILE_CORPSES[4], 4, 9),
+    (symbols::TILE_CORPSES[5], 5, 9),
+    (symbols::TILE_CORPSES[6], 6, 9),
+    (symbols::TILE_CORPSES[7], 7, 9),
+    (symbols::TILE_CORPSES[8], 8, 9),
+    (symbols::TILE_CORPSES[9], 9, 9),
+    (symbols::TILE_HIDING_SPOT_OCCUPIED, 10, 9),
+    (symbols::TILE_SKIP_BUTTON, 11, 9),
+    (symbols::TILE_VOTE_BUTTONS[0], 0, 10),
+    (symbols::TILE_VOTE_BUTTONS[1], 1, 10),
+    (symbols::TILE_VOTE_BUTTONS[2], 2, 10),
+    (symbols::TILE_VOTE_BUTTONS[3], 3, 10),
+    (symbols::TILE_VOTE_BUTTONS[4], 4, 10),
+    (symbols::TILE_VOTE_BUTTONS[5], 5, 10),
+    (symbols::TILE_VOTE_BUTTONS[6], 6, 10),
+    (symbols::TILE_VOTE_BUTTONS[7], 7, 10),
+    (symbols::TILE_VOTE_BUTTONS[8], 8, 10),
+    (symbols::TILE_VOTE_BUTTONS[9], 9, 10),
+    (symbols::TILE_MEETING_BUTTON, 10, 10),
+    (symbols::TILE_MEETING_BUTTON_OFF, 11, 10),
+    (symbols::TILE_CHORE_BUTTON, 0, 11),
+    (symbols::TILE_CHORE_BUTTON_LIT, 1, 11),
+    (symbols::TILE_CHORE_BUTTON_PRESSED, 2, 11),
+    (symbols::UI_ROLE_CREW, 3, 11),
+    (symbols::UI_ROLE_TRAITOR, 4, 11),
+    (symbols::UI_DEAD_CREW, 5, 11),
+    (symbols::UI_DEAD_TRAITORS, 6, 11),
+    (symbols::UI_CHORES, 7, 11),
+    (symbols::UI_ATTACK, 8, 11),
+    (symbols::UI_CLOCK, 9, 11),
+    (symbols::UI_VOTE, 10, 11),
 ];
 
 pub(crate) fn resolve_art(vocab: &Vocabulary) -> Vec<(u32, u32)> {
@@ -119,6 +169,7 @@ mod tests {
     use crate::envs::find_return::{FindReturn, FindReturnConfig};
     use crate::envs::hide_seek::{HideSeek, HideSeekConfig};
     use crate::envs::maze::{Maze, MazeConfig};
+    use crate::envs::mutiny::{Mutiny, MutinyConfig};
     use crate::envs::pacman::{Pacman, PacmanConfig};
     use crate::envs::scouts::{Scouts, ScoutsConfig};
     use crate::envs::survival::{Survival, config::SurvivalConfig};
@@ -137,6 +188,7 @@ mod tests {
             Box::new(Survival::new(&SurvivalConfig::default(), 512)),
             Box::new(Maze::new(&MazeConfig::default(), 512)),
             Box::new(HideSeek::new(&HideSeekConfig::default(), 512)),
+            Box::new(Mutiny::new(&MutinyConfig::default(), 512)),
         ]
     }
 

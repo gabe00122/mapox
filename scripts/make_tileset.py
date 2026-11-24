@@ -1274,6 +1274,415 @@ STONE_PALETTE = {"O": OUTLINE, "L": STONE_LIGHT, "s": STONE, "S": STONE_DARK}
 # --- sheet -----------------------------------------------------------------
 
 
+# --- mutiny ----------------------------------------------------------------
+
+# The crew's colors, in the order of the CREW_COLORS symbols they draw.
+CREW_COLORS = [
+    "e5383f",  # red
+    "f08a24",  # orange
+    "f2d13c",  # yellow
+    "3fae4a",  # green
+    "3fd6e8",  # cyan
+    "3a78ff",  # blue
+    "9d4edd",  # purple
+    "ff8ccf",  # pink
+    "e8ecf4",  # white
+    "8a5a32",  # brown
+]
+
+WHITE = hex_color("ffffff")
+GHOSTLY = hex_color("9fb4d8")
+
+
+def rotate(art: list[str]) -> list[str]:
+    """`art` turned a quarter turn clockwise: what stood up lies on its side."""
+    return ["".join(art[TILE - 1 - x][y] for x in range(TILE)) for y in range(TILE)]
+
+
+def crew_palette(color: Color) -> dict[str, Color]:
+    return {
+        "O": OUTLINE,
+        "W": color,
+        "w": scale(color, 0.7),
+        "h": mix(color, WHITE, 0.5),
+        "E": EYE,
+    }
+
+
+def crew(color: Color) -> Sprite:
+    """The blank agent token in a crew member's color, which is all that
+    tells one from another."""
+    return stamp(floor(), AGENT, crew_palette(color))
+
+
+def corpse(color: Color) -> Sprite:
+    """A crew member on its side, its color gone dull."""
+    return stamp(floor(), rotate(AGENT), crew_palette(mix(color, FLOOR, 0.4)))
+
+
+def crew_ghost() -> Sprite:
+    """A dead crew member as the dead see it: pale, with no outline, most of
+    the way to the floor it floats over."""
+    faint = mix(GHOSTLY, FLOOR, 0.35)
+    return stamp(
+        floor(),
+        AGENT,
+        {
+            "O": mix(GHOSTLY, FLOOR, 0.75),
+            "W": faint,
+            "w": mix(GHOSTLY, FLOOR, 0.5),
+            "h": GHOSTLY,
+            "E": FLOOR,
+        },
+    )
+
+
+# A console with one big button. `R` is the ring round the button and `B` the
+# button itself, which is all that changes between idle, lit and pressed.
+CHORE_BUTTON = check(
+    [
+        "............",
+        "..OOOOOOOO..",
+        ".OLSSSSSSsO.",
+        ".OSRRRRRRsO.",
+        ".OSRhBBBRsO.",
+        ".OSRBBBBRsO.",
+        ".OSRBBBbRsO.",
+        ".OSRBbbbRsO.",
+        ".OSRRRRRRsO.",
+        ".OSsssssssO.",
+        "..OOOOOOOO..",
+        "............",
+    ],
+    "chore button",
+)
+
+
+def chore_button(button: Color, ring: Color) -> Sprite:
+    return stamp(
+        floor(),
+        CHORE_BUTTON,
+        {
+            "O": OUTLINE,
+            "L": IRON_LIGHT,
+            "S": IRON,
+            "s": STONE_DARK,
+            "R": ring,
+            "B": button,
+            "b": scale(button, 0.7),
+            "h": mix(button, WHITE, 0.5),
+        },
+    )
+
+
+# The meeting button: a red dome on a hazard-striped plinth.
+MEETING_BUTTON = check(
+    [
+        "............",
+        "..OOOOOOOO..",
+        ".OYKYKYKYKO.",
+        ".OKOOOOOOYO.",
+        ".OYOhRRROKO.",
+        ".OKORRRROYO.",
+        ".OYORRRrOKO.",
+        ".OKORrrrOYO.",
+        ".OYOOOOOOKO.",
+        ".OKYKYKYKYO.",
+        "..OOOOOOOO..",
+        "............",
+    ],
+    "meeting button",
+)
+
+
+def meeting_button(live: bool) -> Sprite:
+    """Bright when the viewer can call a vote with it, dull when not."""
+    dim = 1.0 if live else 0.4
+    return stamp(
+        floor(),
+        MEETING_BUTTON,
+        {
+            "O": OUTLINE,
+            "Y": scale(GOLD, dim),
+            "K": CHAR,
+            "R": scale(HEART, dim),
+            "r": scale(HEART_DARK, dim),
+            "h": scale(HEART_LIGHT, dim),
+        },
+    )
+
+
+# A locker with a slatted door, for a traitor to hide in. `V` is the slat at
+# eye height.
+LOCKER = check(
+    [
+        "............",
+        "..OOOOOOOO..",
+        "..OLSSSSsO..",
+        "..OSOOOOsO..",
+        "..OSSSSSsO..",
+        "..OSVOOVsO..",
+        "..OSSSSSsO..",
+        "..OSOOOOsO..",
+        "..OSSSSSsO..",
+        "..OSSSSLsO..",
+        "..OSSSSSsO..",
+        "..OOOOOOOO..",
+    ],
+    "locker",
+)
+
+
+def locker(occupied: bool) -> Sprite:
+    """An occupied locker has eyes at the slats."""
+    return stamp(
+        floor(),
+        LOCKER,
+        {
+            "O": OUTLINE,
+            "L": IRON_LIGHT,
+            "S": IRON,
+            "s": STONE_DARK,
+            "V": GOLD_LIGHT if occupied else OUTLINE,
+        },
+    )
+
+
+# A key on the vote room's board, in the color of the crew member it votes
+# to kick.
+VOTE_KEY = check(
+    [
+        "............",
+        ".OOOOOOOOOO.",
+        ".OhhCCCCCCO.",
+        ".OhCCCCCCCO.",
+        ".OCCCCCCCCO.",
+        ".OCCCCCCCCO.",
+        ".OCCCCCCCcO.",
+        ".OCCCCCCccO.",
+        ".OCcccccccO.",
+        ".OOOOOOOOOO.",
+        "............",
+        "............",
+    ],
+    "vote key",
+)
+
+# The same key in grey, marked with chevrons: skip.
+SKIP_KEY = check(
+    [
+        "............",
+        ".OOOOOOOOOO.",
+        ".OCCCCCCCCO.",
+        ".OCWCCWCCCO.",
+        ".OCCWCCWCCO.",
+        ".OCCCWCCWCO.",
+        ".OCCWCCWCCO.",
+        ".OCWCCWCCcO.",
+        ".OCCCCCCccO.",
+        ".OOOOOOOOOO.",
+        "............",
+        "............",
+    ],
+    "skip key",
+)
+
+
+def vote_key(art: list[str], color: Color) -> Sprite:
+    return stamp(
+        blank(UI),
+        art,
+        {
+            "O": UI_DIGIT_SHADOW,
+            "C": color,
+            "c": scale(color, 0.7),
+            "h": mix(color, WHITE, 0.5),
+            "W": UI_DIGIT,
+        },
+    )
+
+
+# Band labels. A shield is a role: green and ticked for the loyal, red and
+# scowling for a traitor.
+ROLE_CREW = check(
+    [
+        "............",
+        "..OOOOOOOO..",
+        ".OCCCCCCCCO.",
+        ".OCCCCCCWCO.",
+        ".OCCCCCWWCO.",
+        ".OCWCCWWCCO.",
+        ".OCWWWWCCCO.",
+        "..OCWWCCCO..",
+        "..OCCCCCCO..",
+        "...OCCCCO...",
+        "....OOOO....",
+        "............",
+    ],
+    "role crew",
+)
+
+ROLE_TRAITOR = check(
+    [
+        "............",
+        "..OOOOOOOO..",
+        ".OCCCCCCCCO.",
+        ".OWWCCCCWWO.",
+        ".OCWWCCWWCO.",
+        ".OCCWCCWCCO.",
+        ".OCCCCCCCCO.",
+        "..OCCCCCCO..",
+        "..OCCCCCCO..",
+        "...OCCCCO...",
+        "....OOOO....",
+        "............",
+    ],
+    "role traitor",
+)
+
+# In front of a count of the dead: bone for the loyal, red for traitors.
+SKULL = check(
+    [
+        "............",
+        "...OOOOOO...",
+        "..OCCCCCCO..",
+        ".OCCCCCCCCO.",
+        ".OCOOCCOOCO.",
+        ".OCOOCCOOCO.",
+        ".OCCCOOCCCO.",
+        "..OCCCCCCO..",
+        "..OCOCCOCO..",
+        "..OCOCCOCO..",
+        "...OOOOOO...",
+        "............",
+    ],
+    "skull",
+)
+
+# A lit button, in front of the presses the crew still owe.
+CHORES_ICON = check(
+    [
+        "............",
+        "............",
+        "..OOOOOOOO..",
+        "..OhCCCCCO..",
+        "..OCCCCCCO..",
+        "..OCCCCCCO..",
+        "..OCCCCCcO..",
+        "..OCCCCccO..",
+        "..OccccccO..",
+        "..OOOOOOOO..",
+        "............",
+        "............",
+    ],
+    "chores icon",
+)
+
+# A burst, in front of a traitor's attack cooldown.
+ATTACK_ICON = check(
+    [
+        "............",
+        ".....OO.....",
+        ".O..OCCO..O.",
+        ".OOOOCCOOOO.",
+        "..OCCCCCCO..",
+        ".OOCCWWCCOO.",
+        ".OOCCWWCCOO.",
+        "..OCCCCCCO..",
+        ".OOOOCCOOOO.",
+        ".O..OCCO..O.",
+        ".....OO.....",
+        "............",
+    ],
+    "attack icon",
+)
+
+CLOCK_ICON = check(
+    [
+        "............",
+        "...OOOOOO...",
+        "..OWWWWWWO..",
+        ".OWWWOWWWWO.",
+        ".OWWWOWWWWO.",
+        ".OWWWOWWWWO.",
+        ".OWWWOOOWWO.",
+        ".OWWWWWWWWO.",
+        ".OWWWWWWWWO.",
+        "..OWWWWWWO..",
+        "...OOOOOO...",
+        "............",
+    ],
+    "clock icon",
+)
+
+# A ballot going into a box, in front of the steps a vote has left.
+VOTE_ICON = check(
+    [
+        "............",
+        "....OOOO....",
+        "....OWWO....",
+        "....OWWO....",
+        ".OOOOWWOOOO.",
+        ".OCCOOOOCCO.",
+        ".OCCCCCCCCO.",
+        ".OCCCCCCCCO.",
+        ".OCCCCCCCCO.",
+        ".OCCCCCCccO.",
+        ".OOOOOOOOOO.",
+        "............",
+    ],
+    "vote icon",
+)
+
+
+def label(art: list[str], color: Color = UI_DIGIT) -> Sprite:
+    return stamp(
+        blank(UI),
+        art,
+        {
+            "O": UI_DIGIT_SHADOW,
+            "C": color,
+            "c": scale(color, 0.7),
+            "h": mix(color, WHITE, 0.5),
+            "W": UI_DIGIT,
+        },
+    )
+
+
+CHORE_IDLE = hex_color("4b5568")
+CHORE_PRESSED = hex_color("6fd26a")
+
+
+def mutiny_rows() -> list[list[Sprite]]:
+    colors = [hex_color(color) for color in CREW_COLORS]
+    return [
+        [*(crew(color) for color in colors), crew_ghost(), locker(occupied=False)],
+        [
+            *(corpse(color) for color in colors),
+            locker(occupied=True),
+            vote_key(SKIP_KEY, STONE),
+        ],
+        [
+            *(vote_key(VOTE_KEY, color) for color in colors),
+            meeting_button(live=True),
+            meeting_button(live=False),
+        ],
+        [
+            chore_button(CHORE_IDLE, OUTLINE),
+            chore_button(GOLD, GOLD_DARK),
+            chore_button(CHORE_PRESSED, LEAF_DARK),
+            label(ROLE_CREW, GRASS),
+            label(ROLE_TRAITOR, HEART),
+            label(SKULL, BONE),
+            label(SKULL, HEART),
+            label(CHORES_ICON, GOLD),
+            label(ATTACK_ICON, HEART),
+            label(CLOCK_ICON),
+            label(VOTE_ICON, TEAM_BLUE),
+        ],
+    ]
+
+
 def build_sheet() -> list[list[Sprite]]:
     terrain = [
         ui(),
@@ -1448,6 +1857,7 @@ def build_sheet() -> list[list[Sprite]]:
         pacman_row,
         survival_row,
         plants_row,
+        *mutiny_rows(),
     ]
 
 

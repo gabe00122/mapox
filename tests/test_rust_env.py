@@ -8,6 +8,7 @@ from mapox.envs.rust_env_numpy import (
     RustFindReturnConfig,
     RustHideSeekConfig,
     RustMazeConfig,
+    RustMutinyConfig,
     RustPacmanConfig,
     RustScoutsConfig,
 )
@@ -18,6 +19,7 @@ CONFIGS = {
     "pacman": RustPacmanConfig(),
     "maze": RustMazeConfig(num_agents=2, width=11, height=11),
     "hide_seek": RustHideSeekConfig(num_hiders=1, num_seekers=1, width=12, height=12),
+    "mutiny": RustMutinyConfig(num_agents=4, num_traitors=1),
 }
 
 
