@@ -168,6 +168,11 @@ fn a_game_deals_everyone_a_color_a_role_and_chores() {
         );
         assert_eq!(env.state.by_color[usize::from(member.color)], Some(id));
 
+        if member.role == Role::Traitor {
+            assert!(member.chores.is_empty());
+            assert_eq!(member.lit, None, "a traitor is shown no button to press");
+            continue;
+        }
         // three chores of four presses each, in three different rooms
         let rooms: HashSet<usize> = member.chores.iter().map(|chore| chore.room).collect();
         assert_eq!((member.chores.len(), rooms.len()), (3, 3));
@@ -330,20 +335,36 @@ fn an_unlit_button_does_nothing() {
     assert_eq!(seen(&env, &buffers, worker, other), ChoreButton);
 }
 
-/// A traitor's chores look like anyone's and count for nothing, and it is
-/// dealt more when they run out.
+/// A traitor has no chores, but any chore button it walks into shows as
+/// pressed to everyone for a step, the same one twice running included, and
+/// counts for nothing.
 #[test]
-fn a_traitors_chores_are_for_show() {
+fn a_traitors_presses_are_for_show() {
     let (mut env, mut buffers) = start(frigate());
-    let traitor = sides(&env).0[0];
+    let (traitors, crew) = sides(&env);
+    let (traitor, watcher) = (traitors[0], crew[0]);
+    env.state.members[watcher].lit = None;
 
-    for _ in 0..30 {
-        let button = press_lit(&mut env, &mut buffers, traitor);
-        assert_eq!(seen(&env, &buffers, traitor, button), ChoreButtonPressed);
-        assert_eq!(buffers.reward[traitor], 0.0);
-        assert_eq!(env.state.chores_left, 72);
+    let rooms = env.state.rooms[..env.state.num_rooms].to_vec();
+    for button in rooms.into_iter().flatten() {
+        let from = beside(&env, button);
+        place(&mut env, traitor, from);
+        let nearby = beside(&env, from);
+        place(&mut env, watcher, nearby);
+
+        for _ in 0..2 {
+            step(&mut env, &mut buffers, &[(traitor, toward(from, button))]);
+            assert_eq!(env.state.members[traitor].position, from);
+            assert_eq!(seen(&env, &buffers, traitor, button), ChoreButtonPressed);
+            assert_eq!(seen(&env, &buffers, watcher, button), ChoreButtonPressed);
+            assert_eq!(buffers.reward[traitor], 0.0);
+            assert_eq!(env.state.chores_left, 72);
+            assert_eq!(env.state.members[traitor].lit, None);
+        }
+
+        step(&mut env, &mut buffers, &[]);
+        assert_eq!(seen(&env, &buffers, watcher, button), ChoreButton);
     }
-    assert!(env.state.members[traitor].lit.is_some());
 }
 
 /// An attack takes no aim: it kills the loyal crew on every side of the

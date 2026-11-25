@@ -9,13 +9,14 @@
 //!
 //! Agents interact with fittings by walking into them:
 //!
-//! - **Chores.** Every crew member has a queue of chores, each a room and a
-//!   number of button presses. The button its chore wants next shows lit, to
-//!   it alone; pressing it lights another button in the same room, and so on
-//!   until the chore is done and the next one starts in another room. A
-//!   pressed button shows as pressed to everyone for a step. Traitors are
-//!   dealt chores too, and theirs light and flash the same, but count for
-//!   nothing and never run out.
+//! - **Chores.** Every loyal crew member has a queue of chores, each a room
+//!   and a number of button presses. The button its chore wants next shows
+//!   lit, to it alone; pressing it lights another button in the same room,
+//!   and so on until the chore is done and the next one starts in another
+//!   room. A pressed button shows as pressed to everyone for a step. Traitors
+//!   have no chores and are shown no lit button, but any chore button a
+//!   traitor walks into shows as pressed all the same, and counts for
+//!   nothing: looking busy is theirs to work out.
 //! - **The meeting button** calls a vote. A crew member can call only so
 //!   many a game, and no one can for a while after a game starts or a vote
 //!   ends; the button shows off to whoever cannot use it.
@@ -682,18 +683,18 @@ impl Mutiny {
         // runs out of rooms and the list goes round again
         let mut rooms: Vec<usize> = (0..state.num_rooms).collect();
         state.chores_left = 0;
-        for id in 0..num_agents {
+        for member in &mut state.members {
+            if member.role != Role::Crew {
+                continue;
+            }
             rooms.shuffle(&mut state.rng);
-            let member = &mut state.members[id];
             for chore in 0..self.config.chores_per_agent as usize {
                 member.chores.push_back(Chore {
                     room: rooms[chore % rooms.len()],
                     presses_left: self.config.presses_per_chore,
                 });
             }
-            if member.role == Role::Crew {
-                state.chores_left += self.config.chores_per_agent * self.config.presses_per_chore;
-            }
+            state.chores_left += self.config.chores_per_agent * self.config.presses_per_chore;
         }
 
         state.game_time = 0;
@@ -807,14 +808,6 @@ impl Mutiny {
     fn light_next(&mut self, id: usize) {
         let state = &mut self.state;
         let member = &mut state.members[id];
-        // a traitor never runs out of chores to be seen doing
-        if member.chores.is_empty() && member.role == Role::Traitor && member.alive() {
-            member.chores.push_back(Chore {
-                room: state.rng.random_range(0..state.num_rooms),
-                presses_left: self.config.presses_per_chore,
-            });
-        }
-
         member.lit = member.chores.front().map(|chore| {
             let pressed = member.pressed;
             let mut buttons = state.rooms[chore.room]
@@ -878,10 +871,6 @@ impl Mutiny {
     fn hand_on_chores(&mut self, id: usize) {
         let chores = std::mem::take(&mut self.state.members[id].chores);
         self.state.members[id].lit = None;
-        if self.state.members[id].role != Role::Crew {
-            return;
-        }
-
         for chore in chores {
             let heir = self
                 .state
@@ -946,15 +935,17 @@ impl Mutiny {
                 member.chores.pop_front();
             }
             member.pressed = Some(target);
-            if member.role == Role::Crew {
-                state.chores_left -= 1;
-                timestep.reward[id] += self.config.chore_reward;
-                self.metrics.crew_reward += f64::from(self.config.chore_reward);
-                self.metrics.presses += 1.0;
-            }
+            state.chores_left -= 1;
+            timestep.reward[id] += self.config.chore_reward;
+            self.metrics.crew_reward += f64::from(self.config.chore_reward);
+            self.metrics.presses += 1.0;
             state.map[target.idx()] = MutinyObs::ChoreButtonPressed;
             state.pressed.push(target);
             self.light_next(id);
+        } else if tile == MutinyObs::ChoreButton && member.role == Role::Traitor {
+            // a traitor's press is only for show
+            state.map[target.idx()] = MutinyObs::ChoreButtonPressed;
+            state.pressed.push(target);
         } else if tile == MutinyObs::MeetingButton {
             if self.can_call(id) {
                 self.state.members[id].meetings_left -= 1;
