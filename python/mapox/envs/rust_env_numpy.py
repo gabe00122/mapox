@@ -241,12 +241,14 @@ class RustMutinyConfig(BaseModel):
     meeting_cooldown: int = 20
     # steps a vote lasts unless everyone living votes sooner
     vote_steps: int = 30
-    # steps a game lasts before the crew win it on time
-    game_steps: int = 400
 
     # paid to a loyal crew member per chore press, and to a traitor per kill
     chore_reward: float = 0.05
     kill_reward: float = 0.25
+    # paid to every loyal crew member when a vote kicks a traitor, and to
+    # every traitor when a vote kicks a loyal crew member
+    traitor_kicked_reward: float = 0.25
+    crew_kicked_reward: float = 0.25
     # paid to everyone on the winning side of a game, and on the losing side
     win_reward: float = 1.0
     loss_reward: float = -1.0

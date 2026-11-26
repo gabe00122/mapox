@@ -38,21 +38,23 @@
 //! shown at once in the count beside the button; there is a skip button too.
 //! The vote ends when everyone living has voted or its time runs out.
 //! Whoever has the most votes is kicked, unless that is a tie or no more
-//! than the skips, and becomes a ghost without a corpse. Then everyone goes
-//! back to where they started the game, the corpses are cleared away, and
-//! the attack and meeting cooldowns start over.
+//! than the skips, and becomes a ghost without a corpse; kicking a traitor
+//! pays the crew, and kicking a loyal crew member pays the traitors. Then
+//! everyone goes back to where they started the game, the corpses are
+//! cleared away, and the attack and meeting cooldowns start over.
 //!
-//! The crew win when the chores are done, when no traitor is left, or when
-//! the game runs out of time; the traitors win when they are as many as the
-//! loyal crew still alive. A win pays everyone on that side, dead or alive,
-//! everyone is flagged terminated, and the next game starts at once; the
-//! episode itself runs until `length`, like every env here.
+//! The crew win when the chores are done or when no traitor is left; the
+//! traitors win when they are as many as the loyal crew still alive. A game
+//! has no clock of its own, so waiting wins it for no one. A win pays
+//! everyone on that side, dead or alive, everyone is flagged terminated, and
+//! the next game starts at once; the episode itself runs until `length`, like
+//! every env here, and a game it cuts short pays no one.
 //!
 //! The UI band's top row is the agent's role, then for a traitor its fellow
 //! traitors as they look (as corpses once dead), and at the right the count
 //! of loyal crew dead and of traitors dead. The row beneath is the button
 //! presses the crew still owe, a traitor's attack cooldown, and at the
-//! right the steps the game has left, or the vote while one is on.
+//! right, while a vote is on, the steps it has left.
 
 mod maps;
 
@@ -80,8 +82,8 @@ use crate::{
         PRIMARY_ACTION, TILE_CHORE_BUTTON, TILE_CHORE_BUTTON_LIT, TILE_CHORE_BUTTON_PRESSED,
         TILE_CORPSES, TILE_EMPTY, TILE_HIDING_SPOT, TILE_HIDING_SPOT_OCCUPIED, TILE_MASK,
         TILE_MEETING_BUTTON, TILE_MEETING_BUTTON_OFF, TILE_SKIP_BUTTON, TILE_UI, TILE_VOTE_BUTTONS,
-        TILE_WALL, UI_ATTACK, UI_CHORES, UI_CLOCK, UI_DEAD_CREW, UI_DEAD_TRAITORS, UI_DIGITS,
-        UI_ROLE_CREW, UI_ROLE_TRAITOR, UI_VOTE,
+        TILE_WALL, UI_ATTACK, UI_CHORES, UI_DEAD_CREW, UI_DEAD_TRAITORS, UI_DIGITS, UI_ROLE_CREW,
+        UI_ROLE_TRAITOR, UI_VOTE,
     },
     timestep::TimeStepMut,
     vocab::{VocabId, Vocabulary},
@@ -121,13 +123,17 @@ pub struct MutinyConfig {
     pub meeting_cooldown: u32,
     /// Steps a vote lasts, unless everyone living votes sooner.
     pub vote_steps: u32,
-    /// Steps a game lasts before the crew win it on time.
-    pub game_steps: u32,
 
     /// Paid to a loyal crew member for each press of its lit button.
     pub chore_reward: f32,
     /// Paid to a traitor for each crew member its attack kills.
     pub kill_reward: f32,
+    /// Paid to every loyal crew member, dead or alive, when a vote kicks a
+    /// traitor.
+    pub traitor_kicked_reward: f32,
+    /// Paid to every traitor, dead or alive, when a vote kicks a loyal crew
+    /// member.
+    pub crew_kicked_reward: f32,
     /// Paid to everyone on the side that wins a game, and
     /// [`loss_reward`](Self::loss_reward) to everyone on the other.
     pub win_reward: f32,
@@ -149,9 +155,10 @@ impl Default for MutinyConfig {
             meetings_per_agent: 1,
             meeting_cooldown: 20,
             vote_steps: 30,
-            game_steps: 400,
             chore_reward: 0.05,
             kill_reward: 0.25,
+            traitor_kicked_reward: 0.25,
+            crew_kicked_reward: 0.25,
             win_reward: 1.0,
             loss_reward: -1.0,
         }
@@ -218,7 +225,6 @@ vocab_enum!(MutinyObs {
     UiDeadTraitors => UI_DEAD_TRAITORS,
     UiChores => UI_CHORES,
     UiAttack => UI_ATTACK,
-    UiClock => UI_CLOCK,
     UiVote => UI_VOTE,
 });
 
@@ -500,7 +506,6 @@ struct MutinyMetrics {
     traitor_reward: f64,
     wins_by_chores: f64,
     wins_by_vote: f64,
-    wins_by_time: f64,
     traitor_wins: f64,
     game_steps: f64,
     presses: f64,
@@ -517,8 +522,6 @@ enum Ending {
     ChoresDone,
     /// No traitor is left.
     TraitorsGone,
-    /// The game ran out of time, which the crew win.
-    OutOfTime,
     /// The traitors are as many as the loyal crew alive.
     Overrun,
 }
@@ -526,8 +529,8 @@ enum Ending {
 impl Ending {
     fn winner(self) -> Role {
         match self {
+            Ending::ChoresDone | Ending::TraitorsGone => Role::Crew,
             Ending::Overrun => Role::Traitor,
-            _ => Role::Crew,
         }
     }
 }
@@ -582,7 +585,7 @@ impl Mutiny {
             "a crew member needs a chore to do"
         );
         // the band's rows: role, fellow traitors, then the two death counts;
-        // and chores, attack cooldown, then the clock
+        // and chores, attack cooldown, then a vote's steps left
         let band = (6 + config.num_traitors as i32).max(12);
         assert!(
             config.view_width >= band,
@@ -1088,7 +1091,7 @@ impl Mutiny {
     }
 
     /// One step of a vote.
-    fn step_vote(&mut self, actions: &[VocabId], steps_left: u32) {
+    fn step_vote(&mut self, actions: &[VocabId], steps_left: u32, timestep: &mut TimeStepMut) {
         // the living stand wherever they like in here, so they come off the
         // map while they move and go back on where they end up
         self.erase_members();
@@ -1113,15 +1116,15 @@ impl Mutiny {
             .iter()
             .all(|member| !member.alive() || member.ballot.is_some());
         if steps_left == 0 || everyone_voted {
-            self.end_vote();
+            self.end_vote(timestep);
         } else {
             self.state.phase = Phase::Vote { steps_left };
         }
     }
 
-    /// Counts the vote, kicks whoever lost it, and sends everyone back to
-    /// where they started the game.
-    fn end_vote(&mut self) {
+    /// Counts the vote, kicks whoever lost it and pays the other side for
+    /// it, and sends everyone back to where they started the game.
+    fn end_vote(&mut self, timestep: &mut TimeStepMut) {
         let num_agents = self.config.num_agents;
         let votes: Vec<u32> = (0..num_agents)
             .map(|id| self.votes_for(Ballot::Kick(id)))
@@ -1133,8 +1136,14 @@ impl Mutiny {
         if leaders == 1 && most > self.votes_for(Ballot::Skip) {
             let kicked = votes.iter().position(|&count| count == most).unwrap();
             match self.state.members[kicked].role {
-                Role::Crew => self.metrics.kicked_crew += 1.0,
-                Role::Traitor => self.metrics.kicked_traitors += 1.0,
+                Role::Crew => {
+                    self.metrics.kicked_crew += 1.0;
+                    self.pay(Role::Traitor, self.config.crew_kicked_reward, timestep);
+                }
+                Role::Traitor => {
+                    self.metrics.kicked_traitors += 1.0;
+                    self.pay(Role::Crew, self.config.traitor_kicked_reward, timestep);
+                }
             }
             self.die(kicked);
         }
@@ -1168,35 +1177,39 @@ impl Mutiny {
             Some(Ending::Overrun)
         } else if self.state.chores_left == 0 {
             Some(Ending::ChoresDone)
-        } else if self.state.game_time >= self.config.game_steps {
-            Some(Ending::OutOfTime)
         } else {
             None
         }
     }
 
-    /// Pays both sides for a game that ended in `ending`.
-    fn pay_out(&mut self, ending: Ending, timestep: &mut TimeStepMut) {
-        let winner = ending.winner();
+    /// Pays `reward` to everyone on `role`'s side, dead or alive.
+    fn pay(&mut self, role: Role, reward: f32, timestep: &mut TimeStepMut) {
         for (id, member) in self.state.members.iter().enumerate() {
-            let reward = if member.role == winner {
-                self.config.win_reward
-            } else {
-                self.config.loss_reward
-            };
+            if member.role != role {
+                continue;
+            }
             timestep.reward[id] += reward;
-            match member.role {
+            match role {
                 Role::Crew => self.metrics.crew_reward += f64::from(reward),
                 Role::Traitor => self.metrics.traitor_reward += f64::from(reward),
             }
         }
+    }
+
+    /// Pays both sides for a game that ended in `ending`.
+    fn pay_out(&mut self, ending: Ending, timestep: &mut TimeStepMut) {
+        let (winner, loser) = match ending.winner() {
+            Role::Crew => (Role::Crew, Role::Traitor),
+            Role::Traitor => (Role::Traitor, Role::Crew),
+        };
+        self.pay(winner, self.config.win_reward, timestep);
+        self.pay(loser, self.config.loss_reward, timestep);
 
         self.metrics.games += 1.0;
         self.metrics.game_steps += f64::from(self.state.game_time);
         *match ending {
             Ending::ChoresDone => &mut self.metrics.wins_by_chores,
             Ending::TraitorsGone => &mut self.metrics.wins_by_vote,
-            Ending::OutOfTime => &mut self.metrics.wins_by_time,
             Ending::Overrun => &mut self.metrics.traitor_wins,
         } += 1.0;
     }
@@ -1313,19 +1326,14 @@ impl Mutiny {
                 &DIGIT_TILES,
             );
         }
-        let (label, steps_left) = match state.phase {
-            Phase::Play => (
-                MutinyObs::UiClock,
-                self.config.game_steps.saturating_sub(state.game_time),
-            ),
-            Phase::Vote { steps_left } => (MutinyObs::UiVote, steps_left),
-        };
-        band[[width - 4, bottom]] = label.into();
-        write_number(
-            band.slice_mut(s![width - 3.., bottom]),
-            steps_left,
-            &DIGIT_TILES,
-        );
+        if let Phase::Vote { steps_left } = state.phase {
+            band[[width - 4, bottom]] = MutinyObs::UiVote.into();
+            write_number(
+                band.slice_mut(s![width - 3.., bottom]),
+                steps_left,
+                &DIGIT_TILES,
+            );
+        }
     }
 
     fn encode_observations(&self, timestep: &mut TimeStepMut) {
@@ -1380,7 +1388,7 @@ impl Environment for Mutiny {
 
         match self.state.phase {
             Phase::Play => self.step_play(actions, timestep),
-            Phase::Vote { steps_left } => self.step_vote(actions, steps_left),
+            Phase::Vote { steps_left } => self.step_vote(actions, steps_left, timestep),
         }
         self.state.time += 1;
         self.state.game_time += 1;
@@ -1413,7 +1421,6 @@ impl Environment for Mutiny {
             "games": metrics.games,
             "wins_by_chores": metrics.wins_by_chores / games,
             "wins_by_vote": metrics.wins_by_vote / games,
-            "wins_by_time": metrics.wins_by_time / games,
             "traitor_wins": metrics.traitor_wins / games,
             "game_steps": metrics.game_steps / games,
             "chore_presses": metrics.presses / games,

@@ -96,7 +96,6 @@ UI_DEAD_CREW = "ui/dead_crew"
 UI_DEAD_TRAITORS = "ui/dead_traitors"
 UI_CHORES = "ui/chores"
 UI_ATTACK = "ui/attack"
-UI_CLOCK = "ui/clock"
 UI_VOTE = "ui/vote"
 
 # --- action symbols ---

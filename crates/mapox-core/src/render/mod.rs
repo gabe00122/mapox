@@ -144,8 +144,7 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::UI_DEAD_TRAITORS, 6, 11),
     (symbols::UI_CHORES, 7, 11),
     (symbols::UI_ATTACK, 8, 11),
-    (symbols::UI_CLOCK, 9, 11),
-    (symbols::UI_VOTE, 10, 11),
+    (symbols::UI_VOTE, 9, 11),
 ];
 
 pub(crate) fn resolve_art(vocab: &Vocabulary) -> Vec<(u32, u32)> {

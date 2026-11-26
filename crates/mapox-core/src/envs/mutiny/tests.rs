@@ -212,10 +212,9 @@ fn the_band_shows_a_crew_member_its_role_and_the_counts() {
     (top[12], top[14]) = (UiDeadTraitors, Digit0);
     assert_eq!(band(&env, &buffers, crew[0], 1), top);
 
-    // 72 presses owed, and 400 steps on the clock
+    // 72 presses owed, and nothing counting down outside a vote
     let mut bottom = vec![UI; 15];
     (bottom[0], bottom[2], bottom[3]) = (UiChores, Digit7, Digit2);
-    (bottom[11], bottom[12], bottom[13], bottom[14]) = (UiClock, Digit4, Digit0, Digit0);
     assert_eq!(band(&env, &buffers, crew[0], 0), bottom);
 }
 
@@ -864,6 +863,51 @@ fn the_most_voted_is_kicked() {
     assert!(!buffers.terminated[suspect], "one traitor is left");
 }
 
+/// A kick pays everyone on the side the kicked agent was not on, the dead
+/// among them, on the step the vote ends; its own side is paid nothing.
+#[test]
+fn a_kick_pays_the_other_side() {
+    for kick_traitor in [true, false] {
+        let (mut env, mut buffers) = start(MutinyConfig {
+            vote_steps: 4,
+            traitor_kicked_reward: 0.5,
+            crew_kicked_reward: 0.125,
+            ..frigate()
+        });
+        let (traitors, crew) = sides(&env);
+        let suspect = if kick_traitor { traitors[0] } else { crew[5] };
+        env.erase_members();
+        env.die(crew[4]);
+        env.start_vote();
+
+        for &voter in &crew[..3] {
+            cast(&mut env, &mut buffers, voter, Ballot::Kick(suspect));
+            assert!(buffers.reward.iter().all(|&reward| reward == 0.0));
+        }
+        cast(&mut env, &mut buffers, crew[3], Ballot::Skip);
+        assert_eq!(env.state.phase, Phase::Play);
+        assert_eq!(env.state.members[suspect].status, Status::Dead);
+
+        let (paid, reward) = if kick_traitor {
+            (&crew, 0.5)
+        } else {
+            (&traitors, 0.125)
+        };
+        for id in 0..env.num_agents() {
+            let expected = if paid.contains(&id) { reward } else { 0.0 };
+            assert_eq!(buffers.reward[id], expected, "agent {id}");
+        }
+        let metrics = env.consume_metrics();
+        let (crew_reward, traitor_reward) = if kick_traitor {
+            (0.5, 0.0)
+        } else {
+            (0.0, 0.125)
+        };
+        assert_eq!(metrics["crew_reward"], crew_reward);
+        assert_eq!(metrics["traitor_reward"], traitor_reward);
+    }
+}
+
 /// A tie kicks no one, and neither does a lead no bigger than the skips.
 #[test]
 fn a_tie_or_a_skip_kicks_no_one() {
@@ -989,7 +1033,11 @@ fn the_crew_win_by_kicking_every_traitor() {
     }
     cast(&mut env, &mut buffers, traitors[0], Ballot::Skip);
     assert!(buffers.terminated.iter().all(|&terminated| terminated));
-    assert_eq!(buffers.reward[crew[0]], 1.0);
+    // the kick pays the crew on top of the win
+    assert_eq!(
+        buffers.reward[crew[0]],
+        1.0 + env.config.traitor_kicked_reward
+    );
     assert_eq!(buffers.reward[traitors[0]], -1.0);
     assert_eq!(env.consume_metrics()["wins_by_vote"], 1.0);
 }
@@ -1021,30 +1069,20 @@ fn the_traitors_win_by_matching_the_crew() {
     assert_eq!(metrics["kills"], 2.0);
 }
 
-/// A game that runs out of time goes to the crew, so traitors cannot win by
-/// stalling.
+/// A game has no clock of its own: however long everyone waits, it goes on
+/// and no one is paid for it.
 #[test]
-fn the_crew_win_when_time_runs_out() {
-    let (mut env, mut buffers) = start(MutinyConfig {
-        game_steps: 5,
-        ..frigate()
-    });
-    let (traitors, crew) = sides(&env);
+fn waiting_wins_the_game_for_no_one() {
+    let (mut env, mut buffers) = start(frigate());
 
-    for _ in 0..4 {
+    for _ in 0..2000 {
         step(&mut env, &mut buffers, &[]);
         assert!(buffers.terminated.iter().all(|&terminated| !terminated));
+        assert!(buffers.reward.iter().all(|&reward| reward == 0.0));
     }
-    assert_eq!(
-        &band(&env, &buffers, 0, 0)[11..],
-        &[UiClock, UI, UI, Digit1]
-    );
-
-    step(&mut env, &mut buffers, &[]);
-    assert!(buffers.terminated.iter().all(|&terminated| terminated));
-    assert_eq!(buffers.reward[crew[0]], 1.0);
-    assert_eq!(buffers.reward[traitors[0]], -1.0);
-    assert_eq!(env.consume_metrics()["wins_by_time"], 1.0);
+    // nothing counts down in the band outside a vote
+    assert_eq!(&band(&env, &buffers, 0, 0)[11..], &[UI; 4]);
+    assert_eq!(env.consume_metrics()["games"], 0.0);
 }
 
 /// The episode ends at `length` whatever the game is doing, and pays no one
@@ -1194,7 +1232,6 @@ fn random_play_keeps_the_books_straight() {
             meeting_cooldown: 4,
             meetings_per_agent: 3,
             vote_steps: 12,
-            game_steps: 150,
             ..Default::default()
         };
         let mut env = Mutiny::new(&config, 1 << 20);
@@ -1255,7 +1292,7 @@ fn random_play_keeps_the_books_straight() {
         }
 
         let metrics = env.consume_metrics();
-        assert!(metrics["games"].as_f64().unwrap() >= 20.0, "{metrics}");
+        assert!(metrics["games"].as_f64().unwrap() >= 10.0, "{metrics}");
         assert!(metrics["kills"].as_f64().unwrap() > 0.0, "{metrics}");
         assert!(metrics["meetings"].as_f64().unwrap() > 0.0, "{metrics}");
         assert!(votes > 0);

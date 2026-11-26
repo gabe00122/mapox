@@ -1597,24 +1597,6 @@ ATTACK_ICON = check(
     "attack icon",
 )
 
-CLOCK_ICON = check(
-    [
-        "............",
-        "...OOOOOO...",
-        "..OWWWWWWO..",
-        ".OWWWOWWWWO.",
-        ".OWWWOWWWWO.",
-        ".OWWWOWWWWO.",
-        ".OWWWOOOWWO.",
-        ".OWWWWWWWWO.",
-        ".OWWWWWWWWO.",
-        "..OWWWWWWO..",
-        "...OOOOOO...",
-        "............",
-    ],
-    "clock icon",
-)
-
 # A ballot going into a box, in front of the steps a vote has left.
 VOTE_ICON = check(
     [
@@ -1677,7 +1659,6 @@ def mutiny_rows() -> list[list[Sprite]]:
             label(SKULL, HEART),
             label(CHORES_ICON, GOLD),
             label(ATTACK_ICON, HEART),
-            label(CLOCK_ICON),
             label(VOTE_ICON, TEAM_BLUE),
         ],
     ]

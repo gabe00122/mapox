@@ -135,7 +135,8 @@ mod tests {
             "map":"random","view_width":15,"view_height":15,"chores_per_agent":3,
             "presses_per_chore":4,"attack_radius":1,"attack_cooldown":30,
             "meetings_per_agent":1,"meeting_cooldown":20,"vote_steps":30,
-            "game_steps":400,"chore_reward":0.05,"kill_reward":0.25,
+            "chore_reward":0.05,"kill_reward":0.25,
+            "traitor_kicked_reward":0.25,"crew_kicked_reward":0.25,
             "win_reward":1.0,"loss_reward":-1.0}"#;
 
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();

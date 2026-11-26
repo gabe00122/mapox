@@ -122,7 +122,6 @@ mod tests {
                             attack_cooldown: 2,
                             meeting_cooldown: 2,
                             vote_steps: 6,
-                            game_steps: 40,
                             ..Default::default()
                         },
                         LENGTH,

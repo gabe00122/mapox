@@ -32,9 +32,7 @@ pub const UI_DEAD_TRAITORS: &str = "ui/dead_traitors";
 pub const UI_CHORES: &str = "ui/chores";
 /// In front of the steps until a traitor can attack again.
 pub const UI_ATTACK: &str = "ui/attack";
-/// In front of the steps a game has left, and [`UI_VOTE`] in front of the
-/// steps a vote has left while one is on.
-pub const UI_CLOCK: &str = "ui/clock";
+/// In front of the steps a vote has left, while one is on.
 pub const UI_VOTE: &str = "ui/vote";
 
 pub const TILE_MASK: &str = "mask";

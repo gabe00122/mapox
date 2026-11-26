@@ -68,7 +68,6 @@ LEGEND: dict[str, str] = {
     SB.UI_DEAD_TRAITORS: "D",
     SB.UI_CHORES: "c",
     SB.UI_ATTACK: "a",
-    SB.UI_CLOCK: "t",
     SB.UI_VOTE: "v",
     SB.TILE_PELLET: "o",
     SB.TILE_POWER_PELLET: "@",
