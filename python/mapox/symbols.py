@@ -71,7 +71,6 @@ CREW_COLORS = (
     "brown",
 )
 AGENT_CREW = tuple(f"agent/crew_{color}" for color in CREW_COLORS)
-AGENT_CREW_GHOST = "agent/crew_ghost"  # a dead crew member, seen only by the dead
 TILE_CORPSES = tuple(f"tile/corpse_{color}" for color in CREW_COLORS)
 TILE_VOTE_BUTTONS = tuple(f"tile/vote_button_{color}" for color in CREW_COLORS)
 TILE_CHORE_BUTTON = "tile/chore_button"
@@ -79,8 +78,7 @@ TILE_CHORE_BUTTON_LIT = "tile/chore_button_lit"  # the viewer's own next button
 TILE_CHORE_BUTTON_PRESSED = "tile/chore_button_pressed"
 TILE_MEETING_BUTTON = "tile/meeting_button"  # calls a vote
 TILE_MEETING_BUTTON_OFF = "tile/meeting_button_off"  # the viewer cannot call one
-TILE_HIDING_SPOT = "tile/hiding_spot"
-TILE_HIDING_SPOT_OCCUPIED = "tile/hiding_spot_occupied"
+TILE_HIDING_SPOT = "tile/hiding_spot"  # covers the traitor standing on it
 TILE_SKIP_BUTTON = "tile/skip_button"  # votes to kick no one
 
 # --- observation symbols: UI band ---
@@ -97,6 +95,20 @@ UI_DEAD_TRAITORS = "ui/dead_traitors"
 UI_CHORES = "ui/chores"
 UI_ATTACK = "ui/attack"
 UI_VOTE = "ui/vote"
+# the way to a crew member's next chore, by the eighth of a turn from up
+UI_ARROWS = tuple(
+    f"ui/arrow_{way}"
+    for way in (
+        "up",
+        "up_right",
+        "right",
+        "down_right",
+        "down",
+        "down_left",
+        "left",
+        "up_left",
+    )
+)
 
 # --- action symbols ---
 

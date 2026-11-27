@@ -18,7 +18,7 @@ use crate::{symbols, vocab::Vocabulary};
 /// Symbol -> (col, row) on the sheet `scripts/make_tileset.py` draws. Row 0
 /// is terrain, row 1 items and characters, rows 2 and 3 the soldiers, row 4
 /// the UI digits and stat labels, row 5 pac-man, rows 6 and 7 survival, and
-/// rows 8 to 11 mutiny.
+/// rows 8 to 12 mutiny.
 const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::TILE_UI, 0, 0),
     (symbols::TILE_MASK, 1, 0),
@@ -98,7 +98,8 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::TILE_IRON_ORE, 11, 7),
     (symbols::ITEM_IRON_ORE, 11, 1),
     // Mutiny: a row of the crew by color, then their corpses, then their
-    // vote buttons, with the fittings in the columns left over.
+    // vote buttons, with the fittings in the columns left over; then the
+    // band's labels, and a row of its arrows.
     (symbols::AGENT_CREW[0], 0, 8),
     (symbols::AGENT_CREW[1], 1, 8),
     (symbols::AGENT_CREW[2], 2, 8),
@@ -109,8 +110,7 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::AGENT_CREW[7], 7, 8),
     (symbols::AGENT_CREW[8], 8, 8),
     (symbols::AGENT_CREW[9], 9, 8),
-    (symbols::AGENT_CREW_GHOST, 10, 8),
-    (symbols::TILE_HIDING_SPOT, 11, 8),
+    (symbols::TILE_HIDING_SPOT, 10, 8),
     (symbols::TILE_CORPSES[0], 0, 9),
     (symbols::TILE_CORPSES[1], 1, 9),
     (symbols::TILE_CORPSES[2], 2, 9),
@@ -121,8 +121,7 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::TILE_CORPSES[7], 7, 9),
     (symbols::TILE_CORPSES[8], 8, 9),
     (symbols::TILE_CORPSES[9], 9, 9),
-    (symbols::TILE_HIDING_SPOT_OCCUPIED, 10, 9),
-    (symbols::TILE_SKIP_BUTTON, 11, 9),
+    (symbols::TILE_SKIP_BUTTON, 10, 9),
     (symbols::TILE_VOTE_BUTTONS[0], 0, 10),
     (symbols::TILE_VOTE_BUTTONS[1], 1, 10),
     (symbols::TILE_VOTE_BUTTONS[2], 2, 10),
@@ -145,6 +144,14 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::UI_CHORES, 7, 11),
     (symbols::UI_ATTACK, 8, 11),
     (symbols::UI_VOTE, 9, 11),
+    (symbols::UI_ARROWS[0], 0, 12),
+    (symbols::UI_ARROWS[1], 1, 12),
+    (symbols::UI_ARROWS[2], 2, 12),
+    (symbols::UI_ARROWS[3], 3, 12),
+    (symbols::UI_ARROWS[4], 4, 12),
+    (symbols::UI_ARROWS[5], 5, 12),
+    (symbols::UI_ARROWS[6], 6, 12),
+    (symbols::UI_ARROWS[7], 7, 12),
 ];
 
 pub(crate) fn resolve_art(vocab: &Vocabulary) -> Vec<(u32, u32)> {

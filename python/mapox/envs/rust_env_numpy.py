@@ -249,6 +249,11 @@ class RustMutinyConfig(BaseModel):
     # every traitor when a vote kicks a loyal crew member
     traitor_kicked_reward: float = 0.25
     crew_kicked_reward: float = 0.25
+    # penalties for losing one of your own side, paid to everyone on it, the
+    # one lost included: to the loyal crew per member killed, and to the
+    # kicked agent's side per kick
+    ally_killed_reward: float = -0.25
+    ally_kicked_reward: float = -0.25
     # paid to everyone on the winning side of a game, and on the losing side
     win_reward: float = 1.0
     loss_reward: float = -1.0

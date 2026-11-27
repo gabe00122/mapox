@@ -24,13 +24,14 @@
 //!
 //! *Attack* lets a traitor kill every loyal crew member in sight within
 //! `attack_radius` cells, in all directions at once, and then has to cool down.
-//! A traitor can walk onto hiding tiles, which cover its sprite in other
-//! agents' views. Adjacent hiding tiles can form a passage. Traitors can
-//! still act normally from these tiles and block other traitors' movement.
+//! A traitor can walk onto hiding tiles, which cover its sprite in every
+//! agent's view, its own included. Adjacent hiding tiles can form a passage.
+//! Traitors can still act normally from these tiles and block other
+//! traitors' movement.
 //!
-//! The dead leave a corpse where they fell and carry on as ghosts: unseen by
-//! the living, free to drift through anything, and able to do nothing but
-//! watch. A dead crew member's unfinished chores pass to the living.
+//! The dead leave a corpse where they fell and are out of the game: off the
+//! map, shown a blank observation, and able to do nothing. A dead crew
+//! member's unfinished chores pass to the living.
 //!
 //! A vote takes everyone to the vote room, where no one can attack and the
 //! living walk through each other. Each living crew member has a button
@@ -38,10 +39,14 @@
 //! shown at once in the count beside the button; there is a skip button too.
 //! The vote ends when everyone living has voted or its time runs out.
 //! Whoever has the most votes is kicked, unless that is a tie or no more
-//! than the skips, and becomes a ghost without a corpse; kicking a traitor
+//! than the skips, and dies without leaving a corpse; kicking a traitor
 //! pays the crew, and kicking a loyal crew member pays the traitors. Then
 //! everyone goes back to where they started the game, the corpses are
 //! cleared away, and the attack and meeting cooldowns start over.
+//!
+//! Losing one of its own costs a side: every loyal crew member is docked
+//! for each of them killed, and everyone on the side of whoever is kicked
+//! for that, the one lost and the already dead included.
 //!
 //! The crew win when the chores are done or when no traitor is left; the
 //! traitors win when they are as many as the loyal crew still alive. A game
@@ -53,8 +58,10 @@
 //! The UI band's top row is the agent's role, then for a traitor its fellow
 //! traitors as they look (as corpses once dead), and at the right the count
 //! of loyal crew dead and of traitors dead. The row beneath is the button
-//! presses the crew still owe, a traitor's attack cooldown, and at the
-//! right, while a vote is on, the steps it has left.
+//! presses the crew still owe, then a traitor's attack cooldown or, for a
+//! loyal crew member outside a vote, an arrow pointing the way to the button
+//! its chore wants next, however far off, to the nearest eighth of a turn.
+//! At the right, while a vote is on, are the steps it has left.
 
 mod maps;
 
@@ -78,12 +85,11 @@ use crate::{
     render::env::{GridRenderSettings, GridRenderState},
     spec::{ActionSpec, ObservationSpec},
     symbols::{
-        AGENT_CREW, AGENT_CREW_GHOST, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, NOOP,
-        PRIMARY_ACTION, TILE_CHORE_BUTTON, TILE_CHORE_BUTTON_LIT, TILE_CHORE_BUTTON_PRESSED,
-        TILE_CORPSES, TILE_EMPTY, TILE_HIDING_SPOT, TILE_HIDING_SPOT_OCCUPIED, TILE_MASK,
-        TILE_MEETING_BUTTON, TILE_MEETING_BUTTON_OFF, TILE_SKIP_BUTTON, TILE_UI, TILE_VOTE_BUTTONS,
-        TILE_WALL, UI_ATTACK, UI_CHORES, UI_DEAD_CREW, UI_DEAD_TRAITORS, UI_DIGITS, UI_ROLE_CREW,
-        UI_ROLE_TRAITOR, UI_VOTE,
+        AGENT_CREW, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, NOOP, PRIMARY_ACTION,
+        TILE_CHORE_BUTTON, TILE_CHORE_BUTTON_LIT, TILE_CHORE_BUTTON_PRESSED, TILE_CORPSES,
+        TILE_EMPTY, TILE_HIDING_SPOT, TILE_MASK, TILE_MEETING_BUTTON, TILE_MEETING_BUTTON_OFF,
+        TILE_SKIP_BUTTON, TILE_UI, TILE_VOTE_BUTTONS, TILE_WALL, UI_ARROWS, UI_ATTACK, UI_CHORES,
+        UI_DEAD_CREW, UI_DEAD_TRAITORS, UI_DIGITS, UI_ROLE_CREW, UI_ROLE_TRAITOR, UI_VOTE,
     },
     timestep::TimeStepMut,
     vocab::{VocabId, Vocabulary},
@@ -92,6 +98,10 @@ use crate::{
 
 /// Most agents a game takes: one for each color.
 pub const MAX_CREW: usize = AGENT_CREW.len();
+
+/// Where the dead are: on no cell of the map, in its coordinates or the
+/// bird's-eye view's.
+const OFF_MAP: Position = Position { x: -1, y: -1 };
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 pub struct MutinyConfig {
@@ -134,6 +144,12 @@ pub struct MutinyConfig {
     /// Paid to every traitor, dead or alive, when a vote kicks a loyal crew
     /// member.
     pub crew_kicked_reward: f32,
+    /// Paid to every loyal crew member, dead or alive and the victim
+    /// included, for each of them an attack kills: a penalty, so negative.
+    pub ally_killed_reward: f32,
+    /// Paid to everyone on the side of whoever a vote kicks, dead or alive
+    /// and the kicked included: a penalty, so negative.
+    pub ally_kicked_reward: f32,
     /// Paid to everyone on the side that wins a game, and
     /// [`loss_reward`](Self::loss_reward) to everyone on the other.
     pub win_reward: f32,
@@ -159,6 +175,8 @@ impl Default for MutinyConfig {
             kill_reward: 0.25,
             traitor_kicked_reward: 0.25,
             crew_kicked_reward: 0.25,
+            ally_killed_reward: -0.25,
+            ally_kicked_reward: -0.25,
             win_reward: 1.0,
             loss_reward: -1.0,
         }
@@ -176,9 +194,7 @@ vocab_enum!(MutinyObs {
     MeetingButton => TILE_MEETING_BUTTON,
     MeetingButtonOff => TILE_MEETING_BUTTON_OFF,
     HidingSpot => TILE_HIDING_SPOT,
-    HidingSpotOccupied => TILE_HIDING_SPOT_OCCUPIED,
     SkipButton => TILE_SKIP_BUTTON,
-    Ghost => AGENT_CREW_GHOST,
     Crew0 => AGENT_CREW[0],
     Crew1 => AGENT_CREW[1],
     Crew2 => AGENT_CREW[2],
@@ -226,6 +242,14 @@ vocab_enum!(MutinyObs {
     UiChores => UI_CHORES,
     UiAttack => UI_ATTACK,
     UiVote => UI_VOTE,
+    ArrowUp => UI_ARROWS[0],
+    ArrowUpRight => UI_ARROWS[1],
+    ArrowRight => UI_ARROWS[2],
+    ArrowDownRight => UI_ARROWS[3],
+    ArrowDown => UI_ARROWS[4],
+    ArrowDownLeft => UI_ARROWS[5],
+    ArrowLeft => UI_ARROWS[6],
+    ArrowUpLeft => UI_ARROWS[7],
 });
 
 const DIGIT_TILES: [MutinyObs; 10] = [
@@ -242,8 +266,8 @@ const DIGIT_TILES: [MutinyObs; 10] = [
 ];
 
 impl MutinyObs {
-    /// The tile `offset` places on from `first`, for the runs of ten the
-    /// vocab keeps in color order.
+    /// The tile `offset` places on from `first`, for the runs the vocab
+    /// keeps in order: ten by color, and the eight arrows.
     fn nth(first: MutinyObs, offset: u8) -> MutinyObs {
         MutinyObs::TABLE[first as usize + usize::from(offset)]
     }
@@ -258,6 +282,14 @@ impl MutinyObs {
 
     fn vote_button(color: u8) -> MutinyObs {
         Self::nth(MutinyObs::VoteButton0, color)
+    }
+
+    /// The arrow pointing along `offset`, to the nearest eighth of a turn.
+    fn arrow(offset: Position) -> MutinyObs {
+        // eighths of a turn clockwise from up; no offset between two cells
+        // falls on the line between two arrows
+        let turn = f64::from(offset.x).atan2(f64::from(offset.y)) / std::f64::consts::FRAC_PI_4;
+        Self::nth(MutinyObs::ArrowUp, turn.round().rem_euclid(8.0) as u8)
     }
 
     fn is_crew(self) -> bool {
@@ -342,6 +374,7 @@ struct Member {
     role: Role,
     color: u8,
     status: Status,
+    /// [`OFF_MAP`] once it is dead.
     position: Position,
     /// Where it starts the game, and comes back to after every vote.
     spawn: Position,
@@ -419,13 +452,6 @@ impl Geometry {
     fn grid(&self) -> (usize, usize) {
         let size = self.inner + self.pad * 2;
         (size.x as usize, size.y as usize)
-    }
-
-    /// Whether `position` is in the interior, hull and all: where a ghost
-    /// can drift.
-    fn inside(&self, position: Position) -> bool {
-        let local = position - self.pad;
-        (0..self.inner.x).contains(&local.x) && (0..self.inner.y).contains(&local.y)
     }
 
     /// The grid cell of column `x` of row `row` of `ship`'s drawing. The
@@ -899,23 +925,17 @@ impl Mutiny {
         }
     }
 
-    /// Makes a ghost of `id`, which leaves the map to the caller.
+    /// Kills `id` and takes it off the map; the cell it stood on is left to
+    /// the caller.
     fn die(&mut self, id: usize) {
         let member = &mut self.state.members[id];
         member.status = Status::Dead;
+        member.position = OFF_MAP;
         match member.role {
             Role::Crew => self.state.dead_crew += 1,
             Role::Traitor => self.state.dead_traitors += 1,
         }
         self.hand_on_chores(id);
-    }
-
-    /// A ghost's move: one cell any way, through whatever is there.
-    fn drift(&mut self, id: usize, step: Position) {
-        let target = self.state.members[id].position + step;
-        if self.geometry.inside(target) {
-            self.state.members[id].position = target;
-        }
     }
 
     /// A living agent's move into `target` outside a vote: a step onto open
@@ -976,19 +996,21 @@ impl Mutiny {
             timestep.reward[id] += self.config.kill_reward;
             self.metrics.traitor_reward += f64::from(self.config.kill_reward);
             self.metrics.kills += 1.0;
+            self.pay(Role::Crew, self.config.ally_killed_reward, timestep);
         }
     }
 
-    /// Carries out one agent's action outside a vote.
+    /// Carries out one agent's action outside a vote. The dead do nothing.
     fn act(&mut self, id: usize, action: MutinyAction, timestep: &mut TimeStepMut) {
         let member = &self.state.members[id];
-        let (status, position) = (member.status, member.position);
+        if !member.alive() {
+            return;
+        }
 
-        match (status, action.step()) {
-            (Status::Dead, Some(step)) => self.drift(id, step),
-            (Status::Alive, Some(step)) => self.walk(id, position + step, timestep),
-            (Status::Alive, None) if action == MutinyAction::Attack => self.attack(id, timestep),
-            _ => {}
+        match action.step() {
+            Some(step) => self.walk(id, member.position + step, timestep),
+            None if action == MutinyAction::Attack => self.attack(id, timestep),
+            None => {}
         }
     }
 
@@ -1020,7 +1042,7 @@ impl Mutiny {
         }
     }
 
-    /// Clears the ship and takes everyone to the vote room.
+    /// Clears the ship and takes everyone living to the vote room.
     fn start_vote(&mut self) {
         self.erase_members();
         let state = &mut self.state;
@@ -1032,7 +1054,9 @@ impl Mutiny {
         }
 
         for (id, member) in state.members.iter_mut().enumerate() {
-            member.position = self.geometry.vote_floor(id);
+            if member.alive() {
+                member.position = self.geometry.vote_floor(id);
+            }
             member.ballot = None;
         }
         state.phase = Phase::Vote {
@@ -1098,13 +1122,10 @@ impl Mutiny {
         for turn in 0..self.state.order.len() {
             let id = self.state.order[turn];
             let member = &self.state.members[id];
-            let Some(step) = MutinyAction::from_id(actions[id]).step() else {
-                continue;
-            };
-            if member.alive() {
+            if let Some(step) = MutinyAction::from_id(actions[id]).step()
+                && member.alive()
+            {
                 self.walk_vote(id, member.position + step);
-            } else {
-                self.drift(id, step);
             }
         }
         self.paint_members();
@@ -1122,8 +1143,9 @@ impl Mutiny {
         }
     }
 
-    /// Counts the vote, kicks whoever lost it and pays the other side for
-    /// it, and sends everyone back to where they started the game.
+    /// Counts the vote, kicks whoever lost it, pays the other side for it
+    /// and docks its own, and sends everyone living back to where they
+    /// started the game.
     fn end_vote(&mut self, timestep: &mut TimeStepMut) {
         let num_agents = self.config.num_agents;
         let votes: Vec<u32> = (0..num_agents)
@@ -1135,7 +1157,8 @@ impl Mutiny {
         self.erase_members();
         if leaders == 1 && most > self.votes_for(Ballot::Skip) {
             let kicked = votes.iter().position(|&count| count == most).unwrap();
-            match self.state.members[kicked].role {
+            let side = self.state.members[kicked].role;
+            match side {
                 Role::Crew => {
                     self.metrics.kicked_crew += 1.0;
                     self.pay(Role::Traitor, self.config.crew_kicked_reward, timestep);
@@ -1145,11 +1168,14 @@ impl Mutiny {
                     self.pay(Role::Crew, self.config.traitor_kicked_reward, timestep);
                 }
             }
+            self.pay(side, self.config.ally_kicked_reward, timestep);
             self.die(kicked);
         }
 
         for member in &mut self.state.members {
-            member.position = member.spawn;
+            if member.alive() {
+                member.position = member.spawn;
+            }
             member.ballot = None;
             member.attack_cooldown = self.config.attack_cooldown;
         }
@@ -1214,40 +1240,20 @@ impl Mutiny {
         } += 1.0;
     }
 
-    /// Draws what `id` sees of the map into `view`.
+    /// Draws what `id`, who is alive, sees of the map into `view`.
     fn draw_view(&self, id: usize, view: &mut ArrayViewMut2<'_, VocabId>) {
         let state = &self.state;
         let member = &state.members[id];
         let (width, height) = view.dim();
         let center = Position::new(width as i32 / 2, height as i32 / 2);
         let origin = member.position - center;
+        let hiding = |other: &Member| state.base_map[other.position.idx()] == MutinyObs::HidingSpot;
 
-        if member.alive() {
-            fov::observe(&state.map, member.position, view);
-        } else {
-            // a ghost sees through the hull
-            let window = fov::window(&state.map, member.position, (width, height));
-            view.zip_mut_with(&window, |cell, &tile| *cell = tile.into());
-        }
-
+        fov::observe(&state.map, member.position, view);
         for other in &state.members {
-            let position = other.position;
-            if other.alive() && state.base_map[position.idx()] == MutinyObs::HidingSpot {
-                overlay(view, origin, position, MutinyObs::HidingSpot);
-            } else if !member.alive()
-                && !other.alive()
-                && matches!(
-                    state.map[position.idx()],
-                    MutinyObs::TileEmpty | MutinyObs::TileWall
-                )
-            {
-                // a ghost over a corpse or a fitting leaves that showing
-                overlay(view, origin, position, MutinyObs::Ghost);
+            if other.alive() && hiding(other) {
+                overlay(view, origin, other.position, MutinyObs::HidingSpot);
             }
-        }
-        if !member.alive() {
-            view[center.idx()] = MutinyObs::Ghost.into();
-            return;
         }
 
         if let Some(button) = member.lit {
@@ -1261,17 +1267,14 @@ impl Mutiny {
                 MutinyObs::MeetingButtonOff,
             );
         }
-        // Show the viewer its own hiding spot or crew color. In the vote
-        // room someone else may be drawn on the same cell.
-        view[center.idx()] = if state.base_map[member.position.idx()] == MutinyObs::HidingSpot {
-            MutinyObs::HidingSpotOccupied
-        } else {
-            MutinyObs::crew(member.color)
+        // In the vote room someone else may be drawn on the viewer's cell,
+        // which shows the viewer unless a hiding tile covers it.
+        if !hiding(member) {
+            view[center.idx()] = MutinyObs::crew(member.color).into();
         }
-        .into();
     }
 
-    /// Draws `id`'s UI band.
+    /// Draws the UI band of `id`, who is alive.
     fn draw_band(&self, id: usize, band: &mut ArrayViewMut2<'_, VocabId>) {
         let state = &self.state;
         let member = &state.members[id];
@@ -1325,6 +1328,10 @@ impl Mutiny {
                 member.attack_cooldown,
                 &DIGIT_TILES,
             );
+        } else if state.phase == Phase::Play
+            && let Some(button) = member.lit
+        {
+            band[[5, bottom]] = MutinyObs::arrow(button - member.position).into();
         }
         if let Phase::Vote { steps_left } = state.phase {
             band[[width - 4, bottom]] = MutinyObs::UiVote.into();
@@ -1339,11 +1346,18 @@ impl Mutiny {
     fn encode_observations(&self, timestep: &mut TimeStepMut) {
         let fov_height = self.config.view_height as usize;
         for id in 0..self.config.num_agents {
-            // hull padding keeps the view window inside the map
-            let mut view = timestep.obs.slice_mut(s![id, .., ..fov_height, 0]);
-            self.draw_view(id, &mut view);
-            let mut band = timestep.obs.slice_mut(s![id, .., fov_height.., 0]);
-            self.draw_band(id, &mut band);
+            let (mut view, mut band) = timestep
+                .obs
+                .multi_slice_mut((s![id, .., ..fov_height, 0], s![id, .., fov_height.., 0]));
+            if self.state.members[id].alive() {
+                // hull padding keeps the view window inside the map
+                self.draw_view(id, &mut view);
+                self.draw_band(id, &mut band);
+            } else {
+                // the dead are shown nothing: no map, and an empty band
+                view.fill(MutinyObs::Mask.into());
+                band.fill(MutinyObs::UI.into());
+            }
         }
 
         timestep.time.fill(self.state.time as i32);
@@ -1352,7 +1366,8 @@ impl Mutiny {
     }
 
     /// Moves and the noop are always legal: a move into a fitting is how it
-    /// is worked. Attack is legal for a traitor with someone to kill.
+    /// is worked, and the dead may pick one though it does nothing. Attack
+    /// is legal for a traitor with someone to kill.
     fn encode_action_mask(&self, timestep: &mut TimeStepMut) {
         timestep.action_mask.fill(true);
         for id in 0..self.config.num_agents {
@@ -1462,8 +1477,8 @@ impl Environment for Mutiny {
         }
     }
 
-    /// The bird's-eye view shows what no one living sees whole: the map, who
-    /// is hiding where, and the ghosts.
+    /// The bird's-eye view shows what no one aboard sees whole: the map, and
+    /// who is on every hiding tile. The dead are off it, at [`OFF_MAP`].
     fn render_state_into(&self, grid_render_state: &mut GridRenderState) {
         let Geometry { pad, inner, .. } = self.geometry;
         let dim = (inner.x as usize, inner.y as usize);
@@ -1479,21 +1494,11 @@ impl Environment for Mutiny {
 
         grid_render_state.agent_positions.clear();
         for member in &self.state.members {
-            let local = member.position - pad;
-            grid_render_state.agent_positions.push(local);
-
-            let under = self.state.map[member.position.idx()];
-            match member.status {
-                Status::Alive
-                    if self.state.base_map[member.position.idx()] == MutinyObs::HidingSpot =>
-                {
-                    tilemap[local.idx()] = MutinyObs::HidingSpotOccupied.into();
-                }
-                Status::Dead if matches!(under, MutinyObs::TileEmpty | MutinyObs::TileWall) => {
-                    tilemap[local.idx()] = MutinyObs::Ghost.into();
-                }
-                _ => {}
-            }
+            grid_render_state.agent_positions.push(if member.alive() {
+                member.position - pad
+            } else {
+                OFF_MAP
+            });
         }
     }
 

@@ -3,6 +3,7 @@ use crate::policy::{Policy, RandomPolicy};
 use crate::timestep::TimeStepBuffers;
 use MutinyAction::*;
 use MutinyObs::*;
+use ndarray::Axis;
 use std::collections::HashSet;
 
 /// Eight aboard the frigate, two of them traitors, with an episode no test
@@ -212,10 +213,65 @@ fn the_band_shows_a_crew_member_its_role_and_the_counts() {
     (top[12], top[14]) = (UiDeadTraitors, Digit0);
     assert_eq!(band(&env, &buffers, crew[0], 1), top);
 
-    // 72 presses owed, and nothing counting down outside a vote
+    // 72 presses owed, the way to its own next one, and nothing counting
+    // down outside a vote
+    let member = &env.state.members[crew[0]];
     let mut bottom = vec![UI; 15];
     (bottom[0], bottom[2], bottom[3]) = (UiChores, Digit7, Digit2);
+    bottom[5] = MutinyObs::arrow(member.lit.unwrap() - member.position);
     assert_eq!(band(&env, &buffers, crew[0], 0), bottom);
+}
+
+/// The arrow in a loyal crew member's band points at its lit button from
+/// wherever it stands, to the nearest eighth of a turn. A traitor has none,
+/// and no one has during a vote.
+#[test]
+fn the_band_points_a_crew_member_at_its_lit_button() {
+    let (mut env, mut buffers) = start(frigate());
+    let (traitors, crew) = sides(&env);
+    let me = crew[0];
+    let from = deck(15, 7);
+    place(&mut env, me, from);
+
+    let pointer = |env: &Mutiny, id: usize| band(env, &observe(env), id, 0)[5];
+    for ((x, y), arrow) in [
+        ((0, 9), ArrowUp),
+        ((9, 9), ArrowUpRight),
+        ((9, 0), ArrowRight),
+        ((9, -9), ArrowDownRight),
+        ((0, -9), ArrowDown),
+        ((-9, -9), ArrowDownLeft),
+        ((-9, 0), ArrowLeft),
+        ((-9, 9), ArrowUpLeft),
+        // either side of the lines between up, up-right and right
+        ((2, 5), ArrowUp),
+        ((5, 12), ArrowUpRight),
+        ((12, 5), ArrowUpRight),
+        ((5, 2), ArrowRight),
+        // rooms away, and far out of sight
+        ((-14, 20), ArrowUpLeft),
+        ((1, -17), ArrowDown),
+    ] {
+        env.state.members[me].lit = Some(from + Position::new(x, y));
+        assert_eq!(pointer(&env, me), arrow, "({x}, {y})");
+    }
+
+    // it follows the chore from one button to the next
+    env.light_next(me);
+    let button = press_lit(&mut env, &mut buffers, me);
+    let member = &env.state.members[me];
+    let next = member.lit.unwrap();
+    assert_ne!(next, button);
+    assert_eq!(pointer(&env, me), MutinyObs::arrow(next - member.position));
+
+    assert_eq!(pointer(&env, traitors[0]), UiAttack);
+    env.start_vote();
+    assert_eq!(pointer(&env, me), UI);
+
+    // and with no chores left there is nowhere to point
+    env.end_vote(&mut buffers.view_mut());
+    env.state.members[me].lit = None;
+    assert_eq!(pointer(&env, me), UI);
 }
 
 /// A traitor's band has what a crew member's has, and its fellow traitor
@@ -390,11 +446,11 @@ fn an_attack_kills_the_crew_all_around() {
     assert!(legal(&observe(&env), killer).contains(&Attack));
     step(&mut env, &mut buffers, &[(killer, Attack)]);
 
-    for victim in [left, diagonal] {
+    for (victim, fell) in [(left, deck(14, 16)), (diagonal, deck(16, 17))] {
         let member = &env.state.members[victim];
         assert_eq!(member.status, Status::Dead);
         assert_eq!(
-            seen(&env, &buffers, far, member.position),
+            seen(&env, &buffers, far, fell),
             MutinyObs::corpse(member.color)
         );
     }
@@ -403,6 +459,10 @@ fn an_attack_kills_the_crew_all_around() {
     assert_eq!(env.state.dead_crew, 2);
     assert_eq!(buffers.reward[killer], 2.0 * env.config.kill_reward);
     assert_eq!(buffers.reward[fellow], 0.0);
+    // each death costs every loyal crew member, the two killed included
+    for &id in &crew {
+        assert_eq!(buffers.reward[id], 2.0 * env.config.ally_killed_reward);
+    }
 
     // the band counts the dead for everyone, and the cooldown for the killer
     assert_eq!(
@@ -464,10 +524,10 @@ fn the_hull_stops_an_attack() {
     assert_eq!(env.state.members[exposed].status, Status::Dead);
 }
 
-/// The dead are ghosts: the living see only the corpse, a ghost sees itself,
-/// the other ghosts and through the hull, and all it can do is drift.
+/// The dead are out of the game: off the map with only a corpse left on it,
+/// shown a blank observation, and able to do nothing.
 #[test]
-fn the_dead_become_ghosts_only_the_dead_can_see() {
+fn the_dead_are_off_the_map_and_shown_nothing() {
     let (mut env, mut buffers) = start(frigate());
     let (traitors, crew) = sides(&env);
     let (killer, first, second, witness) = (traitors[0], crew[0], crew[1], crew[2]);
@@ -480,32 +540,26 @@ fn the_dead_become_ghosts_only_the_dead_can_see() {
     let chores = env.state.chores_left;
     step(&mut env, &mut buffers, &[(killer, Attack)]);
 
-    // both ghosts drift down, off their corpses and into the corridor
-    step(
-        &mut env,
-        &mut buffers,
-        &[(first, MoveDown), (second, MoveDown)],
-    );
-    assert_eq!(at(&env, first), deck(14, 17));
-    assert_eq!(seen(&env, &buffers, witness, at(&env, first)), TileEmpty);
-    assert_eq!(seen(&env, &buffers, killer, at(&env, first)), TileEmpty);
-    assert_eq!(seen(&env, &buffers, first, at(&env, first)), Ghost);
-    assert_eq!(seen(&env, &buffers, first, at(&env, second)), Ghost);
-    assert_eq!(seen(&env, &buffers, second, at(&env, first)), Ghost);
+    let blank = |buffers: &TimeStepBuffers, id: usize| {
+        let obs = buffers.obs.slice(s![id, .., .., 0]);
+        let (view, band) = obs.split_at(Axis(1), 15);
+        view.iter().all(|&tile| tile == VocabId::from(Mask))
+            && band.iter().all(|&tile| tile == VocabId::from(UI))
+    };
+    for dead in [first, second] {
+        assert_eq!(at(&env, dead), OFF_MAP);
+        assert!(blank(&buffers, dead));
+    }
+    assert!(!blank(&buffers, witness));
+    assert!(!blank(&buffers, killer));
 
-    // the dead see the living and the corpses as they are
-    let corpse = MutinyObs::corpse(env.state.members[first].color);
-    assert_eq!(seen(&env, &buffers, first, deck(14, 16)), corpse);
-    assert_eq!(
-        seen(&env, &buffers, first, at(&env, witness)),
-        MutinyObs::crew(env.state.members[witness].color)
-    );
+    // the living see the corpses, and nothing else of the dead
+    for (dead, fell) in [(first, deck(14, 16)), (second, deck(16, 16))] {
+        let corpse = MutinyObs::corpse(env.state.members[dead].color);
+        assert_eq!(seen(&env, &buffers, witness, fell), corpse);
+    }
 
-    // a ghost can only move, and has no chores: its own passed to the living
-    assert_eq!(
-        legal(&buffers, first),
-        vec![MoveUp, MoveRight, MoveDown, MoveLeft, Noop]
-    );
+    // the dead have no chores: their own passed to the living
     assert_eq!(env.state.members[first].lit, None);
     assert_eq!(env.state.chores_left, chores, "the presses are still owed");
     let owed: u32 = crew
@@ -515,32 +569,19 @@ fn the_dead_become_ghosts_only_the_dead_can_see() {
         .sum();
     assert_eq!(owed, chores);
 
-    // down again is the hull, which a ghost passes into and sees out of
-    step(&mut env, &mut buffers, &[(first, MoveDown)]);
-    assert_eq!(at(&env, first), deck(14, 18));
-    assert_eq!(env.state.map[at(&env, first).idx()], TileWall);
-    let view = buffers.obs.slice(s![first, .., ..15, 0]);
-    assert!(view.iter().all(|&tile| tile != VocabId::from(Mask)));
-
-    // the living never walk through one another, but through a ghost they do
-    step(&mut env, &mut buffers, &[(second, MoveLeft)]);
-    step(&mut env, &mut buffers, &[(killer, MoveDown)]);
-    assert_eq!(at(&env, killer), at(&env, second));
-}
-
-/// A ghost stays inside the ship: the padding round it is out of bounds.
-#[test]
-fn a_ghost_cannot_leave_the_ship() {
-    let (mut env, mut buffers) = start(frigate());
-    let ghost = sides(&env).1[0];
-    env.erase_members();
-    env.die(ghost);
-    env.paint_members();
-
-    for _ in 0..60 {
-        step(&mut env, &mut buffers, &[(ghost, MoveLeft)]);
+    // a move is all the dead are offered, and it takes them nowhere
+    assert_eq!(
+        legal(&buffers, first),
+        vec![MoveUp, MoveRight, MoveDown, MoveLeft, Noop]
+    );
+    let map = env.state.map.clone();
+    for action in [MoveUp, MoveRight, MoveDown, MoveLeft, Attack] {
+        step(&mut env, &mut buffers, &[(first, action)]);
+        assert_eq!(at(&env, first), OFF_MAP);
+        assert!(blank(&buffers, first));
     }
-    assert_eq!(env.state.members[ghost].position.x, env.geometry.pad.x);
+    assert_eq!(env.state.map, map);
+    assert_eq!(env.state.phase, Phase::Play);
 }
 
 #[test]
@@ -567,14 +608,15 @@ fn only_traitors_can_walk_onto_hiding_tiles() {
     assert_eq!(seen(&env, &buffers, watcher, spot), HidingSpot);
     assert_eq!(seen(&env, &buffers, watcher, door), TileEmpty);
     assert_eq!(seen(&env, &buffers, fellow, spot), HidingSpot);
-    assert_eq!(seen(&env, &buffers, hider, spot), HidingSpotOccupied);
+    // the tile covers the hider in its own view too
+    assert_eq!(seen(&env, &buffers, hider, spot), HidingSpot);
 
     // An occupant can attack and remains concealed from other agents.
     arm(&mut env, hider);
     assert!(legal(&observe(&env), hider).contains(&Attack));
     step(&mut env, &mut buffers, &[(hider, Attack)]);
     assert!(!env.state.members[victim].alive());
-    assert_eq!(seen(&env, &buffers, victim, spot), HidingSpot);
+    assert_eq!(seen(&env, &buffers, watcher, spot), HidingSpot);
 
     // the way out is blocked while someone stands in it
     place(&mut env, watcher, door);
@@ -622,7 +664,7 @@ fn adjacent_hiding_tiles_form_a_passage_with_normal_collision() {
 }
 
 /// The meeting button is off for a while after the game starts. Once on,
-/// walking into it takes everyone to the vote room, the dead and the hidden
+/// walking into it takes everyone living to the vote room, the hidden
 /// included, and clears the corpses away.
 #[test]
 fn the_meeting_button_calls_a_vote() {
@@ -651,7 +693,7 @@ fn the_meeting_button_calls_a_vote() {
     assert_eq!(at(&env, traitors[1]), deck(11, 3));
     assert_eq!(seen(&env, &buffers, caller, button), MeetingButtonOff);
     assert_eq!(env.state.members[caller].meetings_left, 1);
-    let corpse = env.state.members[crew[1]].position;
+    let corpse = deck(14, 16);
     assert!(env.state.map[corpse.idx()].is_corpse());
 
     env.state.meeting_cooldown = 0;
@@ -663,7 +705,12 @@ fn the_meeting_button_calls_a_vote() {
     assert_eq!(env.state.map[corpse.idx()], TileEmpty);
     assert_eq!(env.state.map[deck(11, 3).idx()], HidingSpot);
     for (id, member) in env.state.members.iter().enumerate() {
-        assert_eq!(member.position, env.geometry.vote_floor(id));
+        let place = if id == crew[1] {
+            OFF_MAP
+        } else {
+            env.geometry.vote_floor(id)
+        };
+        assert_eq!(member.position, place);
     }
     assert_eq!(
         &band(&env, &buffers, caller, 0)[11..],
@@ -733,8 +780,7 @@ fn a_crew_member_runs_out_of_meetings() {
     assert_eq!(env.state.phase, Phase::Vote { steps_left: 1 });
 }
 
-/// Finding a body calls a vote whatever the meeting button's state, but a
-/// ghost drifting over one does not.
+/// Finding a body calls a vote whatever the meeting button's state.
 #[test]
 fn walking_into_a_corpse_calls_a_vote() {
     let (mut env, mut buffers) = start(frigate());
@@ -747,12 +793,7 @@ fn walking_into_a_corpse_calls_a_vote() {
     arm(&mut env, killer);
     step(&mut env, &mut buffers, &[(killer, Attack)]);
 
-    step(&mut env, &mut buffers, &[(victim, MoveLeft)]);
-    step(
-        &mut env,
-        &mut buffers,
-        &[(victim, MoveRight), (finder, MoveRight)],
-    );
+    step(&mut env, &mut buffers, &[(finder, MoveRight)]);
     assert_eq!(env.state.phase, Phase::Play);
 
     step(&mut env, &mut buffers, &[(finder, MoveRight)]);
@@ -820,8 +861,8 @@ fn votes_are_cast_by_walking_into_a_button() {
     assert_eq!(env.state.phase, Phase::Vote { steps_left: 24 });
 }
 
-/// Whoever has the most votes is kicked: it becomes a ghost with no corpse,
-/// the count of the dead says which side it was on, and everyone goes back
+/// Whoever has the most votes is kicked: it dies and leaves no corpse, the
+/// count of the dead says which side it was on, and everyone else goes back
 /// to where they started with the cooldowns reset.
 #[test]
 fn the_most_voted_is_kicked() {
@@ -848,12 +889,13 @@ fn the_most_voted_is_kicked() {
     assert_eq!(env.state.meeting_cooldown, 20);
     assert_eq!(env.state.members[traitors[1]].attack_cooldown, 30);
     for member in &env.state.members {
-        assert_eq!(member.position, member.spawn);
-        let on_map = env.state.map[member.position.idx()];
+        let at_spawn = env.state.map[member.spawn.idx()];
         if member.alive() {
-            assert_eq!(on_map, MutinyObs::crew(member.color));
+            assert_eq!(member.position, member.spawn);
+            assert_eq!(at_spawn, MutinyObs::crew(member.color));
         } else {
-            assert_eq!(on_map, TileEmpty);
+            assert_eq!(member.position, OFF_MAP);
+            assert_eq!(at_spawn, TileEmpty);
         }
     }
     assert_eq!(
@@ -863,15 +905,17 @@ fn the_most_voted_is_kicked() {
     assert!(!buffers.terminated[suspect], "one traitor is left");
 }
 
-/// A kick pays everyone on the side the kicked agent was not on, the dead
-/// among them, on the step the vote ends; its own side is paid nothing.
+/// A kick pays everyone on the side the kicked agent was not on, and docks
+/// everyone on its own, the kicked and the dead among them, on the step the
+/// vote ends.
 #[test]
-fn a_kick_pays_the_other_side() {
+fn a_kick_pays_the_other_side_and_docks_its_own() {
     for kick_traitor in [true, false] {
         let (mut env, mut buffers) = start(MutinyConfig {
             vote_steps: 4,
             traitor_kicked_reward: 0.5,
             crew_kicked_reward: 0.125,
+            ally_kicked_reward: -0.75,
             ..frigate()
         });
         let (traitors, crew) = sides(&env);
@@ -888,21 +932,20 @@ fn a_kick_pays_the_other_side() {
         assert_eq!(env.state.phase, Phase::Play);
         assert_eq!(env.state.members[suspect].status, Status::Dead);
 
-        let (paid, reward) = if kick_traitor {
-            (&crew, 0.5)
+        let (crew_reward, traitor_reward) = if kick_traitor {
+            (0.5, -0.75)
         } else {
-            (&traitors, 0.125)
+            (-0.75, 0.125)
         };
         for id in 0..env.num_agents() {
-            let expected = if paid.contains(&id) { reward } else { 0.0 };
+            let expected = if crew.contains(&id) {
+                crew_reward
+            } else {
+                traitor_reward
+            };
             assert_eq!(buffers.reward[id], expected, "agent {id}");
         }
         let metrics = env.consume_metrics();
-        let (crew_reward, traitor_reward) = if kick_traitor {
-            (0.5, 0.0)
-        } else {
-            (0.0, 0.125)
-        };
         assert_eq!(metrics["crew_reward"], crew_reward);
         assert_eq!(metrics["traitor_reward"], traitor_reward);
     }
@@ -1033,12 +1076,16 @@ fn the_crew_win_by_kicking_every_traitor() {
     }
     cast(&mut env, &mut buffers, traitors[0], Ballot::Skip);
     assert!(buffers.terminated.iter().all(|&terminated| terminated));
-    // the kick pays the crew on top of the win
+    // the kick pays the crew on top of the win, and costs the traitor on
+    // top of the loss
     assert_eq!(
         buffers.reward[crew[0]],
         1.0 + env.config.traitor_kicked_reward
     );
-    assert_eq!(buffers.reward[traitors[0]], -1.0);
+    assert_eq!(
+        buffers.reward[traitors[0]],
+        -1.0 + env.config.ally_kicked_reward
+    );
     assert_eq!(env.consume_metrics()["wins_by_vote"], 1.0);
 }
 
@@ -1062,7 +1109,10 @@ fn the_traitors_win_by_matching_the_crew() {
     assert!(buffers.terminated.iter().all(|&terminated| terminated));
     assert_eq!(buffers.reward[killer], 1.0 + 2.0 * env.config.kill_reward);
     for &id in &crew {
-        assert_eq!(buffers.reward[id], -1.0);
+        assert_eq!(
+            buffers.reward[id],
+            -1.0 + 2.0 * env.config.ally_killed_reward
+        );
     }
     let metrics = env.consume_metrics();
     assert_eq!(metrics["traitor_wins"], 1.0);
@@ -1195,9 +1245,10 @@ fn the_whole_vote_room_is_in_sight_from_anywhere_in_it() {
     }
 }
 
-/// The bird's-eye view shows hidden traitors and ghosts.
+/// The bird's-eye view shows a hidden traitor like anyone else, and has the
+/// dead off the map.
 #[test]
-fn the_render_state_shows_the_hidden_and_the_dead() {
+fn the_render_state_shows_the_hidden_and_not_the_dead() {
     let (mut env, mut buffers) = start(frigate());
     let (traitors, crew) = sides(&env);
     place(&mut env, traitors[0], deck(12, 3));
@@ -1209,18 +1260,16 @@ fn the_render_state_shows_the_hidden_and_the_dead() {
     let mut render = GridRenderState::default();
     env.render_state_into(&mut render);
     let at = |id: usize| MutinyObs::from_id(render.tilemap[render.agent_positions[id].idx()]);
-    assert_eq!(at(traitors[0]), HidingSpotOccupied);
-    assert_eq!(at(crew[0]), Ghost);
-    assert_eq!(
-        at(crew[1]),
-        MutinyObs::crew(env.state.members[crew[1]].color)
-    );
+    for id in [traitors[0], crew[1]] {
+        assert_eq!(at(id), MutinyObs::crew(env.state.members[id].color));
+    }
+    assert_eq!(render.agent_positions[crew[0]], OFF_MAP);
     assert_eq!(render.agent_positions.len(), 8);
 }
 
 /// Whole games of legal random play on every ship, checking after each step
-/// that the map, the members and the chore count still agree, and that no
-/// one living is shown what only the dead may see.
+/// that the map, the members and the chore count still agree, and that the
+/// dead are off the map and shown nothing.
 #[test]
 fn random_play_keeps_the_books_straight() {
     for map in [MutinyMap::Frigate, MutinyMap::Hauler, MutinyMap::Station] {
@@ -1250,27 +1299,26 @@ fn random_play_keeps_the_books_straight() {
 
             let mut open = HashSet::new();
             for (id, member) in state.members.iter().enumerate() {
-                let on_map = state.map[member.position.idx()];
+                let obs = buffers.obs.slice(s![id, .., .., 0]);
+                assert!(usize::from(*obs.iter().max().unwrap()) < MutinyObs::TABLE.len());
+                let (view, band) = obs.split_at(Axis(1), 15);
                 match member.status {
                     Status::Alive => {
                         open.insert(member.position);
-                        assert!(on_map.is_crew());
-                        if state.base_map[member.position.idx()] == HidingSpot {
+                        assert!(state.map[member.position.idx()].is_crew());
+                        let hiding = state.base_map[member.position.idx()] == HidingSpot;
+                        if hiding {
                             assert_eq!(member.role, Role::Traitor);
                         }
+                        // a hiding tile covers whoever is on it from itself too
+                        let own = VocabId::from(MutinyObs::crew(member.color));
+                        assert_eq!(view.iter().any(|&tile| tile == own), !hiding);
                     }
-                    Status::Dead => assert!(env.geometry.inside(member.position)),
-                }
-
-                let view = buffers.obs.slice(s![id, .., ..15, 0]);
-                let sees = |tile: MutinyObs| view.iter().any(|&id| id == VocabId::from(tile));
-                assert!(usize::from(*view.iter().max().unwrap()) < MutinyObs::TABLE.len());
-                if member.alive() {
-                    assert!(!sees(Ghost));
-                    assert_eq!(
-                        sees(HidingSpotOccupied),
-                        state.base_map[member.position.idx()] == HidingSpot
-                    );
+                    Status::Dead => {
+                        assert_eq!(member.position, OFF_MAP);
+                        assert!(view.iter().all(|&tile| tile == VocabId::from(Mask)));
+                        assert!(band.iter().all(|&tile| tile == VocabId::from(UI)));
+                    }
                 }
             }
 

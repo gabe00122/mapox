@@ -137,6 +137,7 @@ mod tests {
             "meetings_per_agent":1,"meeting_cooldown":20,"vote_steps":30,
             "chore_reward":0.05,"kill_reward":0.25,
             "traitor_kicked_reward":0.25,"crew_kicked_reward":0.25,
+            "ally_killed_reward":-0.25,"ally_kicked_reward":-0.25,
             "win_reward":1.0,"loss_reward":-1.0}"#;
 
         let parsed: EnvConfig = serde_json::from_str(json).unwrap();

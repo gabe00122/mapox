@@ -35,6 +35,19 @@ pub const UI_ATTACK: &str = "ui/attack";
 /// In front of the steps a vote has left, while one is on.
 pub const UI_VOTE: &str = "ui/vote";
 
+/// Arrows that point the way to something out of sight, by the eighth of a
+/// turn, clockwise from up. Mutiny points one at a crew member's next chore.
+pub const UI_ARROWS: [&str; 8] = [
+    "ui/arrow_up",
+    "ui/arrow_up_right",
+    "ui/arrow_right",
+    "ui/arrow_down_right",
+    "ui/arrow_down",
+    "ui/arrow_down_left",
+    "ui/arrow_left",
+    "ui/arrow_up_left",
+];
+
 pub const TILE_MASK: &str = "mask";
 pub const TILE_EMPTY: &str = "tile/empty";
 pub const TILE_WALL: &str = "tile/wall";
@@ -80,10 +93,8 @@ pub const TILE_CHORE_BUTTON_PRESSED: &str = "tile/chore_button_pressed";
 /// viewer cannot call one with it.
 pub const TILE_MEETING_BUTTON: &str = "tile/meeting_button";
 pub const TILE_MEETING_BUTTON_OFF: &str = "tile/meeting_button_off";
-/// A tile traitors can walk on that covers their sprite in other agents' views.
+/// A tile traitors can walk on that covers their sprite in every agent's view.
 pub const TILE_HIDING_SPOT: &str = "tile/hiding_spot";
-/// An occupied hiding tile as shown to its occupant and in the full map.
-pub const TILE_HIDING_SPOT_OCCUPIED: &str = "tile/hiding_spot_occupied";
 /// Casts a vote to kick no one.
 pub const TILE_SKIP_BUTTON: &str = "tile/skip_button";
 
@@ -194,8 +205,6 @@ pub const AGENT_CREW: [&str; 10] = [
     "agent/crew_white",
     "agent/crew_brown",
 ];
-/// A dead crew member, which only the dead can see.
-pub const AGENT_CREW_GHOST: &str = "agent/crew_ghost";
 
 // --- action symbols ---
 

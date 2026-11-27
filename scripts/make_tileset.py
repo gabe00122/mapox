@@ -1291,7 +1291,6 @@ CREW_COLORS = [
 ]
 
 WHITE = hex_color("ffffff")
-GHOSTLY = hex_color("9fb4d8")
 
 
 def rotate(art: list[str]) -> list[str]:
@@ -1318,23 +1317,6 @@ def crew(color: Color) -> Sprite:
 def corpse(color: Color) -> Sprite:
     """A crew member on its side, its color gone dull."""
     return stamp(floor(), rotate(AGENT), crew_palette(mix(color, FLOOR, 0.4)))
-
-
-def crew_ghost() -> Sprite:
-    """A dead crew member as the dead see it: pale, with no outline, most of
-    the way to the floor it floats over."""
-    faint = mix(GHOSTLY, FLOOR, 0.35)
-    return stamp(
-        floor(),
-        AGENT,
-        {
-            "O": mix(GHOSTLY, FLOOR, 0.75),
-            "W": faint,
-            "w": mix(GHOSTLY, FLOOR, 0.5),
-            "h": GHOSTLY,
-            "E": FLOOR,
-        },
-    )
 
 
 # A console with one big button. `R` is the ring round the button and `B` the
@@ -1413,7 +1395,7 @@ def meeting_button(live: bool) -> Sprite:
 
 
 # A locker with a slatted door, for a traitor to hide in. `V` is the slat at
-# eye height.
+# eye height, dark whether or not anyone is behind it.
 LOCKER = check(
     [
         "............",
@@ -1433,8 +1415,7 @@ LOCKER = check(
 )
 
 
-def locker(occupied: bool) -> Sprite:
-    """An occupied locker has eyes at the slats."""
+def locker() -> Sprite:
     return stamp(
         floor(),
         LOCKER,
@@ -1443,7 +1424,7 @@ def locker(occupied: bool) -> Sprite:
             "L": IRON_LIGHT,
             "S": IRON,
             "s": STONE_DARK,
-            "V": GOLD_LIGHT if occupied else OUTLINE,
+            "V": OUTLINE,
         },
     )
 
@@ -1617,6 +1598,54 @@ VOTE_ICON = check(
 )
 
 
+# The way to a crew member's next chore. The other six arrows are these two
+# turned by quarters.
+ARROW_UP = check(
+    [
+        "............",
+        ".....OO.....",
+        "....OCCO....",
+        "...OCCCCO...",
+        "..OCCCCCCO..",
+        ".OCCCCCCCCO.",
+        ".OOOOCCOOOO.",
+        "....OCCO....",
+        "....OCCO....",
+        "....OCCO....",
+        "....OOOO....",
+        "............",
+    ],
+    "arrow up",
+)
+ARROW_UP_RIGHT = check(
+    [
+        "............",
+        "...OOOOOOOO.",
+        "...OCCCCCCO.",
+        "....OCCCCCO.",
+        ".....OCCCCO.",
+        "....OCCCCCO.",
+        "...OCCCOCCO.",
+        "..OCCCO.OCO.",
+        ".OCCCO...OO.",
+        ".OCCO.......",
+        ".OOO........",
+        "............",
+    ],
+    "arrow up right",
+)
+
+
+def arrows() -> list[Sprite]:
+    """The eight arrows, clockwise from up as `UI_ARROWS` lists them."""
+    sprites = []
+    straight, diagonal = ARROW_UP, ARROW_UP_RIGHT
+    for _ in range(4):
+        sprites += [label(straight, GOLD), label(diagonal, GOLD)]
+        straight, diagonal = rotate(straight), rotate(diagonal)
+    return sprites
+
+
 def label(art: list[str], color: Color = UI_DIGIT) -> Sprite:
     return stamp(
         blank(UI),
@@ -1638,12 +1667,8 @@ CHORE_PRESSED = hex_color("6fd26a")
 def mutiny_rows() -> list[list[Sprite]]:
     colors = [hex_color(color) for color in CREW_COLORS]
     return [
-        [*(crew(color) for color in colors), crew_ghost(), locker(occupied=False)],
-        [
-            *(corpse(color) for color in colors),
-            locker(occupied=True),
-            vote_key(SKIP_KEY, STONE),
-        ],
+        [*(crew(color) for color in colors), locker()],
+        [*(corpse(color) for color in colors), vote_key(SKIP_KEY, STONE)],
         [
             *(vote_key(VOTE_KEY, color) for color in colors),
             meeting_button(live=True),
@@ -1661,6 +1686,7 @@ def mutiny_rows() -> list[list[Sprite]]:
             label(ATTACK_ICON, HEART),
             label(VOTE_ICON, TEAM_BLUE),
         ],
+        arrows(),
     ]
 
 
