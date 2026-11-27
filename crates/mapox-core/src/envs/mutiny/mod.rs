@@ -37,6 +37,8 @@
 //! living walk through each other. Each living crew member has a button
 //! there in its color, and walking into one casts a vote to kick its owner,
 //! shown at once in the count beside the button; there is a skip button too.
+//! Whoever called the vote, with the meeting button or by walking into a
+//! corpse, is marked behind its count for as long as the vote lasts.
 //! The vote ends when everyone living has voted or its time runs out.
 //! Whoever has the most votes is kicked, unless that is a tie or no more
 //! than the skips, and dies without leaving a corpse; kicking a traitor
@@ -88,8 +90,9 @@ use crate::{
         AGENT_CREW, MOVE_DOWN, MOVE_LEFT, MOVE_RIGHT, MOVE_UP, NOOP, PRIMARY_ACTION,
         TILE_CHORE_BUTTON, TILE_CHORE_BUTTON_LIT, TILE_CHORE_BUTTON_PRESSED, TILE_CORPSES,
         TILE_EMPTY, TILE_HIDING_SPOT, TILE_MASK, TILE_MEETING_BUTTON, TILE_MEETING_BUTTON_OFF,
-        TILE_SKIP_BUTTON, TILE_UI, TILE_VOTE_BUTTONS, TILE_WALL, UI_ARROWS, UI_ATTACK, UI_CHORES,
-        UI_DEAD_CREW, UI_DEAD_TRAITORS, UI_DIGITS, UI_ROLE_CREW, UI_ROLE_TRAITOR, UI_VOTE,
+        TILE_SKIP_BUTTON, TILE_UI, TILE_VOTE_BUTTONS, TILE_WALL, UI_ARROWS, UI_ATTACK, UI_CALLER,
+        UI_CHORES, UI_DEAD_CREW, UI_DEAD_TRAITORS, UI_DIGITS, UI_ROLE_CREW, UI_ROLE_TRAITOR,
+        UI_VOTE,
     },
     timestep::TimeStepMut,
     vocab::{VocabId, Vocabulary},
@@ -242,6 +245,7 @@ vocab_enum!(MutinyObs {
     UiChores => UI_CHORES,
     UiAttack => UI_ATTACK,
     UiVote => UI_VOTE,
+    UiCaller => UI_CALLER,
     ArrowUp => UI_ARROWS[0],
     ArrowUpRight => UI_ARROWS[1],
     ArrowRight => UI_ARROWS[2],
@@ -397,26 +401,28 @@ impl Member {
 }
 
 /// The vote room, drawn top row first. `0`-`9` are the vote buttons by color,
-/// `s` the skip button, `t` the count of votes for the button beside it, and
-/// `_` a blank. Those make up a board along each side of the room, none of
-/// which blocks sight, so every cell of the floor sees every button and
-/// count.
-const VOTE_ROOM: [&str; 10] = [
-    "########", "#tttttt#", "#012345#", "#......#", "#......#", "#......#", "#......#", "#6789_s#",
-    "#tttt_t#", "########",
+/// `s` the skip button, `t` the count of votes for the button beside it, `c`
+/// the mark of whoever called the vote, behind its count, and `_` a blank.
+/// Those make up a board along each side of the room, none of which blocks
+/// sight, so every cell of the floor sees every button, count and mark.
+const VOTE_ROOM: [&str; 12] = [
+    "########", "#cccccc#", "#tttttt#", "#012345#", "#......#", "#......#", "#......#", "#......#",
+    "#6789_s#", "#tttt_t#", "#cccc__#", "########",
 ];
 const VOTE_WIDTH: i32 = VOTE_ROOM[0].len() as i32;
 const VOTE_HEIGHT: i32 = VOTE_ROOM.len() as i32;
 /// Rows of [`VOTE_ROOM`] the two banks of buttons are in, counted from its
-/// bottom as map y is. Each bank's counts are the row behind it.
-const VOTE_TOP_BANK: i32 = 7;
-const VOTE_BOTTOM_BANK: i32 = 2;
+/// bottom as map y is. Each bank's counts are the row behind it, and its
+/// caller marks the row behind that.
+const VOTE_TOP_BANK: i32 = 8;
+const VOTE_BOTTOM_BANK: i32 = 3;
 /// Colors with a button in the top bank; the rest are in the bottom one.
 const VOTE_TOP_COLORS: u8 = 6;
 const VOTE_SKIP_X: i32 = 6;
-const VOTE_FLOOR: std::ops::RangeInclusive<i32> = 3..=6;
-/// Rows of the two boards, each a bank and the counts behind it.
-const VOTE_BOARDS: [i32; 4] = [1, 2, 7, 8];
+const VOTE_FLOOR: std::ops::RangeInclusive<i32> = 4..=7;
+/// Rows of the two boards, each a bank with the counts and the caller marks
+/// behind it.
+const VOTE_BOARDS: [i32; 6] = [1, 2, 3, 8, 9, 10];
 
 /// Where things are on the padded grid: the ship above, the vote room below.
 #[derive(Debug, Clone, Copy)]
@@ -475,14 +481,25 @@ impl Geometry {
         self.vote_origin + Position::new(VOTE_SKIP_X, VOTE_BOTTOM_BANK)
     }
 
+    /// The step from a vote or skip `button` to the cell behind it, away
+    /// from the floor.
+    fn behind(&self, button: Position) -> Position {
+        if button.y - self.vote_origin.y == VOTE_TOP_BANK {
+            Position::new(0, 1)
+        } else {
+            Position::new(0, -1)
+        }
+    }
+
     /// The count for a vote or skip `button`: the cell behind it.
     fn tally(&self, button: Position) -> Position {
-        let behind = if button.y - self.vote_origin.y == VOTE_TOP_BANK {
-            1
-        } else {
-            -1
-        };
-        button + Position::new(0, behind)
+        button + self.behind(button)
+    }
+
+    /// Where the owner of a vote `button` is marked as having called the
+    /// vote: the cell behind its count.
+    fn caller_mark(&self, button: Position) -> Position {
+        button + self.behind(button) * 2
     }
 
     /// The `index`th cell of the vote room's floor, filling it row by row.
@@ -504,8 +521,8 @@ struct MutinyState {
 
     base_map: Array2<MutinyObs>, // the ship and its fittings
     /// The base map with living agents, corpses, recent chore presses, and
-    /// the vote room's buttons and counts. Hiding tiles cover their occupants
-    /// when drawing observations.
+    /// the vote room's buttons, counts and caller marks. Hiding tiles cover
+    /// their occupants when drawing observations.
     map: Array2<MutinyObs>,
 
     rooms: Vec<Vec<Position>>, // chore buttons by room; the ship's rooms come first
@@ -517,7 +534,8 @@ struct MutinyState {
     corpses: Vec<Position>,
     pressed: Vec<Position>, // chore buttons pressed on the last step
     slain: Vec<usize>,      // killed so far this step
-    called: bool,           // a vote was called this step
+    /// Who called a vote this step, and then through the vote they called.
+    callers: Vec<usize>,
     meeting_cooldown: u32,
     /// Presses the loyal crew still owe between them.
     chores_left: u32,
@@ -648,7 +666,7 @@ impl Mutiny {
                 corpses: Vec::new(),
                 pressed: Vec::new(),
                 slain: Vec::new(),
-                called: false,
+                callers: Vec::new(),
                 meeting_cooldown: 0,
                 chores_left: 0,
                 dead_crew: 0,
@@ -731,7 +749,7 @@ impl Mutiny {
         state.corpses.clear();
         state.pressed.clear();
         state.slain.clear();
-        state.called = false;
+        state.callers.clear();
         state.meeting_cooldown = self.config.meeting_cooldown;
         state.dead_crew = 0;
         state.dead_traitors = 0;
@@ -812,20 +830,28 @@ impl Mutiny {
 
     /// Sets out the vote room's buttons with their counts at zero: a button
     /// for each living crew member, the corpse of each dead one where its
-    /// button was, and a blank for the colors no one wears.
+    /// button was, and a blank for the colors no one wears. Whoever called
+    /// the vote is marked behind its count, even if it died on the step it
+    /// called it.
     fn paint_vote_panel(&mut self) {
         let state = &mut self.state;
         for color in 0..MAX_CREW as u8 {
             let button = self.geometry.vote_button(color);
-            let (tile, count) = match state.by_color[usize::from(color)] {
+            let wearer = state.by_color[usize::from(color)];
+            let (tile, count) = match wearer {
                 Some(id) if state.members[id].alive() => {
                     (MutinyObs::vote_button(color), MutinyObs::Digit0)
                 }
                 Some(_) => (MutinyObs::corpse(color), MutinyObs::UI),
                 None => (MutinyObs::UI, MutinyObs::UI),
             };
+            let mark = match wearer {
+                Some(id) if state.callers.contains(&id) => MutinyObs::UiCaller,
+                _ => MutinyObs::UI,
+            };
             state.map[button.idx()] = tile;
             state.map[self.geometry.tally(button).idx()] = count;
+            state.map[self.geometry.caller_mark(button).idx()] = mark;
         }
         let skip = self.geometry.skip_button();
         state.map[skip.idx()] = MutinyObs::SkipButton;
@@ -972,10 +998,10 @@ impl Mutiny {
         } else if tile == MutinyObs::MeetingButton {
             if self.can_call(id) {
                 self.state.members[id].meetings_left -= 1;
-                self.state.called = true;
+                self.state.callers.push(id);
             }
         } else if tile.is_corpse() {
-            state.called = true;
+            state.callers.push(id);
         }
     }
 
@@ -1037,12 +1063,13 @@ impl Mutiny {
             member.attack_cooldown = member.attack_cooldown.saturating_sub(1);
         }
 
-        if std::mem::take(&mut self.state.called) {
+        if !self.state.callers.is_empty() {
             self.start_vote();
         }
     }
 
-    /// Clears the ship and takes everyone living to the vote room.
+    /// Clears the ship and takes everyone living to the vote room, where
+    /// whoever called the vote is marked.
     fn start_vote(&mut self) {
         self.erase_members();
         let state = &mut self.state;
@@ -1181,7 +1208,9 @@ impl Mutiny {
         }
         self.state.meeting_cooldown = self.config.meeting_cooldown;
         self.state.phase = Phase::Play;
-        // the boards go back to blank counts, less whoever was kicked
+        self.state.callers.clear();
+        // the boards go back to blank counts and no caller marked, less
+        // whoever was kicked
         self.paint_vote_panel();
         self.paint_members();
     }

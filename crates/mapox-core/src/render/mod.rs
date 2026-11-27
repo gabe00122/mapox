@@ -144,6 +144,7 @@ const TILE_ART: &[(&str, u32, u32)] = &[
     (symbols::UI_CHORES, 7, 11),
     (symbols::UI_ATTACK, 8, 11),
     (symbols::UI_VOTE, 9, 11),
+    (symbols::UI_CALLER, 10, 11),
     (symbols::UI_ARROWS[0], 0, 12),
     (symbols::UI_ARROWS[1], 1, 12),
     (symbols::UI_ARROWS[2], 2, 12),

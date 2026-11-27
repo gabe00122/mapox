@@ -148,6 +148,21 @@ fn vote_button_of(env: &Mutiny, id: usize) -> Position {
     env.geometry.vote_button(env.state.members[id].color)
 }
 
+/// Who `viewer` sees marked on the vote room's boards as having called the
+/// vote.
+fn marked(env: &Mutiny, buffers: &TimeStepBuffers, viewer: usize) -> Vec<usize> {
+    (0..env.num_agents())
+        .filter(|&id| {
+            let mark = env.geometry.caller_mark(vote_button_of(env, id));
+            match seen(env, buffers, viewer, mark) {
+                UiCaller => true,
+                UI => false,
+                tile => panic!("{tile:?} where a caller is marked"),
+            }
+        })
+        .collect()
+}
+
 #[test]
 fn a_game_deals_everyone_a_color_a_role_and_chores() {
     let (env, buffers) = start(frigate());
@@ -738,6 +753,10 @@ fn the_meeting_button_calls_a_vote() {
         seen(&env, &buffers, caller, env.geometry.tally(skip)),
         Digit0
     );
+    // and who it was that called the vote
+    for viewer in (0..env.num_agents()).filter(|&id| id != crew[1]) {
+        assert_eq!(marked(&env, &buffers, viewer), [caller]);
+    }
 
     // no one can attack in the vote room
     arm(&mut env, traitors[0]);
@@ -800,6 +819,58 @@ fn walking_into_a_corpse_calls_a_vote() {
     assert_eq!(env.state.phase, Phase::Vote { steps_left: 30 });
     assert_eq!(env.state.members[finder].meetings_left, 1);
     assert!(env.state.corpses.is_empty());
+    assert_eq!(marked(&env, &buffers, killer), [finder]);
+}
+
+/// Whoever calls a vote is marked on the board for as long as it lasts, a
+/// traitor reporting its own kill like anyone else, and everyone who called
+/// it on the same step with it.
+#[test]
+fn the_board_marks_whoever_called_the_vote() {
+    let (mut env, mut buffers) = start(MutinyConfig {
+        vote_steps: 2,
+        ..frigate()
+    });
+    let (traitors, crew) = sides(&env);
+    let (killer, finder) = (traitors[0], crew[2]);
+
+    // a vote no one called has no one marked
+    env.erase_members();
+    env.start_vote();
+    assert!(marked(&env, &observe(&env), finder).is_empty());
+    env.end_vote(&mut buffers.view_mut());
+
+    place(&mut env, killer, deck(15, 16));
+    place(&mut env, crew[0], deck(14, 16));
+    arm(&mut env, killer);
+    step(&mut env, &mut buffers, &[(killer, Attack)]);
+    step(&mut env, &mut buffers, &[(killer, MoveLeft)]);
+    assert_eq!(env.state.phase, Phase::Vote { steps_left: 2 });
+    assert_eq!(marked(&env, &buffers, finder), [killer]);
+
+    // the mark stays through the vote and is gone with it
+    step(&mut env, &mut buffers, &[]);
+    assert_eq!(marked(&env, &buffers, finder), [killer]);
+    step(&mut env, &mut buffers, &[]);
+    assert_eq!(env.state.phase, Phase::Play);
+    assert!(env.state.callers.is_empty());
+    let board = env.geometry.caller_mark(vote_button_of(&env, killer));
+    assert_eq!(env.state.map[board.idx()], UI);
+
+    // two find the next body at once
+    place(&mut env, killer, deck(15, 16));
+    place(&mut env, crew[1], deck(14, 16));
+    place(&mut env, finder, deck(13, 16));
+    arm(&mut env, killer);
+    step(&mut env, &mut buffers, &[(killer, Attack)]);
+    step(
+        &mut env,
+        &mut buffers,
+        &[(killer, MoveLeft), (finder, MoveRight)],
+    );
+    let mut both = [killer, finder];
+    both.sort();
+    assert_eq!(marked(&env, &buffers, crew[3]), both);
 }
 
 /// In the vote room the living walk through each other, and a vote shows in
@@ -1206,6 +1277,7 @@ fn the_vote_room_is_laid_out_as_drawn() {
         assert_eq!(drawn(button), b'0' + color);
         assert!(VOTE_BOARDS.contains(&(button.y - geometry.vote_origin.y)));
         assert_eq!(drawn(geometry.tally(button)), b't');
+        assert_eq!(drawn(geometry.caller_mark(button)), b'c');
     }
     assert_eq!(drawn(geometry.skip_button()), b's');
     assert_eq!(drawn(geometry.tally(geometry.skip_button())), b't');

@@ -1597,6 +1597,26 @@ VOTE_ICON = check(
     "vote icon",
 )
 
+# A megaphone, on the vote room's board behind the count of whoever called
+# the vote.
+CALLER_ICON = check(
+    [
+        "............",
+        "......OOO...",
+        "....OOCCO...",
+        ".OOOCCCCO.W.",
+        ".OCCCCCCO...",
+        ".OCCCCCCO.WW",
+        ".OCCCCCCO...",
+        ".OOOCCCCO.W.",
+        "..OcOOCCO...",
+        "..OcO.OOO...",
+        "..OOO.......",
+        "............",
+    ],
+    "caller icon",
+)
+
 
 # The way to a crew member's next chore. The other six arrows are these two
 # turned by quarters.
@@ -1685,6 +1705,7 @@ def mutiny_rows() -> list[list[Sprite]]:
             label(CHORES_ICON, GOLD),
             label(ATTACK_ICON, HEART),
             label(VOTE_ICON, TEAM_BLUE),
+            label(CALLER_ICON, GOLD),
         ],
         arrows(),
     ]

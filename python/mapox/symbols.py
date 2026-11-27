@@ -95,6 +95,7 @@ UI_DEAD_TRAITORS = "ui/dead_traitors"
 UI_CHORES = "ui/chores"
 UI_ATTACK = "ui/attack"
 UI_VOTE = "ui/vote"
+UI_CALLER = "ui/caller"  # on the vote board, marks whoever called the vote
 # the way to a crew member's next chore, by the eighth of a turn from up
 UI_ARROWS = tuple(
     f"ui/arrow_{way}"

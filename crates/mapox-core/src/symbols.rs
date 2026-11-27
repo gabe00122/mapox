@@ -34,6 +34,8 @@ pub const UI_CHORES: &str = "ui/chores";
 pub const UI_ATTACK: &str = "ui/attack";
 /// In front of the steps a vote has left, while one is on.
 pub const UI_VOTE: &str = "ui/vote";
+/// On the vote room's board, behind the count of whoever called the vote.
+pub const UI_CALLER: &str = "ui/caller";
 
 /// Arrows that point the way to something out of sight, by the eighth of a
 /// turn, clockwise from up. Mutiny points one at a crew member's next chore.

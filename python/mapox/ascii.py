@@ -67,6 +67,7 @@ LEGEND: dict[str, str] = {
     SB.UI_CHORES: "c",
     SB.UI_ATTACK: "a",
     SB.UI_VOTE: "v",
+    SB.UI_CALLER: "&",
     # the chore arrow, clockwise from up. Text has no diagonal arrows, so
     # those are strokes: / up-right, \ down-right, , down-left, ` up-left
     **{symbol: char for symbol, char in zip(SB.UI_ARROWS, "^/>\\V,<`")},
